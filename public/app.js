@@ -201,10 +201,16 @@ media?.addEventListener?.('devicechange', listDevices);
 
 // ---------------------------------------------------------------- signaling (HTTP + adaptive polling; runs on Vercel)
 async function api(action, body) {
-  const res = await fetch('/api/studio?action=' + action, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body || {}) });
+  let res;
+  try { res = await fetch('/api/studio?action=' + action, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body || {}) }); }
+  catch { const e = new Error('Could not reach the studio server. Check your connection and try again.'); e.status = 0; throw e; }
   let data = {};
   try { data = await res.json(); } catch {}
-  if (!res.ok) { const e = new Error(data.error || `The studio server answered ${res.status}.`); e.status = res.status; throw e; }
+  if (!res.ok) {
+    const hint = res.status === 404 ? 'The studio API was not found (404). In Vercel, check that the deployment includes the api folder, then redeploy.'
+      : `The studio server answered ${res.status}. Check the function logs in Vercel.`;
+    const e = new Error(data.error || hint); e.status = res.status; throw e;
+  }
   return data;
 }
 const creds = () => ({ studio: S.studio, id: S.id, tok: S.tok });
@@ -1014,6 +1020,7 @@ async function openEnter(mode, code) {
   $('#enterErr').hidden = true;
   $('#enterGo').disabled = false;
   $('#enterDlg').showModal();
+  checkServer();
   (S.name ? (mode === 'join' && !code ? $('#enterCode') : $('#enterGo')) : $('#enterName')).focus();
   previewing = true;
   audioCtx();
@@ -1036,6 +1043,14 @@ function renderPreview() {
 $('#pMic').onclick = () => setMic(!(S.local.micOn && S.local.audio));
 $('#pCam').onclick = () => setCam(!S.local.camOn);
 $('#enterName').addEventListener('input', renderPreview);
+function showEnterErr(msg) { const e = $('#enterErr'); e.textContent = msg; e.hidden = false; }
+// Check the server and its storage as soon as the green room opens, so setup problems show up before you click.
+async function checkServer() {
+  try {
+    const c = await api('config');
+    if (!c.ok) showEnterErr(c.problem || 'The studio server is not ready.');
+  } catch (e) { showEnterErr(e.message); }
+}
 function setEnterMode(m) {
   enterMode = m;
   $$('#enterForm .seg button').forEach((b) => { const on = b.dataset.mode === m; b.classList.toggle('on', on); b.setAttribute('aria-selected', on); });
@@ -1054,7 +1069,7 @@ $('#enterForm').addEventListener('submit', async (e) => {
   S.name = name; store.set('name', name); $('#nameInput').value = name;
   $('#enterGo').disabled = true; $('#enterGo').textContent = 'Connecting…';
   try { await join(code); }
-  catch (err) { $('#enterErr').textContent = err.message; $('#enterErr').hidden = false; $('#enterGo').disabled = false; setEnterMode(enterMode); setPhase('offline'); }
+  catch (err) { setEnterMode(enterMode); showEnterErr(err.message); $('#enterGo').disabled = false; setPhase('offline'); }
 });
 $('#enterDlg').addEventListener('close', () => {
   if (!S.studio) { previewing = false; stopCam(); stopMic(); renderStageUI(); renderDock(); }

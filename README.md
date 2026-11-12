@@ -7,12 +7,15 @@ host-controlled layouts, banners, a scrolling ticker, branding, studio chat and 
 
 1. Import this repository in Vercel (**Add New → Project**). No build settings are needed;
    `vercel.json` serves `public/` and the `api/` function.
-2. In the project, open **Storage → Create Database → Upstash (Redis)**, create a free database and
-   **connect it to the project**. That adds `KV_REST_API_URL` and `KV_REST_API_TOKEN`.
+2. In the project, open **Storage**, create a Redis database (Upstash, free plan is fine) and
+   **connect it to the project**. Any of these variables works, whichever Vercel adds:
+   `KV_REST_API_URL` + `KV_REST_API_TOKEN`, `UPSTASH_REDIS_REST_URL` + `UPSTASH_REDIS_REST_TOKEN`, or `REDIS_URL`.
 3. **Redeploy** (Deployments → ⋯ → Redeploy) so the function picks up the new variables.
+4. Check it: open `https://<your-app>.vercel.app/api/studio?action=config`. You want `"ok": true`.
+   If not, `problem` says what's wrong and `envDetected` lists which variable names the function can see.
 
 Open the deployment URL, create a studio, and send the invite link to a second device.
-Until Redis is connected, joining shows "Studio storage is not set up" instead of failing silently.
+Any setup problem also appears in red in the "Step into the studio" dialog.
 
 Optional environment variables, for guests on strict corporate or mobile networks:
 

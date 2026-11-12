@@ -23,7 +23,7 @@ http.createServer((req, res) => {
       let body = {};
       try { body = raw ? JSON.parse(raw) : {}; } catch {}
       try { json(res, 200, await handle(u.searchParams.get('action'), body)); }
-      catch (e) { if (!e.status) console.error(e); json(res, e.status || 500, { error: e.status ? e.message : 'Server error.' }); }
+      catch (e) { if (!e.status) console.error(e); json(res, e.status || 500, { error: e.status ? e.message : `The studio server hit an error: ${e.message}` }); }
     });
     return;
   }

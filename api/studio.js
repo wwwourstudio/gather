@@ -10,7 +10,8 @@ module.exports = async (req, res) => {
     res.status(200).json(await handle(action, body || {}));
   } catch (e) {
     const status = e.status || 500;
-    if (status === 500) console.error(e);
-    res.status(status).json({ error: status === 500 ? 'Server error. Try again in a moment.' : e.message });
+    if (status === 500) console.error('[gather]', action, e);
+    // Internal errors here never include secrets (store errors are sanitized), and the detail makes setup problems fixable.
+    res.status(status).json({ error: status === 500 ? `The studio server hit an error: ${e.message}` : e.message });
   }
 };
