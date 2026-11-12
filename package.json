@@ -1,0 +1,15 @@
+{
+  "name": "gather-studio",
+  "version": "1.0.0",
+  "description": "The conversation studio: multi-party WebRTC with a recordable stage",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "engines": {
+    "node": ">=18"
+  }
+}
