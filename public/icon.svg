@@ -1,1 +1,15 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><rect width="32" height="32" rx="8" fill="#1f6feb"/><g fill="none" stroke="#fff" stroke-width="2.2" stroke-linejoin="round"><path d="M6 11h13v10H6z"/><path d="m19 14.5 7-3.5v10l-7-3.5"/></g></svg>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" fill="none">
+  <defs>
+    <linearGradient id="gm" x1="10" y1="10" x2="90" y2="90" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#2f7bff"/><stop offset="1" stop-color="#1557e0"/>
+    </linearGradient>
+  </defs>
+  <g stroke="url(#gm)" stroke-width="9" stroke-linecap="round" stroke-linejoin="round">
+    <!-- rounded play-triangle -->
+    <path d="M22 13 L84 44 Q93 50 84 56 L22 87 Q13 91 13 81 V19 Q13 9 22 13 Z"/>
+    <!-- three interlaced loops, one reaching into each corner -->
+    <ellipse cx="31" cy="34" rx="16" ry="7.5" transform="rotate(57 31 34)"/>
+    <ellipse cx="31" cy="66" rx="16" ry="7.5" transform="rotate(-57 31 66)"/>
+    <ellipse cx="61" cy="50" rx="18" ry="7.5"/>
+  </g>
+</svg>
