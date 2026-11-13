@@ -73,3 +73,17 @@ The stack is plain ES modules in the browser plus Node serverless functions on V
 - Phone-number dial-in (PSTN) isn't built. The call-in line is WebRTC links only; a phone field on the card can carry a number from an outside service.
 - Removing someone ends their session, but they can come back through the link. Lock the studio to keep people out.
 - Scheduled-stream email needs `RESEND_API_KEY`, `MAIL_FROM` and `APP_URL` set in Vercel.
+
+## Audit (part A): no app changes
+- `scripts/audit.ts` is a strict TypeScript Playwright audit. Node 22.18+ runs it directly, and it typechecks with `tsc -p scripts` (needs `playwright` and `typescript` installed).
+- **What it covers, at 1440, 1024 and 390:**
+  - It signs up a host, opens every panel, dialog, menu, dock tool and deck layer, and clicks every control.
+  - File pickers are answered with `scripts/fixtures`.
+  - It records errors and failed requests, flags dead controls, and checks overlap, overflow, off-screen controls, clipped text, tap targets and focusable hidden layers.
+  - It also runs functional checks on the AI image maker, AI chat, AI voice, the AI producer, video upload, PDF presenting, QR hide, banner editing, the editor-only layer and the guest view.
+- **Output:** `AUDIT.md`, `audit/findings.json`, and about 600 screenshots in `audit/screens/auto/` (gitignored, about 35 MB).
+- **How the findings were triaged:**
+  - Earlier runs produced false positives: hidden deck layers, the sticky phone dock, a light stage background mistaken for hint text, and the wizard's first step. The script now handles each of these correctly.
+  - The editor-only check compares the host's and a guest's program frames pixel by pixel.
+  - Confirmed root causes carry specific fixes in `KNOWN`.
+- **Intermittent:** the pdf.js "same canvas during multiple render()" error showed up in 2 of 4 runs, when slide changes come in fast.
