@@ -5,10 +5,11 @@ const fs = require('fs');
 const path = require('path');
 const { handle } = require('./lib/studio');
 const { handleAI } = require('./lib/ai');
+const accountHandler = require('./api/account');
 
 const PORT = Number(process.env.PORT) || 8080;
 const PUBLIC = path.join(__dirname, 'public');
-const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml', '.png': 'image/png', '.json': 'application/json' };
+const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml', '.png': 'image/png', '.json': 'application/json', '.wasm': 'application/wasm', '.webp': 'image/webp' };
 
 function json(res, status, obj) {
   res.writeHead(status, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
@@ -21,6 +22,12 @@ http.createServer((req, res) => {
     let raw = '';
     req.on('data', (c) => { raw += c; if (raw.length > 512 * 1024) req.destroy(); });
     req.on('end', () => { let body = {}; try { body = JSON.parse(raw || '{}'); } catch {} handleAI(req, res, body); });
+    return;
+  }
+  if (u.pathname === '/api/account' && req.method === 'POST') {
+    let raw = '';
+    req.on('data', (c) => { raw += c; if (raw.length > 2 * 1024 * 1024) req.destroy(); });
+    req.on('end', () => { try { req.body = JSON.parse(raw || '{}'); } catch { req.body = {}; } req.query = Object.fromEntries(u.searchParams); accountHandler(req, res); });
     return;
   }
   if (u.pathname === '/api/studio') {

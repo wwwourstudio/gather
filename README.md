@@ -10,6 +10,11 @@ host-controlled layouts, banners, a scrolling ticker, branding, studio chat and 
 - **On-air AI:** research live with your own Claude, ChatGPT, Gemini or Grok API key, and put the answer on screen as it streams. Claude and Gemini can search the web.
 - **Platform chat:** Twitch and Rumble chat in studio chat and in the on-stage overlay, with host moderation (hide, time out, block).
 - **Support links:** PayPal, Venmo, Cash App, Stripe, Ko-fi, Patreon and Buy Me a Coffee as scannable QR cards on stage.
+- **Accounts:** email + password (scrypt), nickname and photo, password change and reset, and settings that follow you between devices.
+- **Start a stream:** go live now or schedule up to 29 days ahead, with emailed invites, a calendar file, and reminders a day and 15 minutes before. Scheduled studios keep the host seat for their owner.
+- **Thumbnails:** design one from your camera and headline, generate an AI background with your own ChatGPT, Gemini or Grok key, or upload your own.
+- **Camera and mic:** AI noise removal (RNNoise), echo cancellation, gain, light correction, background blur or replacement (MediaPipe), and a chroma-key green screen.
+- **Live captions** in 14 languages, **vertical 9:16** scenes for TikTok, Reels and Shorts, a guest view without host controls, and searchable help that jumps to the exact setting.
 - **Profile photos** for guests whose camera is off, banners, a ticker, brand colours and stage backgrounds, and recording to a local video file.
 
 ## Deploy to Vercel
@@ -25,6 +30,18 @@ host-controlled layouts, banners, a scrolling ticker, branding, studio chat and 
 
 Open the deployment URL, create a studio, and send the invite link to a second device.
 Any setup problem also appears in red in the "Step into the studio" dialog.
+
+### Email (invites, reminders, password reset)
+
+gather sends email through [Resend](https://resend.com) and schedules reminders with Resend's `scheduled_at`, so no cron job is needed.
+
+| Variable | Example | Notes |
+| --- | --- | --- |
+| `RESEND_API_KEY` | `re_…` | From resend.com → API Keys |
+| `MAIL_FROM` | `gather <studio@yourdomain.com>` | Must use a domain verified in Resend |
+| `APP_URL` | `https://gather-gold-nine.vercel.app` | Used in email links; defaults to the request's host |
+
+Without these, accounts, scheduling and everything else still work; the app says plainly that emails were not sent.
 
 Optional environment variables, for guests on strict corporate or mobile networks:
 

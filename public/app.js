@@ -1,3 +1,4 @@
+import { createAudioChain, createVideoFx, needsProcessing } from './fx.js';
 // gather — client. Full-mesh WebRTC studio with a canvas-composited stage.
 // The stage canvas is the single source of truth for what you see AND what gets recorded.
 
@@ -13,7 +14,7 @@ function mkStore(get) {
 }
 
 const MAX = 6;
-const W = 1280, H = 720;
+let W = 1280, H = 720; // swapped to 720x1280 for the vertical stage
 const DEFAULT_TITLE = 'The conversation studio';
 const DEFAULT_PRESETS = ['Have a question? Drop it in the chat.', 'Thanks for joining us today.'];
 const BGS = {
@@ -39,7 +40,14 @@ const S = {
   audioBlocked: false,
 };
 function localState() {
-  return { layout: 'split', stage: ['me'], banner: null, ticker: '', brand: { color: store.get('accent', '#3b82f6'), bg: store.get('bg', 'dusk'), watermark: false, names: true, logo: '' }, title: store.get('title', ''), elements: [], featured: null, feeds: { twitch: '' } };
+  const imgs = store.get('brandImgs', {});
+  return {
+    layout: 'split', stage: ['me'], banner: null, ticker: '',
+    brand: { color: store.get('accent', '#3b82f6'), bg: store.get('bg', 'dusk'), watermark: false, names: true, font: 'jakarta', tag: 'solid', bannerStyle: 'classic', anim: 'slide', frame: 'none', dim: 0.25, logoPos: 'tr', logoSize: 0.12,
+      ...store.get('brandPrefs', {}), bgImage: imgs.bgImage ? 'local-brand-bgImage' : '', overlay: imgs.overlay ? 'local-brand-overlay' : '', logo: imgs.logo ? 'local-brand-logo' : '' },
+    title: store.get('title', ''), elements: [], featured: null, feeds: { twitch: '' },
+    aspect: store.get('streamPrefs', {}).aspect || '16:9', captions: { on: false, style: 'bar', size: 26, lang: 'en-US', ...(store.get('streamPrefs', {}).captions || {}) },
+  };
 }
 const isHost = () => !S.studio || S.host === S.id;
 const myId = () => S.id || 'me';
@@ -94,13 +102,15 @@ function meter(track) {
 
 // ---------------------------------------------------------------- local media
 const media = navigator.mediaDevices;
+S.audioFx = { echo: true, ns: true, agc: true, ai: false, gain: 1, ...store.get('audioFx', {}) };
+S.videoFx = { effect: 'none', bright: 0, contrast: 1, sat: 1, key: '#00ff00', tol: 0.1, fps: 30, mirror: true, ...store.get('videoFx', {}) };
 function camConstraints() {
   const h = Number(S.prefs.quality) || 720;
-  return { width: { ideal: Math.round(h * 16 / 9) }, height: { ideal: h }, frameRate: { ideal: 30 }, ...(S.prefs.camId ? { deviceId: { exact: S.prefs.camId } } : {}) };
+  return { width: { ideal: Math.round(h * 16 / 9) }, height: { ideal: h }, frameRate: { ideal: Number(S.videoFx.fps) || 30 }, ...(S.prefs.camId ? { deviceId: { exact: S.prefs.camId } } : {}) };
 }
 function micConstraints() {
-  const n = S.prefs.noise;
-  return { echoCancellation: n, noiseSuppression: n, autoGainControl: true, ...(S.prefs.micId ? { deviceId: { exact: S.prefs.micId } } : {}) };
+  const a = S.audioFx;
+  return { echoCancellation: a.echo, noiseSuppression: a.ns, autoGainControl: a.agc, channelCount: 1, ...(S.prefs.micId ? { deviceId: { exact: S.prefs.micId } } : {}) };
 }
 function mediaErr(e) {
   if (!window.isSecureContext) return 'Camera needs HTTPS or localhost.';
@@ -117,15 +127,39 @@ async function startCam() {
       if (S.prefs.camId && (e.name === 'OverconstrainedError' || e.name === 'NotFoundError')) { S.prefs.camId = ''; return media.getUserMedia({ video: camConstraints() }); }
       throw e;
     });
-    S.local.cam = s.getVideoTracks()[0];
-    S.local.cam.contentHint = 'motion';
+    const raw = s.getVideoTracks()[0];
+    raw.contentHint = 'motion';
+    S.local.camRaw = raw;
     S.local.camError = '';
-    S.local.cam.onended = () => { S.local.cam = null; if (S.local.camOn) { S.local.camOn = false; syncMedia(); toast('Your camera disconnected.', { err: true }); } };
+    raw.onended = () => { if (S.local.camRaw !== raw) return; stopCam(); if (S.local.camOn) { S.local.camOn = false; syncMedia(); toast('Your camera disconnected.', { err: true }); } };
+    await applyVideoFx();
     listDevices();
     return S.local.cam;
   } catch (e) { S.local.camError = mediaErr(e); return null; }
 }
-function stopCam() { S.local.cam?.stop(); S.local.cam = null; }
+function stopCam() { vfx?.stop(); vfx = null; S.local.camRaw?.stop(); S.local.camRaw = null; S.local.cam = null; }
+// Background effects and light correction run in fx.js; with nothing to do, the camera track goes out untouched.
+let vfx = null, fxBgImg = null;
+function fxBgImage() {
+  const d = store.get('fxBg', '');
+  if (!d) return null;
+  if (!fxBgImg || fxBgImg.dataset.src !== d) {
+    fxBgImg = new Image(); fxBgImg.dataset.src = d;
+    fxBgImg.onload = () => vfx?.set({ bgImage: fxBgImg });
+    fxBgImg.src = d;
+  }
+  return fxBgImg;
+}
+async function applyVideoFx() {
+  const raw = S.local.camRaw;
+  if (!raw) { vfx?.stop(); vfx = null; S.local.cam = null; return; }
+  const opts = { ...S.videoFx, bgImage: fxBgImage() };
+  if (!needsProcessing(opts)) { vfx?.stop(); vfx = null; S.local.cam = raw; return; }
+  if (vfx && vfx.src === raw) { vfx.set(opts); S.local.cam = vfx.track; return; }
+  vfx?.stop();
+  try { vfx = await createVideoFx(raw, opts); vfx.src = raw; S.local.cam = vfx.track; }
+  catch (e) { vfx = null; S.local.cam = raw; toast('Video effects: ' + e.message, { err: true }); }
+}
 let localMeter = null;
 async function startMic() {
   if (S.local.audio) return S.local.audio;
@@ -137,12 +171,31 @@ async function startMic() {
     });
     S.local.audio = s.getAudioTracks()[0];
     S.local.audio.enabled = S.local.micOn;
-    localMeter?.dispose(); localMeter = meter(S.local.audio);
+    await applyAudioFx();
     listDevices();
     return S.local.audio;
   } catch (e) { toast('Microphone: ' + mediaErr(e), { err: true }); return null; }
 }
-function stopMic() { S.local.audio?.stop(); S.local.audio = null; localMeter?.dispose(); localMeter = null; }
+function stopMic() { afx?.dispose(); afx = null; S.local.audioOut = null; S.local.audio?.stop(); S.local.audio = null; localMeter?.dispose(); localMeter = null; }
+let afx = null, fxCtx = null;
+function fxAudioCtx() {
+  if (!fxCtx) { try { fxCtx = new AudioContext({ sampleRate: 48000 }); } catch { fxCtx = null; } }
+  fxCtx?.resume?.().catch(() => {});
+  return fxCtx;
+}
+const micOut = () => S.local.audioOut || S.local.audio || null;
+async function applyAudioFx() {
+  afx?.dispose(); afx = null; S.local.audioOut = null;
+  if (S.local.audio && (S.audioFx.ai || Math.abs(S.audioFx.gain - 1) > 0.01)) {
+    const ctx = S.audioFx.ai ? fxAudioCtx() : audioCtx();
+    if (ctx) {
+      afx = await createAudioChain(ctx, S.local.audio, { aiNoise: S.audioFx.ai, gain: S.audioFx.gain });
+      S.local.audioOut = afx.track;
+      if (S.audioFx.ai && !afx.ai) toast('AI noise removal is unavailable here: ' + afx.note, { err: true });
+    }
+  }
+  localMeter?.dispose(); localMeter = S.local.audio ? meter(micOut()) : null;
+}
 const outVideo = () => (S.local.camOn ? S.local.cam : null);
 
 async function setMic(on) {
@@ -151,6 +204,7 @@ async function setMic(on) {
   if (S.local.audio) S.local.audio.enabled = on;
   if (on && !S.local.audio) S.local.micOn = false;
   syncMedia();
+  syncCaptions();
 }
 async function setCam(on) {
   if (on) { await startCam(); if (!S.local.cam) { toast('Camera: ' + S.local.camError, { err: true }); on = false; } }
@@ -168,10 +222,22 @@ function syncMedia() {
   }
   const me = $('#card-' + cssId(myId()));
   const el = me && $('video', me);
-  if (el) { const cur = el.srcObject?.getVideoTracks()[0]; if (cur !== v) el.srcObject = v ? new MediaStream([v]) : null; el.classList.add('mirror'); }
+  if (el) { const cur = el.srcObject?.getVideoTracks()[0]; if (cur !== v) el.srcObject = v ? new MediaStream([v]) : null; el.classList.toggle('mirror', !!S.videoFx.mirror); }
   sendMeta({ mic: S.local.micOn, cam: S.local.camOn, sharing: !!S.local.pres });
   renderDock(); renderCrew(); renderPreview(); renderPresBar();
 }
+
+async function listDevices() {
+  if (!media?.enumerateDevices) return;
+  const devs = await media.enumerateDevices();
+  fill($('#camSelect'), devs.filter((d) => d.kind === 'videoinput'), S.local.camRaw?.getSettings().deviceId || S.prefs.camId, 'camera');
+  fill($('#micSelect'), devs.filter((d) => d.kind === 'audioinput'), S.local.audio?.getSettings().deviceId || S.prefs.micId, 'microphone');
+  function fill(sel, list, cur, kind) {
+    sel.replaceChildren(new Option(`Default ${kind}`, ''), ...list.filter((d) => d.deviceId && d.deviceId !== 'default').map((d, i) => new Option(d.label || `${kind[0].toUpperCase() + kind.slice(1)} ${i + 1}`, d.deviceId)));
+    sel.value = [...sel.options].some((o) => o.value === cur) ? cur : '';
+  }
+}
+media?.addEventListener?.('devicechange', listDevices);
 
 // ---------------------------------------------------------------- presentation: screen, video file, PDF
 // Each connection carries a second video track for whatever is being presented,
@@ -182,14 +248,14 @@ const presTrack = () => S.local.pres?.track || null;
 // Outgoing audio: the raw mic, or mic + media audio (a video's sound, a tab's sound) while one plays.
 let sendMix = null;
 function outAudio() {
-  if (!S.local.mediaAudio) return S.local.audio || null;
+  if (!S.local.mediaAudio) return micOut();
   const ctx = audioCtx();
   if (!sendMix) sendMix = { dest: ctx.createMediaStreamDestination(), micSrc: null, micTrack: null };
-  if (sendMix.micTrack !== S.local.audio) {
+  if (sendMix.micTrack !== micOut()) {
     try { sendMix.micSrc?.disconnect(); } catch {}
-    sendMix.micSrc = S.local.audio ? ctx.createMediaStreamSource(new MediaStream([S.local.audio])) : null;
+    sendMix.micSrc = micOut() ? ctx.createMediaStreamSource(new MediaStream([micOut()])) : null;
     sendMix.micSrc?.connect(sendMix.dest);
-    sendMix.micTrack = S.local.audio;
+    sendMix.micTrack = micOut();
   }
   return sendMix.dest.stream.getAudioTracks()[0];
 }
@@ -436,7 +502,7 @@ async function iceConfig(serverIce) {
 async function join(code) {
   setPhase(S.phase === 'reconnecting' ? 'reconnecting' : 'connecting');
   audioCtx();
-  const r = await api('join', { studio: code, name: S.name || 'Guest', mic: S.local.micOn, cam: S.local.camOn });
+  const r = await api('join', { studio: code, name: S.name || 'Guest', mic: S.local.micOn, cam: S.local.camOn, acct: acct.token || undefined });
   await onServer(r);
 }
 
@@ -459,8 +525,11 @@ async function onServer(m) {
       pollLoop(++pollGen);
       if (S.host === S.id && wasHosting) {
         // Bring the look you set up before creating the studio.
-        setStage({ brand: pre.brand, title: pre.title, layout: pre.layout, banner: pre.banner, ticker: pre.ticker, stage: [S.id], feeds: pre.feeds, elements: (pre.elements || []).filter((e) => !(e.type === 'image' && e.asset?.startsWith('local-'))) });
+        setStage({ aspect: pre.aspect, captions: pre.captions, brand: { ...pre.brand, bgImage: '', overlay: '', logo: '' }, title: pre.title, layout: pre.layout, banner: pre.banner, ticker: pre.ticker, stage: [S.id], feeds: pre.feeds, elements: (pre.elements || []).filter((e) => !(e.type === 'image' && e.asset?.startsWith('local-'))) });
         uploadLocalAssets(pre.elements).then((elements) => { if (S.host === S.id) setStage({ elements }); });
+        uploadBrandAssets(pre.brand);
+        if (S.pendingStream?.id) acctApi('streamStart', { id: S.pendingStream.id }).catch(() => {});
+        S.pendingStream = null;
       }
       sendMeta({ mic: S.local.micOn, cam: S.local.camOn, sharing: !!S.local.pres });
       uploadAvatar();
@@ -503,6 +572,8 @@ async function onServer(m) {
     case 'chat': addMsg(m.msg); break;
     case 'feed': for (const it of m.items || []) addExternal(it); break;
     case 'ai': upsertAI(m.item, false); break;
+    case 'caption': showCaption(m.from, m.name, m.text, m.final); break;
+    case 'host': S.host = m.host; if (S.host === S.id) toast('You are now the host.'); renderAll(); break;
     case 'recording': toast(m.on ? `${m.by} started recording` : `${m.by} stopped recording`); break;
     case 'error':
       if ($('#enterDlg').open) { $('#enterErr').textContent = m.message; $('#enterErr').hidden = false; setPhase(S.studio ? 'online' : 'offline'); $('#enterGo').disabled = false; }
@@ -656,12 +727,13 @@ function layoutRects(n, layout, area) {
   if (!n) return [];
   if (layout === 'solo' || n === 1) return [{ x, y, w, h }];
   if (layout === 'spotlight') {
-    const sh = Math.round(h * 0.22), mh = h - sh - gap, k = n - 1;
+    const sh = Math.round(h * (h > w ? 0.16 : 0.22)), mh = h - sh - gap, k = n - 1;
     const tw = Math.min((w - gap * (k - 1)) / k, sh * 16 / 9);
     const total = tw * k + gap * (k - 1), sx = x + (w - total) / 2;
     return [{ x, y, w, h: mh }, ...Array.from({ length: k }, (_, i) => ({ x: sx + i * (tw + gap), y: y + mh + gap, w: tw, h: sh }))];
   }
-  const cols = n <= 3 ? n : n === 4 ? 2 : 3, rows = Math.ceil(n / cols);
+  const portrait = h > w;
+  const cols = portrait ? (n <= 3 ? 1 : 2) : n <= 3 ? n : n === 4 ? 2 : 3, rows = Math.ceil(n / cols);
   const tw = (w - gap * (cols - 1)) / cols, th = (h - gap * (rows - 1)) / rows;
   return Array.from({ length: n }, (_, i) => {
     const r = Math.floor(i / cols), inRow = r === rows - 1 ? n - r * cols : cols;
@@ -669,7 +741,16 @@ function layoutRects(n, layout, area) {
     return { x: x + off + (i % cols) * (tw + gap), y: y + r * (th + gap), w: tw, h: th };
   });
 }
+const FONTS = { jakarta: '"Plus Jakarta Sans"', onest: 'Onest', playfair: '"Playfair Display"', bebas: '"Bebas Neue"', mono: '"JetBrains Mono"', serif: '"DM Serif Display"' };
+const stageFont = () => (FONTS[S.state.brand.font] || FONTS.jakarta) + ', Inter, sans-serif';
 function drawBackground(t) {
+  const bgImg = assetImg(S.state.brand.bgImage);
+  if (bgImg) {
+    const k = Math.max(W / bgImg.naturalWidth, H / bgImg.naturalHeight), dw = bgImg.naturalWidth * k, dh = bgImg.naturalHeight * k;
+    g.drawImage(bgImg, (W - dw) / 2, (H - dh) / 2, dw, dh);
+    g.fillStyle = `rgba(4,8,20,${S.state.brand.dim ?? 0.25})`; g.fillRect(0, 0, W, H);
+    return;
+  }
   const [a, b, c, glow] = BGS[S.state.brand.bg] || BGS.dusk;
   const grd = g.createLinearGradient(0, 0, W, H);
   grd.addColorStop(0, a); grd.addColorStop(.6, b); grd.addColorStop(1, c);
@@ -726,13 +807,20 @@ function drawTile(p, rect, t) {
   const ty = y + h - 16 - fs * 1.9;
   if (brand.names) {
     const label = p.me ? `${p.name} (you)` : p.name;
-    g.font = `600 ${fs}px Inter, sans-serif`; g.textAlign = 'left'; g.textBaseline = 'middle';
-    const tw = Math.min(g.measureText(label).width, w - 80);
-    g.fillStyle = brand.color; rr(tx, ty, tw + fs * 1.4, fs * 1.9, 6); g.fill();
-    g.fillStyle = contrastInk(brand.color);
-    g.save(); g.beginPath(); g.rect(tx, ty, tw + fs * 1.4, fs * 1.9); g.clip();
+    g.font = `700 ${fs}px ${stageFont()}`; g.textAlign = 'left'; g.textBaseline = 'middle';
+    const tw = Math.min(g.measureText(label).width, w - 80), bw = tw + fs * 1.4, bh = fs * 1.9;
+    const style = brand.tag || 'solid';
+    let ink = '#ffffff';
+    if (style === 'solid') { g.fillStyle = brand.color; rr(tx, ty, bw, bh, 6); g.fill(); ink = contrastInk(brand.color); }
+    else if (style === 'glass') { g.fillStyle = 'rgba(8,14,30,.62)'; rr(tx, ty, bw, bh, 8); g.fill(); g.strokeStyle = 'rgba(255,255,255,.22)'; g.lineWidth = 1; g.stroke(); g.fillStyle = brand.color; rr(tx, ty + 6, 3, bh - 12, 2); g.fill(); }
+    else if (style === 'outline') { g.strokeStyle = brand.color; g.lineWidth = 2; rr(tx + 1, ty + 1, bw - 2, bh - 2, 6); g.stroke(); g.fillStyle = 'rgba(0,0,0,.25)'; g.fill(); }
+    else { g.fillStyle = brand.color; g.fillRect(tx + fs * .7, ty + bh - 3, tw, 3); }
+    g.fillStyle = ink;
+    if (style === 'minimal') { g.shadowColor = 'rgba(0,0,0,.6)'; g.shadowBlur = 8; }
+    g.save(); g.beginPath(); g.rect(tx, ty, bw, bh); g.clip();
     g.fillText(label, tx + fs * .7, ty + fs * .97); g.restore();
-    tx += tw + fs * 1.4 + 6;
+    g.shadowColor = 'transparent';
+    tx += bw + 6;
   }
   if (!p.mic) {
     const s = fs * 1.9;
@@ -748,32 +836,60 @@ function drawMicOff(cx, cy, r) {
   g.beginPath(); g.moveTo(cx - r, cy - r); g.lineTo(cx + r, cy + r); g.stroke();
   g.restore();
 }
+// Entrance animations shared by banners and featured messages: returns {alpha, dx, scale, clip, chars}.
+function entrance(t0, t, len) {
+  const kind = S.state.brand.anim || 'slide';
+  const k = Math.min(1, (t - t0) / (kind === 'type' ? 900 : 450)), e = 1 - Math.pow(1 - k, 3);
+  if (kind === 'fade') return { alpha: e, dx: 0, scale: 1, clip: 1, chars: len };
+  if (kind === 'pop') { const o = k < 1 ? 1 + Math.sin(k * Math.PI) * .06 : 1; return { alpha: Math.min(1, k * 2.5), dx: 0, scale: (.85 + .15 * e) * o, clip: 1, chars: len }; }
+  if (kind === 'wipe') return { alpha: 1, dx: 0, scale: 1, clip: e, chars: len };
+  if (kind === 'type') return { alpha: 1, dx: 0, scale: 1, clip: 1, chars: Math.ceil(len * k) };
+  return { alpha: e, dx: -(1 - e) * 40, scale: 1, clip: 1, chars: len };
+}
 function drawBanner(t, bottom) {
   const b = S.state.banner;
   if (!b) return;
   const key = b.id + b.text + b.sub;
   if (S.banner.key !== key) S.banner = { key, t0: t };
-  const k = Math.min(1, (t - S.banner.t0) / 420), e = 1 - Math.pow(1 - k, 3);
-  const brand = S.state.brand;
+  const brand = S.state.brand, style = brand.bannerStyle || 'classic', F = stageFont();
+  const an = entrance(S.banner.t0, t, b.text.length);
+  const text = b.text.slice(0, an.chars);
+  const big = style === 'bold' ? 40 : 30;
   g.save();
-  g.globalAlpha = e;
-  const x = 56 - (1 - e) * 40;
-  g.font = '700 30px "Plus Jakarta Sans", Inter, sans-serif';
-  const tw = Math.min(g.measureText(b.text).width, W - 200);
+  g.globalAlpha = an.alpha;
+  g.font = `800 ${big}px ${F}`;
+  const tw = Math.min(g.measureText(style === 'bold' ? b.text.toUpperCase() : b.text).width, W - 140);
   let subW = 0;
-  if (b.sub) { g.font = '500 19px Inter, sans-serif'; subW = Math.min(g.measureText(b.sub).width, W - 200); }
+  if (b.sub) { g.font = `500 19px ${F}`; subW = Math.min(g.measureText(b.sub).width, W - 140); }
   const bw = Math.max(tw, subW) + 56;
-  const mainH = 64, subH = b.sub ? 40 : 0;
-  const y = bottom - mainH - subH - 22;
-  g.shadowColor = 'rgba(0,0,0,.35)'; g.shadowBlur = 24; g.shadowOffsetY = 8;
-  g.fillStyle = brand.color; rr(x, y, bw, mainH, b.sub ? [10, 10, 0, 0] : 10); g.fill();
-  g.shadowColor = 'transparent';
-  if (b.sub) { g.fillStyle = '#ffffff'; rr(x, y + mainH, bw, subH, [0, 0, 10, 10]); g.fill(); }
-  g.save(); g.beginPath(); g.rect(x, y, bw - 20, mainH + subH); g.clip();
-  g.fillStyle = contrastInk(brand.color); g.font = '700 30px "Plus Jakarta Sans", Inter, sans-serif'; g.textBaseline = 'middle'; g.textAlign = 'left';
-  g.fillText(b.text, x + 28, y + mainH / 2 + 1);
-  if (b.sub) { g.fillStyle = '#1f2937'; g.font = '500 19px Inter, sans-serif'; g.fillText(b.sub, x + 28, y + mainH + subH / 2 + 1); }
-  g.restore(); g.restore();
+  const mainH = style === 'bold' ? 78 : 64, subH = b.sub ? 40 : 0;
+  const x = 48 + an.dx, y = bottom - mainH - subH - 22;
+  // scale around the banner's left edge, clip for the wipe
+  g.translate(x, y + (mainH + subH) / 2); g.scale(an.scale, an.scale); g.translate(-x, -(y + (mainH + subH) / 2));
+  g.beginPath(); g.rect(x - 4, y - 30, (bw + 8) * an.clip, mainH + subH + 60); g.clip();
+  const shadow = () => { g.shadowColor = 'rgba(0,0,0,.35)'; g.shadowBlur = 24; g.shadowOffsetY = 8; };
+  let ink = contrastInk(brand.color), subInk = '#1f2937';
+  if (style === 'classic') {
+    shadow(); g.fillStyle = brand.color; rr(x, y, bw, mainH, b.sub ? [10, 10, 0, 0] : 10); g.fill(); g.shadowColor = 'transparent';
+    if (b.sub) { g.fillStyle = '#ffffff'; rr(x, y + mainH, bw, subH, [0, 0, 10, 10]); g.fill(); }
+  } else if (style === 'glass') {
+    shadow(); g.fillStyle = 'rgba(8,14,30,.72)'; rr(x, y, bw, mainH + subH, 14); g.fill(); g.shadowColor = 'transparent';
+    g.strokeStyle = 'rgba(255,255,255,.18)'; g.lineWidth = 1; g.stroke();
+    g.fillStyle = brand.color; rr(x, y + 12, 5, mainH + subH - 24, 3); g.fill();
+    ink = '#ffffff'; subInk = 'rgba(230,238,255,.85)';
+  } else if (style === 'bold') {
+    shadow(); g.fillStyle = brand.color; g.fillRect(x, y, bw, mainH); g.shadowColor = 'transparent';
+    if (b.sub) { g.fillStyle = '#0b1020'; g.fillRect(x, y + mainH, bw, subH); subInk = '#ffffff'; }
+  } else {
+    ink = '#ffffff'; subInk = 'rgba(230,238,255,.9)';
+    g.fillStyle = brand.color; g.fillRect(x + 28, y + mainH - 8, Math.min(tw, 220), 4);
+  }
+  g.textBaseline = 'middle'; g.textAlign = 'left';
+  if (style === 'minimal') { g.shadowColor = 'rgba(0,0,0,.7)'; g.shadowBlur = 12; }
+  g.fillStyle = ink; g.font = `800 ${big}px ${F}`;
+  g.fillText(style === 'bold' ? text.toUpperCase() : text, x + 28, y + mainH / 2 + 1);
+  if (b.sub && an.chars >= b.text.length) { g.fillStyle = subInk; g.font = `500 19px ${F}`; g.fillText(b.sub, x + 28, y + mainH + subH / 2 + 1); }
+  g.restore();
 }
 function drawTicker(t) {
   const text = S.state.ticker;
@@ -788,27 +904,39 @@ function drawTicker(t) {
   for (let x = -off; x < W; x += uw) g.fillText(unit, x, y + h / 2 + 1);
   return h;
 }
+function drawFrame() {
+  const brand = S.state.brand, f = brand.frame;
+  if (f === 'vignette') { const r = g.createRadialGradient(W / 2, H / 2, Math.min(W, H) * .35, W / 2, H / 2, Math.max(W, H) * .75); r.addColorStop(0, 'rgba(0,0,0,0)'); r.addColorStop(1, 'rgba(0,0,0,.55)'); g.fillStyle = r; g.fillRect(0, 0, W, H); }
+  if (f === 'border') { g.strokeStyle = brand.color; g.lineWidth = 8; g.strokeRect(4, 4, W - 8, H - 8); }
+  if (f === 'corners') {
+    g.strokeStyle = brand.color; g.lineWidth = 6; g.lineCap = 'round'; const L = Math.min(W, H) * .08, m = 18;
+    for (const [cx, cy, sx, sy] of [[m, m, 1, 1], [W - m, m, -1, 1], [m, H - m, 1, -1], [W - m, H - m, -1, -1]]) { g.beginPath(); g.moveTo(cx, cy + sy * L); g.lineTo(cx, cy); g.lineTo(cx + sx * L, cy); g.stroke(); }
+  }
+  const ov = assetImg(brand.overlay);
+  if (ov) g.drawImage(ov, 0, 0, W, H);
+  const logo = assetImg(brand.logo);
+  if (logo) {
+    const lw = W * (brand.logoSize || .12), lh = lw * logo.naturalHeight / logo.naturalWidth, m = 26;
+    const x = brand.logoPos?.includes('l') ? m : W - m - lw, y = brand.logoPos?.startsWith('b') ? H - m - lh : m;
+    g.drawImage(logo, x, y, lw, lh);
+  }
+}
 function drawChrome() {
   const paper = BGS[S.state.brand.bg]?.[4];
   const ink = paper ? 'rgba(17,24,39,' : 'rgba(255,255,255,';
   g.textBaseline = 'middle';
   if (S.state.title) {
-    g.textAlign = 'left'; g.font = '600 14px Inter, sans-serif'; g.fillStyle = ink + '.8)';
-    g.fillText(S.state.title.toUpperCase().split('').join(String.fromCharCode(8202)), 30, 22);
+    g.textAlign = 'left'; g.font = `700 14px ${stageFont()}`; g.fillStyle = ink + '.8)';
+    const hasLogoTL = assetImg(S.state.brand.logo) && S.state.brand.logoPos === 'tl';
+    g.fillText(S.state.title.toUpperCase().split('').join(String.fromCharCode(8202)), 30, hasLogoTL ? H - 22 : 22);
   }
-}
-function drawOffline(t) {
-  g.textAlign = 'left'; g.textBaseline = 'alphabetic';
-  g.font = '600 12px Inter, sans-serif';
-  const paper = BGS[S.state.brand.bg]?.[4];
-  g.fillStyle = paper ? 'rgba(17,24,39,.55)' : 'rgba(255,255,255,.55)';
-  g.fillText('A LITTLE SPACE. BIG IDEAS.'.split('').join(String.fromCharCode(8202)), 26, H - 26);
 }
 function draw() {
   const t = performance.now();
+  syncAspect();
   drawBackground(t);
   const inStudio = !!S.studio;
-  if (!inStudio && !previewActive()) { drawOffline(t); drawChrome(); return; }
+  if (!inStudio && !previewActive()) { drawFrame(); drawChrome(); return; }
   const people = participants();
   const byId = new Map(people.map((p) => [p.id, p]));
   const stageIds = inStudio ? S.state.stage : [myId()];
@@ -837,8 +965,10 @@ function draw() {
   }
   drawOverlays(t);
   if (S.state.ticker) drawTicker(t); // keep ticker above tiles
+  drawFrame();
   drawBanner(t, H - (tickH || 0) - 10);
   drawFeatured(t, H - (tickH || 0) - 10);
+  drawCaptions(H - (tickH || 0) - (S.state.banner ? 150 : 24));
   drawChrome();
 }
 function hexA(hex, a) { const n = parseInt(hex.slice(1), 16); return `rgba(${n >> 16},${(n >> 8) & 255},${n & 255},${a})`; }
@@ -1051,7 +1181,15 @@ const TEMPLATES = [
     { type: 'slot', index: 0, x: .025, y: .1, w: .3, h: .6 }, { type: 'slot', index: 1, x: .35, y: .1, w: .3, h: .6 }, { type: 'slot', index: 2, x: .675, y: .1, w: .3, h: .6 },
     { type: 'chat', x: .025, y: .73, w: .95, h: .22, max: 3, size: 17, bg: true }] },
 ];
-const TPL = Object.fromEntries(TEMPLATES.map((t) => [t.id, t]));
+const V_TEMPLATES = [
+  { id: 'v-solo', name: 'Vertical solo', els: [{ type: 'slot', index: 0, x: .04, y: .06, w: .92, h: .8, radius: 18 }] },
+  { id: 'v-stack', name: 'Stacked duo', els: [{ type: 'slot', index: 0, x: .04, y: .06, w: .92, h: .42, radius: 16 }, { type: 'slot', index: 1, x: .04, y: .5, w: .92, h: .42, radius: 16 }] },
+  { id: 'v-present', name: 'Vertical presentation', els: [{ type: 'media', x: .04, y: .08, w: .92, h: .3 }, { type: 'slot', index: 0, x: .04, y: .41, w: .92, h: .5, radius: 16 }] },
+  { id: 'v-ai', name: 'Vertical AI', els: [{ type: 'ai', x: .04, y: .06, w: .92, h: .44, size: 26 }, { type: 'slot', index: 0, x: .04, y: .53, w: .92, h: .4, radius: 16 }] },
+  { id: 'v-chat', name: 'Vertical + chat', els: [{ type: 'slot', index: 0, x: .04, y: .06, w: .92, h: .56, radius: 16 }, { type: 'chat', x: .04, y: .65, w: .92, h: .28, max: 6, size: 24, bg: true }] },
+];
+const TPL = Object.fromEntries([...TEMPLATES, ...V_TEMPLATES].map((t) => [t.id, t]));
+const isVertical = () => S.state.aspect === '9:16';
 const BUILTINS = [
   { id: 'b-solo', name: 'Solo', layout: 'solo' },
   { id: 'b-split', name: 'Side by side', layout: 'split' },
@@ -1073,7 +1211,7 @@ function autoPresentScene(id) {
   const patch = { presenter: id };
   if (!hasMediaScene()) {
     S.prePres = { layout: S.state.layout, elements: elementsCopy(), scene: S.state.scene || '' };
-    Object.assign(patch, templatePatch(TPL.present));
+    Object.assign(patch, templatePatch(isVertical() ? TPL['v-present'] : TPL.present));
   }
   setStage(patch);
 }
@@ -1090,6 +1228,10 @@ S.assets = new Map(); // id -> { img, data, loading }
 function assetImg(id) {
   if (!id) return null;
   let a = S.assets.get(id);
+  if (!a && id.startsWith('local-brand-')) {
+    const data = store.get('brandImgs', {})[id.slice(12)];
+    if (data) { setAssetData(id, data); a = S.assets.get(id); }
+  }
   if (!a) {
     a = { img: null, data: null, loading: true };
     S.assets.set(id, a);
@@ -1365,7 +1507,7 @@ function drawFeatured(t, bottom) {
   const f = S.state.featured;
   if (!f) return;
   if (featAnim.key !== f.id) { featAnim.key = f.id; featAnim.t0 = t; }
-  const k = Math.min(1, (t - featAnim.t0) / 380), e = 1 - Math.pow(1 - k, 3);
+  const an = entrance(featAnim.t0, t, f.text.length), e = an.alpha;
   const brand = S.state.brand, cw = 560, pad = 22;
   g.save();
   g.font = '500 24px Inter, sans-serif';
@@ -1375,7 +1517,7 @@ function drawFeatured(t, bottom) {
   const chatEl = (S.state.elements || []).find((el) => el.type === 'chat');
   const left = chatEl && chatEl.x + chatEl.w / 2 > 0.5;
   if (left && S.state.banner) bottom -= S.state.banner.sub ? 140 : 100;
-  const x = left ? 44 - (1 - e) * 60 : W - cw - 44 + (1 - e) * 60, y = bottom - ch - 20;
+  const x = left ? 44 + an.dx : W - cw - 44 - an.dx, y = bottom - ch - 20;
   g.globalAlpha = e;
   g.shadowColor = 'rgba(0,0,0,.35)'; g.shadowBlur = 28; g.shadowOffsetY = 10;
   g.fillStyle = '#ffffff'; rr(x, y, cw, ch, 14); g.fill();
@@ -1743,7 +1885,7 @@ $('#aiModel').addEventListener('change', (e) => store.set('aiModel:' + S.aiProv,
 $('#aiStage').addEventListener('change', (e) => {
   if (!isHost()) return;
   if (!e.target.checked) return setStage({ elements: elementsCopy().filter((x) => x.type !== 'ai') });
-  applyTemplate(S.local.pres || participants().some((p) => p.sharing) ? TPL['screen-ai'] : TPL['ai-cam']);
+  applyTemplate(isVertical() ? TPL['v-ai'] : S.local.pres || participants().some((p) => p.sharing) ? TPL['screen-ai'] : TPL['ai-cam']);
 });
 $('#aiClear').onclick = () => { S.ai.items = []; renderAILog(); if (S.studio && isHost()) wsSend({ type: 'ai', item: { id: 'clear', role: 'system', text: '', done: true } }); };
 $('#aiForm').addEventListener('submit', async (ev) => {
@@ -1821,6 +1963,7 @@ $('#avatarFile').onchange = async (e) => {
   try {
     const data = await squareThumb(f);
     store.set('avatar', data);
+    if (acct.user) acctApi('update', { avatar: data }).then((r) => setUser(r.user)).catch(() => {});
     renderPreview();
     if (S.studio) uploadAvatar(true);
   } catch (err) { toast(err.message, { err: true }); }
@@ -1844,6 +1987,649 @@ async function uploadAvatar(force) {
   if (!data || !S.studio || (S.local.avatarId && !force)) return;
   try { S.local.avatarId = await storeAsset(data); sendMeta({ avatar: S.local.avatarId }); renderCrew(); } catch {}
 }
+
+// ---------------------------------------------------------------- account (sign in, profile, synced settings)
+const acct = { token: store.get('acctToken', ''), user: null };
+async function acctApi(action, body = {}) {
+  let res;
+  try {
+    res = await fetch('/api/account?action=' + action, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...(acct.token ? { Authorization: 'Bearer ' + acct.token } : {}) },
+      body: JSON.stringify(body),
+    });
+  } catch { throw Object.assign(new Error('Could not reach gather. Check your connection.'), { status: 0 }); }
+  let data = {};
+  try { data = await res.json(); } catch {}
+  if (!res.ok) {
+    if (res.status === 401 && acct.token && !['login', 'signup', 'reset', 'forgot', 'password', 'delete'].includes(action)) signedOut();
+    throw Object.assign(new Error(data.error || `Request failed (${res.status}).`), { status: res.status });
+  }
+  return data;
+}
+// Settings that follow you between devices once you're signed in. API keys and stream keys never sync.
+const SYNC_KEYS = ['tips', 'layouts', 'presets', 'accent', 'bg', 'title', 'theme', 'aiProv', 'startMic', 'startCam', 'quality', 'audioFx', 'videoFx', 'brandPrefs', 'streamPrefs'];
+let syncT = null, applyingSync = false;
+const rawSet = store.set;
+store.set = (k, v) => {
+  rawSet(k, v);
+  if (!applyingSync && acct.user && SYNC_KEYS.includes(k)) { clearTimeout(syncT); syncT = setTimeout(pushSettings, 1500); renderSyncNote('Saving…'); }
+};
+function collectSettings() { const o = {}; for (const k of SYNC_KEYS) { const v = store.get(k, undefined); if (v !== undefined) o[k] = v; } return o; }
+async function pushSettings() {
+  if (!acct.user) return;
+  try { const r = await acctApi('update', { settings: collectSettings() }); acct.user = r.user; renderSyncNote('Saved to your account'); }
+  catch (e) { renderSyncNote(e.message); }
+}
+function applySettings(settings) {
+  applyingSync = true;
+  for (const k of SYNC_KEYS) if (settings && k in settings) rawSet(k, settings[k]);
+  applyingSync = false;
+  S.audioFx = { echo: true, ns: true, agc: true, ai: false, gain: 1, ...store.get('audioFx', {}) };
+  S.videoFx = { effect: 'none', bright: 0, contrast: 1, sat: 1, key: '#00ff00', tol: 0.1, fps: 30, mirror: true, ...store.get('videoFx', {}) };
+  S.aiProv = store.get('aiProv', 'claude');
+  applyTheme(store.get('theme', 'dark'));
+  if (!S.studio) S.state = localState();
+  renderAll(); renderPresets(); renderBgFx();
+}
+let profT = null;
+function profileSoon(patch) {
+  if (!acct.user) return;
+  clearTimeout(profT);
+  profT = setTimeout(() => acctApi('update', patch).then((r) => setUser(r.user)).catch(() => {}), 700);
+}
+function setUser(u, token) {
+  acct.user = u;
+  if (token) { acct.token = token; rawSet('acctToken', token); }
+  if (u) {
+    if (u.name) { S.name = u.name; rawSet('name', u.name); if (document.activeElement !== $('#nameInput')) $('#nameInput').value = u.name; if (document.activeElement !== $('#enterName')) $('#enterName').value = u.name; }
+    if (u.avatar) rawSet('avatar', u.avatar);
+  }
+  renderUser(); renderPreview(); renderStreamPanel();
+}
+function signedOut(msg) {
+  acct.user = null; acct.token = ''; rawSet('acctToken', '');
+  renderUser(); renderStreamPanel();
+  if (msg) toast(msg);
+}
+function renderUser() {
+  const b = $('#userBtn'), u = acct.user;
+  b.classList.toggle('signed', !!u);
+  b.title = u ? `Signed in as ${u.email}` : 'Sign in';
+  const av = $('#userAv');
+  av.style.backgroundImage = u?.avatar ? `url("${u.avatar}")` : '';
+  av.textContent = u ? (u.avatar ? '' : initials(u.name)) : '';
+  $('#userIcon').toggleAttribute('hidden', !!u);
+  $('#userLabel').textContent = u ? u.name : 'Sign in';
+  if ($('#acctDlg').open) renderAcctDlg();
+}
+function renderSyncNote(t) { const n = $('#acSync'); if (n) n.textContent = t; }
+let acView = 'in'; // in | up | forgot | reset
+function renderAcctDlg() {
+  const u = acct.user;
+  $('#acOut').hidden = !!u || acView === 'forgot' || acView === 'reset';
+  $('#acForgotView').hidden = acView !== 'forgot';
+  $('#acResetView').hidden = acView !== 'reset';
+  $('#acIn').hidden = !u;
+  $$('#acTabs button').forEach((b) => { const on = b.dataset.ac === acView; b.classList.toggle('on', on); b.setAttribute('aria-selected', on); });
+  $('#acNameRow').hidden = acView !== 'up';
+  $('#acGo').textContent = acView === 'up' ? 'Create account' : 'Sign in';
+  $('#acPass').autocomplete = acView === 'up' ? 'new-password' : 'current-password';
+  $('#acH').textContent = u ? 'Your account' : acView === 'forgot' ? 'Reset your password' : acView === 'reset' ? 'Choose a new password' : acView === 'up' ? 'Create your gather account' : 'Welcome back.';
+  if (u) {
+    if (document.activeElement !== $('#acNick')) $('#acNick').value = u.name;
+    $('#acEmailShow').textContent = u.email;
+    $('#acAvatarImg').hidden = !u.avatar; if (u.avatar) $('#acAvatarImg').src = u.avatar;
+    $('#acAvatarIni').textContent = u.avatar ? '' : initials(u.name);
+    renderSyncNote('Brand, scenes, support links and device preferences follow you.');
+  }
+}
+function openAccount(view) {
+  acView = view || (acct.user ? 'in' : 'in');
+  $$('#acctDlg .err').forEach((e) => (e.hidden = true));
+  renderAcctDlg();
+  $('#acctDlg').showModal();
+}
+const acErr = (id, msg) => { const e = $(id); e.textContent = msg; e.hidden = !msg; };
+$('#userBtn').onclick = () => openAccount();
+$$('#acTabs button').forEach((b) => b.addEventListener('click', () => { acView = b.dataset.ac; acErr('#acErr', ''); renderAcctDlg(); }));
+$('#acForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  acErr('#acErr', '');
+  $('#acGo').disabled = true;
+  try {
+    const body = { email: $('#acEmail').value, password: $('#acPass').value };
+    const local = collectSettings();
+    let r;
+    if (acView === 'up') r = await acctApi('signup', { ...body, name: $('#acName').value || S.name });
+    else r = await acctApi('login', body);
+    setUser(r.user, r.token);
+    $('#acPass').value = '';
+    // Bring this browser's setup into a new account; an existing account's settings win on a new device.
+    if (acView === 'up' || !Object.keys(r.user.settings || {}).length) { const av = store.get('avatar', ''); await acctApi('update', { settings: local, ...(av && !r.user.avatar ? { avatar: av } : {}) }).then((x) => setUser(x.user)).catch(() => {}); }
+    else applySettings(r.user.settings);
+    acView = 'in'; renderAcctDlg();
+    toast(`Signed in as ${r.user.name}.`);
+  } catch (err) { acErr('#acErr', err.message); }
+  finally { $('#acGo').disabled = false; }
+});
+$('#acForgot').onclick = () => { acView = 'forgot'; $('#acFEmail').value = $('#acEmail').value; renderAcctDlg(); };
+$('#acFBack').onclick = () => { acView = 'in'; renderAcctDlg(); };
+$('#acFGo').onclick = async () => {
+  acErr('#acFErr', ''); $('#acFMsg').hidden = true;
+  try { await acctApi('forgot', { email: $('#acFEmail').value }); $('#acFMsg').hidden = false; }
+  catch (err) { acErr('#acFErr', err.message); }
+};
+$('#acRGo').onclick = async () => {
+  acErr('#acRErr', '');
+  try {
+    const r = await acctApi('reset', { token: S.resetToken, password: $('#acRPass').value });
+    setUser(r.user, r.token); applySettings(r.user.settings);
+    history.replaceState(null, '', '/'); acView = 'in'; renderAcctDlg(); toast('Password changed. You’re signed in.');
+  } catch (err) { acErr('#acRErr', err.message); }
+};
+$('#acSaveProfile').onclick = async () => {
+  try { const r = await acctApi('update', { name: $('#acNick').value }); setUser(r.user); toast('Profile saved.'); }
+  catch (err) { toast(err.message, { err: true }); }
+};
+$('#acAvatarBtn').onclick = () => $('#acAvatarFile').click();
+$('#acAvatarFile').onchange = async (e) => {
+  const f = e.target.files[0]; e.target.value = '';
+  if (!f) return;
+  try {
+    const data = await squareThumb(f);
+    rawSet('avatar', data);
+    const r = await acctApi('update', { avatar: data }); setUser(r.user);
+    if (S.studio) uploadAvatar(true);
+    toast('Photo updated.');
+  } catch (err) { toast(err.message, { err: true }); }
+};
+$('#acPwGo').onclick = async () => {
+  acErr('#acPwErr', ''); $('#acPwMsg').hidden = true;
+  try {
+    const r = await acctApi('password', { current: $('#acCur').value, next: $('#acNew').value });
+    setUser(r.user, r.token); $('#acCur').value = ''; $('#acNew').value = '';
+    $('#acPwMsg').hidden = false;
+  } catch (err) { acErr('#acPwErr', err.message); }
+};
+$('#acSignOut').onclick = async () => { await acctApi('logout').catch(() => {}); signedOut('Signed out.'); $('#acctDlg').close(); };
+$('#acDelGo').onclick = async () => {
+  acErr('#acDelErr', '');
+  try { await acctApi('delete', { password: $('#acDelPass').value }); signedOut('Your account was deleted.'); $('#acctDlg').close(); }
+  catch (err) { acErr('#acDelErr', err.message); }
+};
+async function acctBoot() {
+  const reset = new URLSearchParams(location.search).get('reset');
+  if (reset) { S.resetToken = reset; openAccount('reset'); }
+  if (!acct.token) return renderUser();
+  try { const r = await acctApi('me'); setUser(r.user); if (Object.keys(r.user.settings || {}).length) applySettings(r.user.settings); }
+  catch (e) { if (e.status !== 401) renderUser(); }
+}
+
+// ---------------------------------------------------------------- brand panel
+function savedBrandImgs() { return store.get('brandImgs', {}); }
+async function uploadBrandAssets(brand) {
+  if (!brand || S.host !== S.id) return;
+  const patch = {};
+  for (const k of ['bgImage', 'overlay', 'logo']) {
+    const id = brand[k];
+    if (id?.startsWith('local-')) { const data = S.assets.get(id)?.data || savedBrandImgs()[k]; if (data) patch[k] = await storeAsset(data).catch(() => ''); }
+  }
+  if (Object.keys(patch).length) setStage({ brand: patch });
+}
+function brandPref(patch) {
+  // Keep the look for the next studio too (images live in this browser).
+  const keep = ['font', 'tag', 'bannerStyle', 'anim', 'frame', 'dim', 'logoPos', 'logoSize'];
+  const prefs = store.get('brandPrefs', {});
+  for (const k of keep) if (k in patch) prefs[k] = patch[k];
+  store.set('brandPrefs', prefs);
+  setStage({ brand: patch });
+}
+async function brandImage(kind, file) {
+  try {
+    const data = await compressImage(file);
+    const imgs = savedBrandImgs(); imgs[kind] = data;
+    try { rawSet('brandImgs', imgs); } catch {}
+    const id = S.studio ? await storeAsset(data) : (setAssetData('local-brand-' + kind, data), 'local-brand-' + kind);
+    setStage({ brand: { [kind]: id } });
+    toast({ bgImage: 'Background image set.', overlay: 'Overlay added.', logo: 'Logo added.' }[kind]);
+  } catch (err) { toast(err.message, { err: true }); }
+}
+function clearBrandImage(kind) {
+  const imgs = savedBrandImgs(); delete imgs[kind]; rawSet('brandImgs', imgs);
+  setStage({ brand: { [kind]: '' } });
+}
+for (const [kind, pick, file, clear] of [['bgImage', '#bgImgPick', '#bgImgFile', '#bgImgClear'], ['overlay', '#overlayPick', '#overlayFile', '#overlayClear'], ['logo', '#logoPick', '#logoFile', '#logoClear']]) {
+  $(pick).onclick = () => { if (!isHost()) return toast('Only the host can change the brand.', { err: true }); $(file).click(); };
+  $(file).onchange = (e) => { const f = e.target.files[0]; e.target.value = ''; if (f) brandImage(kind, f); };
+  $(clear).onclick = () => clearBrandImage(kind);
+}
+function segWire(sel, attr, key) {
+  $$(sel + ' button').forEach((b) => b.addEventListener('click', () => { if (!isHost()) return; brandPref({ [key]: b.dataset[attr] }); }));
+}
+segWire('#tagSeg', 'tag', 'tag'); segWire('#bannerStyleSeg', 'bs', 'bannerStyle'); segWire('#frameSeg', 'frame', 'frame'); segWire('#logoPosSeg', 'lp', 'logoPos');
+$('#fontSel').onchange = (e) => brandPref({ font: e.target.value });
+$('#animSel').onchange = (e) => { brandPref({ anim: e.target.value }); previewAnimation(); };
+$('#bgDim').oninput = (e) => brandPref({ dim: Number(e.target.value) });
+$('#logoSize').oninput = (e) => brandPref({ logoSize: Number(e.target.value) });
+function previewAnimation() {
+  S.banner.key = ''; featAnim.key = '';
+  if (!S.state.banner && !S.state.featured) toast('Show a banner to see the animation on stage.');
+}
+$('#animPreview').onclick = previewAnimation;
+function renderBrandPanel() {
+  const b = S.state.brand, host = isHost();
+  const segOn = (sel, attr, val) => $$(sel + ' button').forEach((x) => { x.classList.toggle('on', x.dataset[attr] === val); x.disabled = !host; });
+  segOn('#tagSeg', 'tag', b.tag || 'solid'); segOn('#bannerStyleSeg', 'bs', b.bannerStyle || 'classic'); segOn('#frameSeg', 'frame', b.frame || 'none'); segOn('#logoPosSeg', 'lp', b.logoPos || 'tr');
+  $('#fontSel').value = b.font || 'jakarta'; $('#fontSel').disabled = !host;
+  $('#animSel').value = b.anim || 'slide'; $('#animSel').disabled = !host;
+  $('#bgDim').value = b.dim ?? 0.25; $('#bgDim').disabled = !host;
+  $('#logoSize').value = b.logoSize ?? 0.12; $('#logoSize').disabled = !host;
+  $('#bgImgClear').hidden = !b.bgImage; $('#overlayClear').hidden = !b.overlay; $('#logoClear').hidden = !b.logo;
+  $('#bgDimRow').hidden = !b.bgImage;
+  $('#logoRow').hidden = !b.logo;
+  for (const id of ['#bgImgPick', '#overlayPick', '#logoPick']) $(id).disabled = !host;
+}
+
+// ---------------------------------------------------------------- stream tab: format, captions, upcoming
+S.streams = [];
+const streamPrefs = () => store.get('streamPrefs', {});
+function setStreamPref(patch) { store.set('streamPrefs', { ...streamPrefs(), ...patch }); }
+$$('#aspectSeg button').forEach((b) => b.addEventListener('click', () => {
+  if (!isHost()) return;
+  if (S.rec) return toast('Stop recording before changing the format.', { err: true });
+  const aspect = b.dataset.aspect;
+  setStreamPref({ aspect });
+  const patch = { aspect };
+  if (S.state.layout === 'custom') { const t = aspect === '9:16' ? TPL['v-solo'] : TPL['duo-chat']; Object.assign(patch, templatePatch(t)); patch.aspect = aspect; }
+  setStage(patch);
+  toast(aspect === '9:16' ? 'Vertical 9:16 — ready for TikTok, Reels and Shorts.' : 'Landscape 16:9.');
+}));
+function syncAspect() {
+  const v = S.state.aspect === '9:16';
+  const w = v ? 720 : 1280, h = v ? 1280 : 720;
+  if (W === w && H === h) return;
+  W = w; H = h; canvas.width = w; canvas.height = h;
+  $('#stage').classList.toggle('vertical', v);
+  renderScenes();
+}
+$('#capSwitch').onchange = (e) => { if (!isHost()) return; const c = { ...S.state.captions, on: e.target.checked }; setStreamPref({ captions: c }); setStage({ captions: c }); };
+$('#capLang').onchange = (e) => { const c = { ...S.state.captions, lang: e.target.value }; setStreamPref({ captions: c }); setStage({ captions: c }); };
+$$('#capStyle button').forEach((b) => b.addEventListener('click', () => { const c = { ...S.state.captions, style: b.dataset.cs }; setStreamPref({ captions: c }); setStage({ captions: c }); }));
+$('#capSize').oninput = (e) => { const c = { ...S.state.captions, size: Number(e.target.value) }; setStreamPref({ captions: c }); setStage({ captions: c }); };
+function renderStreamPanel() {
+  const host = isHost(), c = S.state.captions || {};
+  $$('#aspectSeg button').forEach((b) => { b.classList.toggle('on', b.dataset.aspect === (S.state.aspect || '16:9')); b.disabled = !host; });
+  $('#capSwitch').checked = !!c.on; $('#capSwitch').disabled = !host;
+  $('#capLang').value = c.lang || 'en-US'; $('#capLang').disabled = !host;
+  $$('#capStyle button').forEach((b) => { b.classList.toggle('on', b.dataset.cs === (c.style || 'bar')); b.disabled = !host; });
+  $('#capSize').value = c.size || 26; $('#capSize').disabled = !host;
+  $('#capOpts').hidden = !c.on;
+  $('#capNote').textContent = (window.SpeechRecognition || window.webkitSpeechRecognition) ? 'Each person’s browser transcribes their own mic. Works best in Chrome and Edge.' : 'This browser can’t transcribe speech. Guests on Chrome or Edge will still be captioned.';
+  // upcoming
+  $('#upSignin').hidden = !!acct.user;
+  $('#upWrap').hidden = !acct.user;
+  if (acct.user && !S.streamsLoaded) loadStreams();
+}
+async function loadStreams() {
+  S.streamsLoaded = true;
+  try { const r = await acctApi('streamList'); S.streams = r.streams; S.mailReady = r.mailReady; renderUpcoming(); }
+  catch { S.streamsLoaded = false; }
+}
+const fmtLocal = (ms) => new Date(ms).toLocaleString([], { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+function renderUpcoming() {
+  const ul = $('#upList');
+  const rows = S.streams.filter((x) => x.status === 'scheduled' || (x.status === 'live' && Date.now() - x.when < 6 * 3600e3));
+  $('#upEmpty').hidden = !!rows.length;
+  ul.replaceChildren(...rows.map((st) => {
+    const li = document.createElement('li'); li.className = 'up-item';
+    const top = document.createElement('div'); top.className = 'up-top';
+    const t = document.createElement('b'); t.textContent = st.title;
+    const badge = document.createElement('span'); badge.className = 'up-badge ' + st.status; badge.textContent = st.status === 'live' ? 'Live' : fmtLocal(st.when);
+    top.append(t, badge);
+    const meta = document.createElement('p'); meta.className = 'up-meta';
+    meta.textContent = `${st.invites.length ? st.invites.length + ' invited' : 'No invites'}${st.mail?.scheduled ? ` · ${st.mail.scheduled} reminders scheduled` : ''}`;
+    const row = document.createElement('div'); row.className = 'row';
+    const btn = (label, cls, fn) => { const b = document.createElement('button'); b.type = 'button'; b.className = 'btn sm ' + cls; b.textContent = label; b.onclick = fn; return b; };
+    row.append(
+      btn('Start', 'primary', () => startScheduled(st)),
+      btn('Copy link', 'glassy', () => copy(`${location.origin}/s/${st.studio}`, 'Invite link copied.')),
+      btn('Calendar', 'glassy', () => downloadIcs(st)),
+      btn('Cancel', 'ghost danger-text', (ev) => {
+        const b = ev.currentTarget;
+        if (b.dataset.confirm) { cancelStream(st); return; }
+        b.dataset.confirm = '1'; b.textContent = 'Confirm cancel'; setTimeout(() => { delete b.dataset.confirm; b.textContent = 'Cancel'; }, 4000);
+      }),
+    );
+    li.append(top, meta, row);
+    return li;
+  }));
+}
+async function cancelStream(st) {
+  try { await acctApi('streamCancel', { id: st.id, notify: true }); toast('Stream cancelled. Invitees were told and reminders stopped.'); S.streamsLoaded = false; loadStreams(); }
+  catch (err) { toast(err.message, { err: true }); }
+}
+function startScheduled(st) {
+  if (S.studio) return toast('Leave this studio first, then start the stream.', { err: true });
+  S.pendingStream = { code: st.studio, id: st.id, title: st.title };
+  S.state.title = st.title;
+  openEnter('create');
+}
+function downloadIcs(st) {
+  const d = (ms) => new Date(ms).toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
+  const e = (t) => String(t || '').replace(/[\\,;]/g, (c) => '\\' + c).replace(/\n/g, '\\n');
+  const link = `${location.origin}/s/${st.studio}`;
+  const text = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//gather//studio//EN', 'BEGIN:VEVENT', `UID:${st.id}@gather`, `DTSTAMP:${d(Date.now())}`, `DTSTART:${d(st.when)}`, `DTEND:${d(st.when + (st.duration || 60) * 60000)}`,
+    `SUMMARY:${e(st.title)}`, `DESCRIPTION:${e((st.description ? st.description + '\n\n' : '') + 'Studio: ' + link)}`, `URL:${link}`, 'BEGIN:VALARM', 'TRIGGER:-PT15M', 'ACTION:DISPLAY', 'DESCRIPTION:Starting soon', 'END:VALARM', 'END:VEVENT', 'END:VCALENDAR'].join('\r\n');
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([text], { type: 'text/calendar' }));
+  a.download = (st.title || 'gather-stream').replace(/[^\w -]+/g, '').slice(0, 40) + '.ics';
+  a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+}
+$('#upSigninBtn').onclick = () => openAccount('up');
+
+// ---------------------------------------------------------------- start / schedule wizard + thumbnails
+const wiz = { step: 1, mode: 'now', thumb: null, photo: null, aiBg: null, upload: null, tab: 'design', style: 'bold' };
+const tc = $('#wThumb'), tg = tc.getContext('2d');
+function openWizard() {
+  if (S.studio && !isHost()) return;
+  Object.assign(wiz, { step: 1, mode: 'now' });
+  $('#wTitle').value = $('#wTitle').value || S.state.title || '';
+  const d = new Date(Date.now() + 864e5); d.setMinutes(0, 0, 0);
+  if (!$('#wDate').value) { $('#wDate').value = d.toISOString().slice(0, 10); $('#wTime').value = d.toTimeString().slice(0, 5); }
+  $('#wDone').hidden = true; $('#wSteps').hidden = false;
+  renderWizard(); drawThumb();
+  $('#wizDlg').showModal();
+}
+$('#wizOpen').onclick = openWizard;
+$$('[data-wmode]').forEach((b) => b.addEventListener('click', () => { wiz.mode = b.dataset.wmode; wiz.step = 2; renderWizard(); setTimeout(() => $('#wTitle').focus(), 50); }));
+$('#wBack').onclick = () => { wiz.step = Math.max(1, wiz.step - 1); renderWizard(); };
+$('#wNext').onclick = () => {
+  if (wiz.step === 2) {
+    if (!$('#wTitle').value.trim()) return wErr('Give your stream a title.');
+    if (wiz.mode === 'later') {
+      if (!acct.user) return wErr('Sign in to schedule streams and send reminders.');
+      const when = wWhen();
+      if (!when || when < Date.now() + 60e3) return wErr('Pick a start time in the future.');
+      if (when > Date.now() + 29 * 864e5) return wErr('You can schedule up to 29 days ahead.');
+    }
+  }
+  wErr(''); wiz.step = Math.min(4, wiz.step + 1); renderWizard(); if (wiz.step === 3) drawThumb();
+};
+const wErr = (m) => { $('#wErr').textContent = m; $('#wErr').hidden = !m; };
+const wWhen = () => { const v = $('#wDate').value && $('#wTime').value ? new Date(`${$('#wDate').value}T${$('#wTime').value}`) : null; return v ? v.getTime() : 0; };
+function renderWizard() {
+  $$('#wSteps [data-step]').forEach((el) => (el.hidden = Number(el.dataset.step) !== wiz.step));
+  $$('#wDots i').forEach((d, i) => d.classList.toggle('on', i < wiz.step));
+  $('#wBack').hidden = wiz.step === 1;
+  $('#wNext').hidden = wiz.step === 1 || wiz.step === 4;
+  $('#wGo').hidden = wiz.step !== 4;
+  $('#wGo').textContent = wiz.mode === 'later' ? 'Schedule stream' : 'Go to the green room';
+  $$('.w-later').forEach((el) => (el.hidden = wiz.mode !== 'later'));
+  $('#wMailNote').textContent = !acct.user ? 'Sign in to email invites and reminders.' : S.mailReady === false ? 'Email isn’t set up on this gather yet, so invites won’t be emailed. You can still copy the link.' : 'Invitees get the invite now, then reminders a day and 15 minutes before. You get the reminders too.';
+  $$('#wThumbTabs button').forEach((b) => b.classList.toggle('on', b.dataset.wt === wiz.tab));
+  $$('[data-wpane]').forEach((p) => (p.hidden = p.dataset.wpane !== wiz.tab));
+  $$('#wStyle button').forEach((b) => b.classList.toggle('on', b.dataset.ws === wiz.style));
+  if (wiz.step === 4) {
+    $('#wSumTitle').textContent = $('#wTitle').value.trim();
+    $('#wSumWhen').textContent = wiz.mode === 'later' ? fmtLocal(wWhen()) : 'Now';
+    const inv = $('#wInvites').value.split(/[\s,;]+/).filter(Boolean);
+    $('#wSumInv').textContent = inv.length ? `${inv.length} ${inv.length === 1 ? 'person' : 'people'}` : 'Nobody yet';
+    $('#wSumThumb').src = tc.toDataURL('image/webp', .8);
+  }
+}
+$$('#wThumbTabs button').forEach((b) => b.addEventListener('click', () => { wiz.tab = b.dataset.wt; renderWizard(); drawThumb(); }));
+$$('#wStyle button').forEach((b) => b.addEventListener('click', () => { wiz.style = b.dataset.ws; renderWizard(); drawThumb(); }));
+$('#wHeadline').oninput = drawThumb;
+$('#wTitle').addEventListener('input', () => { if (!$('#wHeadline').dataset.touched) $('#wHeadline').value = $('#wTitle').value; drawThumb(); });
+$('#wHeadline').addEventListener('input', () => { $('#wHeadline').dataset.touched = '1'; });
+const loadImg = (src) => new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = src; });
+$('#wSnap').onclick = async () => {
+  const v = $(`#card-${cssId(myId())} video`) || $('#previewVideo');
+  if (!v?.videoWidth) return toast('Turn your camera on first, or upload a photo.', { err: true });
+  const c = document.createElement('canvas'); c.width = v.videoWidth; c.height = v.videoHeight;
+  c.getContext('2d').drawImage(v, 0, 0); wiz.photo = await loadImg(c.toDataURL('image/jpeg', .9)); drawThumb();
+};
+$('#wPhotoPick').onclick = () => $('#wPhotoFile').click();
+$('#wPhotoFile').onchange = async (e) => { const f = e.target.files[0]; e.target.value = ''; if (f) { wiz.photo = await loadImg(await compressImage(f)); drawThumb(); } };
+$('#wUploadPick').onclick = () => $('#wUploadFile').click();
+$('#wUploadFile').onchange = async (e) => { const f = e.target.files[0]; e.target.value = ''; if (f) { wiz.upload = await loadImg(await compressImage(f)); drawThumb(); } };
+$('#wGen').onclick = async () => {
+  const prompt = $('#wPrompt').value.trim();
+  if (!prompt) return toast('Describe the background you want.', { err: true });
+  const prov = S.aiProv, key = store.get('aiKey:' + prov, '');
+  $('#wGen').disabled = true; $('#wGen').textContent = 'Creating…'; $('#wGenNote').textContent = '';
+  try {
+    const res = await fetch('/api/ai', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mode: 'image', provider: prov, apiKey: key, prompt }) });
+    const j = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(j.error || 'The image request failed.');
+    wiz.aiBg = await loadImg(j.data); wiz.tab = 'design'; renderWizard(); drawThumb();
+    toast('AI background added. Adjust the headline and style.');
+  } catch (err) { $('#wGenNote').textContent = err.message; }
+  finally { $('#wGen').disabled = false; $('#wGen').textContent = 'Create background'; }
+};
+function cover(gx, img, x, y, w, h) {
+  const k = Math.max(w / img.naturalWidth, h / img.naturalHeight), dw = img.naturalWidth * k, dh = img.naturalHeight * k;
+  gx.save(); gx.beginPath(); gx.rect(x, y, w, h); gx.clip(); gx.drawImage(img, x + (w - dw) / 2, y + (h - dh) / 2, dw, dh); gx.restore();
+}
+function drawThumb() {
+  const Wt = 1280, Ht = 720, accent = S.state.brand.color, F = stageFont();
+  tg.clearRect(0, 0, Wt, Ht);
+  if (wiz.tab === 'upload') {
+    if (wiz.upload) cover(tg, wiz.upload, 0, 0, Wt, Ht);
+    else { tg.fillStyle = '#101b3a'; tg.fillRect(0, 0, Wt, Ht); tg.fillStyle = 'rgba(255,255,255,.6)'; tg.font = '600 30px Onest, sans-serif'; tg.textAlign = 'center'; tg.fillText('Choose an image (1280 × 720 works best)', Wt / 2, Ht / 2); }
+    return;
+  }
+  // background: AI image, else the brand gradient
+  if (wiz.aiBg) cover(tg, wiz.aiBg, 0, 0, Wt, Ht);
+  else { const gr = tg.createLinearGradient(0, 0, Wt, Ht); gr.addColorStop(0, '#0b1636'); gr.addColorStop(.55, '#1a2a6b'); gr.addColorStop(1, accent); tg.fillStyle = gr; tg.fillRect(0, 0, Wt, Ht); }
+  const head = ($('#wHeadline').value || $('#wTitle').value || 'Your stream title').trim();
+  const st = wiz.style;
+  if (wiz.photo) {
+    if (st === 'split') cover(tg, wiz.photo, Wt * .5, 0, Wt * .5, Ht);
+    else if (st === 'center') { tg.save(); tg.globalAlpha = .35; cover(tg, wiz.photo, 0, 0, Wt, Ht); tg.restore(); }
+    else { cover(tg, wiz.photo, Wt * .48, 0, Wt * .52, Ht); const fade = tg.createLinearGradient(Wt * .48, 0, Wt * .62, 0); fade.addColorStop(0, 'rgba(8,14,32,1)'); fade.addColorStop(1, 'rgba(8,14,32,0)'); tg.fillStyle = fade; tg.fillRect(Wt * .48, 0, Wt * .14, Ht); }
+  }
+  if (st !== 'center') { const sh = tg.createLinearGradient(0, 0, Wt * .6, 0); sh.addColorStop(0, 'rgba(6,10,24,.75)'); sh.addColorStop(1, 'rgba(6,10,24,0)'); tg.fillStyle = sh; tg.fillRect(0, 0, Wt * .6, Ht); }
+  // headline
+  const maxW = st === 'center' ? Wt - 160 : Wt * .46;
+  let size = 108;
+  tg.font = `900 ${size}px ${F}`;
+  let lines = [];
+  for (;;) {
+    tg.font = `900 ${size}px ${F}`;
+    const words = head.toUpperCase().split(/\s+/); lines = []; let cur = '';
+    for (const w of words) { const test = cur ? cur + ' ' + w : w; if (tg.measureText(test).width > maxW && cur) { lines.push(cur); cur = w; } else cur = test; }
+    if (cur) lines.push(cur);
+    if (lines.length <= 4 || size <= 48) break;
+    size -= 8;
+  }
+  const lh = size * 1.02, total = lines.length * lh;
+  tg.textAlign = st === 'center' ? 'center' : 'left'; tg.textBaseline = 'alphabetic';
+  const x0 = st === 'center' ? Wt / 2 : 70, y0 = (Ht - total) / 2 + size * .85;
+  lines.forEach((l, i) => {
+    tg.lineWidth = size * .12; tg.strokeStyle = 'rgba(0,0,0,.55)'; tg.lineJoin = 'round'; tg.strokeText(l, x0, y0 + i * lh);
+    tg.fillStyle = i === lines.length - 1 ? accent : '#ffffff'; tg.fillText(l, x0, y0 + i * lh);
+  });
+  tg.fillStyle = accent; tg.fillRect(st === 'center' ? Wt / 2 - 60 : 72, y0 + (lines.length - 1) * lh + 26, 120, 10);
+}
+$('#wGo').onclick = async () => {
+  wErr('');
+  const title = $('#wTitle').value.trim();
+  const thumb = (wiz.tab === 'upload' && !wiz.upload) ? '' : tc.toDataURL('image/jpeg', .86);
+  const body = { title, description: $('#wDesc').value.trim(), invites: $('#wInvites').value, destinations: $$('#wDest input:checked').map((i) => i.value), thumb, tz: Intl.DateTimeFormat().resolvedOptions().timeZone, duration: Number($('#wDur').value) };
+  $('#wGo').disabled = true;
+  try {
+    if (wiz.mode === 'later') {
+      const r = await acctApi('streamCreate', { ...body, when: wWhen(), notify: true });
+      S.streams.push(r.stream); renderUpcoming();
+      $('#wSteps').hidden = true; $('#wDone').hidden = false;
+      $('#wDoneWhen').textContent = fmtLocal(r.stream.when);
+      $('#wDoneMail').textContent = r.stream.mail?.skipped || (r.stream.mail ? `${r.stream.mail.sent} invites sent, ${r.stream.mail.scheduled} reminders scheduled${r.stream.mail.failed ? `, ${r.stream.mail.failed} failed: ${r.stream.mail.error}` : ''}.` : 'No emails were sent.');
+      wiz.done = r.stream;
+    } else {
+      // Live now: a reserved studio when signed in (so you keep the host seat), else a fresh one.
+      let code = newCode(), id = null;
+      if (acct.user) { const r = await acctApi('streamCreate', body); code = r.stream.studio; id = r.stream.id; }
+      S.pendingStream = { code, id, title };
+      setStage({ title });
+      $('#wizDlg').close();
+      openEnter('create');
+    }
+  } catch (err) { wErr(err.message); }
+  finally { $('#wGo').disabled = false; }
+};
+$('#wDoneCopy').onclick = () => wiz.done && copy(`${location.origin}/s/${wiz.done.studio}`, 'Invite link copied.');
+$('#wDoneCal').onclick = () => wiz.done && downloadIcs(wiz.done);
+$('#wDoneClose').onclick = () => $('#wizDlg').close();
+
+// ---------------------------------------------------------------- live captions (Web Speech API, each person's own mic)
+const cap = { rec: null, want: false, lang: '', lines: new Map(), warned: false };
+function syncCaptions() {
+  const c = S.state.captions || {};
+  const want = !!(S.studio && c.on && S.local.micOn && S.local.audio);
+  if (want === cap.want && (!want || cap.lang === c.lang)) return;
+  cap.want = want; stopCaptionRec();
+  if (want) startCaptionRec(c.lang || 'en-US');
+}
+function startCaptionRec(lang) {
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) { if (!cap.warned) { cap.warned = true; toast('Your browser can’t transcribe speech, so your captions won’t show. Chrome and Edge can.'); } return; }
+  const r = new SR();
+  r.continuous = true; r.interimResults = true; r.lang = lang; cap.lang = lang;
+  r.onresult = (e) => {
+    let interim = '', fin = '';
+    for (let i = e.resultIndex; i < e.results.length; i++) { const t = e.results[i][0].transcript; if (e.results[i].isFinal) fin += t; else interim += t; }
+    const text = (fin || interim).trim();
+    if (!text) return;
+    showCaption(S.id, S.name || 'You', text, !!fin);
+    sendCaption(text, !!fin);
+  };
+  r.onerror = (e) => { if (e.error === 'not-allowed' || e.error === 'service-not-allowed') { cap.want = false; toast('Captions need permission to use speech recognition.', { err: true }); } };
+  r.onend = () => { if (cap.want && cap.rec === r) setTimeout(() => { try { r.start(); } catch {} }, 250); };
+  cap.rec = r;
+  try { r.start(); } catch {}
+}
+function stopCaptionRec() { const r = cap.rec; cap.rec = null; try { r?.stop(); } catch {} }
+let capLast = 0, capTimer = null;
+function sendCaption(text, final) {
+  clearTimeout(capTimer);
+  const go = () => { capLast = Date.now(); wsSend({ type: 'caption', text, final }); };
+  if (final || Date.now() - capLast > 400) go(); else capTimer = setTimeout(go, 400);
+}
+function showCaption(id, name, text, final) { cap.lines.set(id, { name, text, final, t: Date.now() }); }
+function drawCaptions(bottom) {
+  const c = S.state.captions;
+  if (!c?.on) return;
+  const now = Date.now();
+  const live = [...cap.lines.values()].filter((l) => now - l.t < (l.final ? 4000 : 6000)).sort((a, b) => a.t - b.t).slice(-2);
+  if (!live.length) return;
+  const fs = c.size || 26, F = stageFont(), maxW = Math.min(W - 120, 1000), lh = fs * 1.3, many = cap.lines.size > 1;
+  const rows = [];
+  for (const l of live) {
+    g.font = `600 ${fs}px ${F}`;
+    const words = wrapLines(l.text, maxW - (many ? 0 : 0));
+    const tail = words.slice(-2); // newest words stay visible
+    tail.forEach((t, i) => rows.push({ name: i === 0 && many ? l.name : '', text: t }));
+  }
+  const shown = rows.slice(-3);
+  const blockH = shown.length * lh + 18;
+  const y0 = bottom - blockH;
+  g.save(); g.textAlign = 'center'; g.textBaseline = 'middle';
+  if (c.style === 'bar') { g.fillStyle = 'rgba(0,0,0,.72)'; rr(W / 2 - maxW / 2 - 24, y0, maxW + 48, blockH, 10); g.fill(); }
+  shown.forEach((r, i) => {
+    const y = y0 + 9 + lh * (i + .5);
+    const label = r.name ? r.name + ': ' : '';
+    g.font = `600 ${fs}px ${F}`;
+    const full = g.measureText(label + r.text).width;
+    if (c.style === 'box') { g.fillStyle = 'rgba(0,0,0,.78)'; rr(W / 2 - full / 2 - 12, y - lh / 2 + 2, full + 24, lh - 4, 6); g.fill(); }
+    if (c.style === 'plain') { g.shadowColor = 'rgba(0,0,0,.9)'; g.shadowBlur = 8; }
+    let x = W / 2 - full / 2;
+    g.textAlign = 'left';
+    if (label) { g.fillStyle = S.state.brand.color; g.fillText(label, x, y); x += g.measureText(label).width; }
+    g.fillStyle = '#ffffff'; g.fillText(r.text, x, y);
+    g.shadowColor = 'transparent';
+  });
+  g.restore();
+}
+
+// ---------------------------------------------------------------- guest view: invitees see only their own controls
+function renderGuestView() {
+  const guest = !!S.studio && !isHost();
+  document.body.classList.toggle('is-guest', guest);
+  const active = $(`.rail-btn[data-tab="${S.tab}"]`);
+  if (guest && active?.classList.contains('host-only')) setTab('chat');
+}
+
+// ---------------------------------------------------------------- help: search every setting, jump straight to it
+const HELP = [
+  ['Change my camera', 'camera webcam device switch', 'settings', '#camSelect', 'Settings → Camera'],
+  ['Change my microphone', 'mic microphone audio input device', 'settings', '#micSelect', 'Settings → Microphone'],
+  ['Others hear an echo', 'echo feedback hear myself loop', 'settings', '#echoChk', 'Settings → Microphone → Echo cancellation'],
+  ['Remove background noise', 'noise background fan keyboard dog ai rnnoise', 'settings', '#aiNoiseChk', 'Settings → Microphone → AI noise removal'],
+  ['My mic is too quiet or too loud', 'volume gain loud quiet level', 'settings', '#micGain', 'Settings → Microphone → Input gain'],
+  ['Blur my background', 'blur background bokeh', 'settings', '#bgFxSeg', 'Settings → Background'],
+  ['Replace my background / green screen', 'virtual background green screen chroma replace image', 'settings', '#bgFxSeg', 'Settings → Background'],
+  ['Video looks dark or washed out', 'brightness contrast light dark saturation colour', 'settings', '#fxBright', 'Settings → Camera → Light'],
+  ['Video is choppy', 'choppy laggy fps frame rate quality bandwidth', 'settings', '#qualitySelect', 'Settings → Camera → Quality'],
+  ['Mirror my camera', 'mirror flip reversed', 'settings', '#mirrorChk', 'Settings → Camera'],
+  ['Go live or schedule a stream', 'go live schedule stream start upcoming', 'stream', '#wizOpen', 'Stream → Start a stream'],
+  ['Send reminders to guests', 'email reminder invite calendar', 'stream', '#wizOpen', 'Stream → Start a stream → Schedule'],
+  ['Make a thumbnail', 'thumbnail cover image ai', 'stream', '#wizOpen', 'Stream → Start a stream → Thumbnail'],
+  ['Vertical video for TikTok, Reels, Shorts', 'vertical portrait 9:16 tiktok reels shorts mobile', 'stream', '#aspectSeg', 'Stream → Format'],
+  ['Turn on live captions', 'captions subtitles transcript accessibility', 'stream', '#capSwitch', 'Stream → Live captions'],
+  ['Show Twitch or Rumble chat on stage', 'chat overlay twitch rumble comments', 'stream', '#overlaySwitch', 'Stream → Platform chat'],
+  ['Switch scenes / layouts', 'scene layout switch arrange', 'layouts', '#editToggle', 'Layouts'],
+  ['Present slides, a screen or a video', 'present pdf slides screen share video', null, '#shareBtn', 'Present button in the dock'],
+  ['Ask the on-air AI', 'ai claude chatgpt gemini grok research', 'ai', '#aiInput', 'AI'],
+  ['Add a banner or ticker', 'banner lower third ticker headline', 'banners', '#bannerText', 'Banners'],
+  ['Change stage colours, fonts and animations', 'brand colour color font animation style', 'brand', '#fontSel', 'Brand'],
+  ['Add my logo or an overlay', 'logo overlay watermark frame', 'brand', '#logoPick', 'Brand → Overlays'],
+  ['Show my PayPal, Venmo or Cash App', 'tip donate paypal venmo cash app stripe support', 'brand', '#tipList', 'Brand → Support links'],
+  ['Change my name or photo', 'name nickname photo avatar profile', null, '#userBtn', 'Your account (top right)'],
+  ['Change my password', 'password reset account security', null, '#userBtn', 'Your account → Change password'],
+  ['Record the show', 'record recording save download', null, '#recBtn', 'Record button in the dock'],
+  ['A guest can’t connect', 'connect firewall turn network corporate', 'settings', '#turnUrl', 'Settings → TURN server'],
+  ['Switch to light mode', 'light dark theme appearance', 'settings', '#themeSeg', 'Settings → Appearance'],
+];
+const POPULAR = [3, 2, 5, 10, 14, 17];
+function helpGo(row) {
+  const [, , tab, sel] = row;
+  const hits = store.get('helpHits', {}); hits[row[0]] = (hits[row[0]] || 0) + 1; rawSet('helpHits', hits);
+  if (tab) setTab(tab);
+  if (sel === '#userBtn') return openAccount();
+  if (sel === '#wizOpen') { setTab('stream'); return openWizard(); }
+  const el = $(sel);
+  if (!el) return;
+  setTimeout(() => {
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    const box = el.closest('.fld, .switch-row, .check, .tool, .btn, .seg') || el;
+    box.classList.remove('flash'); void box.offsetWidth; box.classList.add('flash');
+    if (el.focus) el.focus({ preventScroll: true });
+  }, 120);
+}
+function helpRow(row) {
+  const li = document.createElement('li');
+  const b = document.createElement('button'); b.type = 'button'; b.className = 'help-item';
+  const t = document.createElement('b'); t.textContent = row[0];
+  const w = document.createElement('span'); w.textContent = row[4];
+  b.append(t, w); b.onclick = () => helpGo(row);
+  li.append(b); return li;
+}
+function renderHelp() {
+  const q = $('#helpSearch').value.trim().toLowerCase();
+  const hits = store.get('helpHits', {});
+  const popular = [...POPULAR.map((i) => HELP[i]), ...HELP].filter((r, i, a) => a.indexOf(r) === i)
+    .sort((a, b) => (hits[b[0]] || 0) - (hits[a[0]] || 0)).slice(0, 6);
+  $('#helpPopular').replaceChildren(...popular.map(helpRow));
+  $('#helpPopWrap').hidden = !!q;
+  const words = q.split(/\s+/).filter(Boolean);
+  const res = q ? HELP.filter((r) => words.every((w) => (r[0] + ' ' + r[1] + ' ' + r[4]).toLowerCase().includes(w))) : [];
+  $('#helpResults').replaceChildren(...res.map(helpRow));
+  $('#helpNone').hidden = !q || !!res.length;
+}
+$('#helpSearch').addEventListener('input', renderHelp);
+$('#helpSearch').addEventListener('keydown', (e) => { if (e.key === 'Enter') { const first = $('#helpResults .help-item'); first?.click(); } });
 
 // ---------------------------------------------------------------- recording
 function pickMime() {
@@ -1941,19 +2727,16 @@ function setPhase(p) {
   $('#statusText').textContent = { offline: 'Studio offline', connecting: 'Connecting…', online: 'Studio connected', reconnecting: 'Reconnecting…' }[p];
   renderAll();
 }
-function renderAll() { renderHeader(); renderStageUI(); renderCrew(); renderDock(); renderPanels(); renderFeedUI(); renderLayoutsPanel(); renderAIPanel(); renderTips(); syncTwitch(); }
+function renderAll() { renderHeader(); renderStageUI(); renderCrew(); renderDock(); renderPanels(); renderFeedUI(); renderLayoutsPanel(); renderAIPanel(); renderTips(); renderBrandPanel(); renderStreamPanel(); renderGuestView(); syncTwitch(); syncCaptions(); }
 function renderHeader() {
   $('#studioTitle').textContent = S.state.title || DEFAULT_TITLE;
   $('#enterTopText').textContent = S.studio ? 'Room details' : 'Enter studio';
-  const c = S.state.brand.color;
-  document.documentElement.style.setProperty('--accent', c);
-  document.documentElement.style.setProperty('--accent-soft', `color-mix(in srgb, ${c} 12%, var(--surface))`);
-  document.documentElement.style.setProperty('--accent-ink', contrastInk(c));
 }
 function renderStageUI() {
   $('#stageEmpty').hidden = !!S.studio || previewActive();
   $('#stageMeta').classList.toggle('live', !!S.studio);
-  $('#stageMeta').lastChild.textContent = S.studio ? `${S.state.stage.length} on stage · 16:9` : 'Stage preview · 16:9';
+  const fmt = S.state.aspect === '9:16' ? '9:16 vertical' : '16:9';
+  $('#stageMeta').lastChild.textContent = S.studio ? `${S.state.stage.length} on stage · ${fmt}` : `Stage preview · ${fmt}`;
   renderScenes();
   $('#hostNote').hidden = isHost();
 }
@@ -1969,7 +2752,7 @@ function renderCrew() {
       li = document.createElement('li'); li.className = 'crew-card'; li.id = 'card-' + cssId(p.id); li.dataset.id = p.id;
       li.innerHTML = `<div class="crew-thumb"><video autoplay playsinline></video><div class="ini" hidden><span></span></div><div class="tagrow"></div></div><div class="crew-info"><div class="crew-name"><span class="nm"></span></div><div class="crew-sub"></div><button class="crew-act" hidden></button></div>`;
       const v = $('video', li);
-      if (p.me) { v.muted = true; const ov = outVideo(); if (ov) v.srcObject = new MediaStream([ov]); v.classList.add('mirror'); }
+      if (p.me) { v.muted = true; const ov = outVideo(); if (ov) v.srcObject = new MediaStream([ov]); v.classList.toggle('mirror', !!S.videoFx.mirror); }
       else if (p.peer.stream.getTracks().length) { v.srcObject = p.peer.stream; playEl(v); }
       $('.crew-act', li).addEventListener('click', () => toggleStage(p.id));
       list.insertBefore(li, add);
@@ -2083,7 +2866,7 @@ $$('.rail-btn').forEach((b) => b.addEventListener('click', () => setTab(b.datase
 $('#settingsDock').onclick = () => { setTab('settings'); if (innerWidth <= 900) $('#side').scrollIntoView({ behavior: 'smooth' }); };
 
 function sceneList() {
-  return [...BUILTINS.map((b) => ({ ...b, kind: 'builtin' })), ...TEMPLATES.map((t) => ({ ...t, kind: 'template' })), ...savedLayouts().map((l) => ({ id: 'saved:' + l.name, name: l.name, kind: 'saved', saved: l }))];
+  return [...BUILTINS.map((b) => ({ ...b, kind: 'builtin' })), ...(isVertical() ? V_TEMPLATES : TEMPLATES).map((t) => ({ ...t, kind: 'template' })), ...savedLayouts().map((l) => ({ id: 'saved:' + l.name, name: l.name, kind: 'saved', saved: l }))];
 }
 function activeSceneId() {
   if (S.state.layout !== 'custom') return 'b-' + S.state.layout;
@@ -2098,7 +2881,7 @@ function scenePreview(sc) {
   const pv = document.createElement('span'); pv.className = 'sc-pv';
   let els = sc.els || sc.saved?.elements;
   if (sc.kind === 'builtin') {
-    const area = { x: 32, y: 44, w: W - 64, h: H - 76 }; // same geometry the stage uses, then scaled to 0..1
+    const area = { x: 32, y: 44, w: W - 64, h: H - 76 }; // same geometry the stage uses, then scaled to 0..1 (current orientation)
     const n = sc.layout === 'solo' ? 1 : 3;
     els = layoutRects(n, sc.layout, area).map((r) => ({ type: 'slot', x: r.x / W, y: r.y / H, w: r.w / W, h: r.h / H }));
   }
@@ -2160,9 +2943,9 @@ $('#titleApply').onclick = () => { setStage({ title: $('#titleInput').value.trim
 // Appearance: dark by default; light or follow the OS on request.
 function applyTheme(t) {
   store.set('theme', t);
-  const root = document.documentElement;
-  if (t === 'system') root.removeAttribute('data-theme'); else root.setAttribute('data-theme', t);
-  const dark = t === 'dark' || (t === 'system' && matchMedia('(prefers-color-scheme: dark)').matches);
+  if (t !== 'light') t = 'dark';
+  document.documentElement.setAttribute('data-theme', t);
+  const dark = t === 'dark';
   $('meta[name="theme-color"]').setAttribute('content', dark ? '#0d1117' : '#ffffff');
   $$('#themeSeg button').forEach((b) => { const on = b.dataset.themeOpt === t; b.classList.toggle('on', on); b.setAttribute('aria-checked', on); });
 }
@@ -2174,6 +2957,7 @@ $('#nameInput').value = S.name;
 let nameT;
 $('#nameInput').addEventListener('input', (e) => {
   S.name = e.target.value.trim(); store.set('name', S.name); $('#enterName').value = S.name;
+  profileSoon({ name: S.name });
   clearTimeout(nameT); nameT = setTimeout(() => { sendMeta({ name: S.name || 'Guest' }); renderCrew(); }, 400);
 });
 $('#startMic').checked = S.prefs.startMic; $('#startCam').checked = S.prefs.startCam;
@@ -2192,11 +2976,73 @@ $('#qualitySelect').onchange = async (e) => {
   store.set('quality', (S.prefs.quality = e.target.value));
   if (S.local.cam) await S.local.cam.applyConstraints(camConstraints()).catch(async () => { stopCam(); await startCam(); syncMedia(); });
 };
-$('#noiseChk').checked = S.prefs.noise;
-$('#noiseChk').onchange = async (e) => {
-  store.set('noise', (S.prefs.noise = e.target.checked));
-  if (S.local.audio) { stopMic(); await startMic(); syncMedia(); }
+// Microphone
+function saveAudioFx() { store.set('audioFx', S.audioFx); }
+for (const [id, key] of [['echoChk', 'echo'], ['nsChk', 'ns'], ['agcChk', 'agc']]) {
+  $('#' + id).checked = !!S.audioFx[key];
+  $('#' + id).onchange = async (e) => { S.audioFx[key] = e.target.checked; saveAudioFx(); if (S.local.audio) { stopMic(); await startMic(); syncMedia(); } };
+}
+$('#aiNoiseChk').checked = !!S.audioFx.ai;
+$('#aiNoiseChk').onchange = async (e) => {
+  S.audioFx.ai = e.target.checked; saveAudioFx();
+  if (S.local.audio) { await applyAudioFx(); syncMedia(); }
+  toast(e.target.checked ? 'AI noise removal on. Keyboards, fans and traffic fade out.' : 'AI noise removal off.');
 };
+const gainLabel = () => { $('#micGainVal').textContent = Math.round(S.audioFx.gain * 100) + '%'; };
+$('#micGain').value = S.audioFx.gain; gainLabel();
+$('#micGain').oninput = async (e) => {
+  S.audioFx.gain = Number(e.target.value); gainLabel(); saveAudioFx();
+  if (afx) afx.setGain(S.audioFx.gain);
+  else if (S.local.audio && Math.abs(S.audioFx.gain - 1) > 0.01) { await applyAudioFx(); syncMedia(); }
+};
+// Camera
+function saveVideoFx() { store.set('videoFx', S.videoFx); }
+$('#fpsSelect').value = String(S.videoFx.fps);
+$('#fpsSelect').onchange = async (e) => { S.videoFx.fps = Number(e.target.value); saveVideoFx(); if (S.local.camRaw) await S.local.camRaw.applyConstraints(camConstraints()).catch(() => {}); };
+$('#mirrorChk').checked = !!S.videoFx.mirror;
+$('#mirrorChk').onchange = (e) => { S.videoFx.mirror = e.target.checked; saveVideoFx(); syncMedia(); renderPreview(); };
+for (const [id, key] of [['fxBright', 'bright'], ['fxContrast', 'contrast'], ['fxSat', 'sat']]) {
+  $('#' + id).value = S.videoFx[key];
+  $('#' + id).oninput = async (e) => { S.videoFx[key] = Number(e.target.value); saveVideoFx(); await applyVideoFx(); syncMedia(); };
+}
+$('#fxReset').onclick = async () => {
+  Object.assign(S.videoFx, { bright: 0, contrast: 1, sat: 1 }); saveVideoFx();
+  $('#fxBright').value = 0; $('#fxContrast').value = 1; $('#fxSat').value = 1;
+  await applyVideoFx(); syncMedia();
+};
+// Background
+function renderBgFx() {
+  $$('#bgFxSeg button').forEach((b) => { const on = b.dataset.fx === S.videoFx.effect; b.classList.toggle('on', on); b.setAttribute('aria-checked', on); });
+  const hasImg = !!store.get('fxBg', '');
+  $('#bgFxImgRow').hidden = !['image', 'green'].includes(S.videoFx.effect);
+  $('#bgFxKeyRow').hidden = S.videoFx.effect !== 'green';
+  $('#bgFxClear').hidden = !hasImg;
+  $('#bgFxThumb').hidden = !hasImg; if (hasImg) $('#bgFxThumb').src = store.get('fxBg', '');
+  $('#bgFxNote').textContent = {
+    none: 'Your real background.',
+    blur: 'Softens everything behind you. Runs on this device; the first use downloads a small model.',
+    image: hasImg ? 'Replaces your background with the picture, no green screen needed.' : 'Choose a picture to put behind you.',
+    green: 'For a physical green or blue screen. Pick the screen colour and adjust until the edges look clean.',
+  }[S.videoFx.effect];
+}
+$$('#bgFxSeg button').forEach((b) => b.addEventListener('click', async () => {
+  S.videoFx.effect = b.dataset.fx; saveVideoFx(); renderBgFx();
+  if (S.local.camRaw) { await applyVideoFx(); syncMedia(); }
+  else if (b.dataset.fx !== 'none') toast('Turn your camera on to see the effect.');
+}));
+$('#bgFxPick').onclick = () => $('#bgFxFile').click();
+$('#bgFxFile').onchange = async (e) => {
+  const f = e.target.files[0]; e.target.value = '';
+  if (!f) return;
+  try { store.set('fxBg', await compressImage(f)); renderBgFx(); await applyVideoFx(); syncMedia(); }
+  catch (err) { toast(err.message, { err: true }); }
+};
+$('#bgFxClear').onclick = async () => { store.set('fxBg', ''); renderBgFx(); await applyVideoFx(); syncMedia(); };
+$('#keyColor').value = S.videoFx.key;
+$('#keyColor').oninput = async (e) => { S.videoFx.key = e.target.value; saveVideoFx(); await applyVideoFx(); };
+$('#keyTol').value = S.videoFx.tol;
+$('#keyTol').oninput = async (e) => { S.videoFx.tol = Number(e.target.value); saveVideoFx(); await applyVideoFx(); };
+renderBgFx();
 for (const k of ['turnUrl', 'turnUser', 'turnPass']) {
   $('#' + k).value = sess.get(k, '');
   $('#' + k).addEventListener('change', (e) => { sess.set(k, e.target.value.trim()); if (S.studio) toast('TURN settings apply the next time you enter a studio.'); });
@@ -2222,7 +3068,7 @@ function leave() {
   $$('.crew-card').forEach((n) => n.remove());
   S.feed = []; seenFeed.clear(); editor.sel = null; if (editor.on) setEditing(false);
   rumble.url = ''; clearTimeout(rumble.timer);
-  S.local.avatarId = ''; S.prePres = null;
+  S.local.avatarId = ''; S.prePres = null; cap.lines.clear();
   history.replaceState(null, '', '/');
   setPhase('offline');
   toast('You left the studio.');
@@ -2230,7 +3076,6 @@ function leave() {
 addEventListener('beforeunload', (e) => { if (S.studio && (S.rec || S.peers.size)) { e.preventDefault(); e.returnValue = ''; } });
 
 // Fullscreen stage
-$('#fsBtn').onclick = () => { const st = $('#stage'); (document.fullscreenElement ? document.exitFullscreen() : st.requestFullscreen?.())?.catch?.(() => {}); };
 
 // ---------------------------------------------------------------- enter studio (green room)
 let enterMode = 'create', previewing = false;
@@ -2293,7 +3138,7 @@ $('#enterForm').addEventListener('submit', async (e) => {
   e.preventDefault();
   const name = $('#enterName').value.trim();
   if (!name) { $('#enterErr').textContent = 'Add your name so people know who you are.'; $('#enterErr').hidden = false; return $('#enterName').focus(); }
-  let code = enterMode === 'join' ? parseCode($('#enterCode').value) : newCode();
+  let code = enterMode === 'join' ? parseCode($('#enterCode').value) : (S.pendingStream?.code || newCode());
   if (!code) { $('#enterErr').textContent = 'Paste the studio code your host sent you.'; $('#enterErr').hidden = false; return $('#enterCode').focus(); }
   S.name = name; store.set('name', name); $('#nameInput').value = name;
   $('#enterGo').disabled = true; $('#enterGo').textContent = 'Connecting…';
@@ -2333,7 +3178,6 @@ addEventListener('keydown', (e) => {
     v: () => setCam(!S.local.camOn),
     s: () => S.studio && (S.local.pres ? stopPresentation() : presentScreen()),
     r: () => S.studio && toggleRecord(),
-    f: () => $('#fsBtn').click(),
     ...Object.fromEntries([1, 2, 3, 4, 5, 6, 7, 8, 9].map((n) => [n, () => isHost() && sceneList()[n - 1] && applyScene(sceneList()[n - 1])])),
     arrowright: () => S.local.pres?.kind === 'pdf' && S.local.pres.go(S.local.pres.page + 1),
     arrowleft: () => S.local.pres?.kind === 'pdf' && S.local.pres.go(S.local.pres.page - 1),
@@ -2361,6 +3205,10 @@ function chime() {
 document.fonts?.ready.then(() => S.banner.key = '');
 setTab('chat');
 setPhase('offline');
+renderHelp();
+acctBoot();
 const linkCode = location.pathname.startsWith('/s/') ? parseCode(location.pathname) : '';
 if (linkCode) openEnter('join', linkCode);
 window.__gather = S; // handy for debugging in the console
+window.__acct = acct;
+window.__cap = cap;
