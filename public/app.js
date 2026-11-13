@@ -39,7 +39,7 @@ const S = {
   audioBlocked: false,
 };
 function localState() {
-  return { layout: 'split', stage: ['me'], banner: null, ticker: '', brand: { color: store.get('accent', '#1f6feb'), bg: store.get('bg', 'dusk'), watermark: true, names: true, logo: '' }, title: store.get('title', ''), elements: [], featured: null, feeds: { twitch: '' } };
+  return { layout: 'split', stage: ['me'], banner: null, ticker: '', brand: { color: store.get('accent', '#3b82f6'), bg: store.get('bg', 'dusk'), watermark: false, names: true, logo: '' }, title: store.get('title', ''), elements: [], featured: null, feeds: { twitch: '' } };
 }
 const isHost = () => !S.studio || S.host === S.id;
 const myId = () => S.id || 'me';
@@ -143,7 +143,7 @@ async function startMic() {
   } catch (e) { toast('Microphone: ' + mediaErr(e), { err: true }); return null; }
 }
 function stopMic() { S.local.audio?.stop(); S.local.audio = null; localMeter?.dispose(); localMeter = null; }
-const outVideo = () => S.local.screen || (S.local.camOn ? S.local.cam : null);
+const outVideo = () => (S.local.camOn ? S.local.cam : null);
 
 async function setMic(on) {
   S.local.micOn = on;
@@ -162,42 +162,186 @@ async function setCam(on) {
 function syncMedia() {
   const v = outVideo();
   for (const p of S.peers.values()) {
-    p.aT?.sender.replaceTrack(S.local.audio || null).catch(() => {});
+    p.aT?.sender.replaceTrack(outAudio()).catch(() => {});
     p.vT?.sender.replaceTrack(v || null).catch(() => {});
+    p.pT?.sender.replaceTrack(presTrack()).catch(() => {});
   }
   const me = $('#card-' + cssId(myId()));
   const el = me && $('video', me);
-  if (el) { const cur = el.srcObject?.getVideoTracks()[0]; if (cur !== v) el.srcObject = v ? new MediaStream([v]) : null; el.classList.toggle('mirror', !S.local.screen); }
-  sendMeta({ mic: S.local.micOn, cam: S.local.camOn, sharing: !!S.local.screen });
-  renderDock(); renderCrew(); renderPreview();
+  if (el) { const cur = el.srcObject?.getVideoTracks()[0]; if (cur !== v) el.srcObject = v ? new MediaStream([v]) : null; el.classList.add('mirror'); }
+  sendMeta({ mic: S.local.micOn, cam: S.local.camOn, sharing: !!S.local.pres });
+  renderDock(); renderCrew(); renderPreview(); renderPresBar();
 }
 
-async function toggleShare() {
-  if (S.local.screen) return stopShare();
+// ---------------------------------------------------------------- presentation: screen, video file, PDF
+// Each connection carries a second video track for whatever is being presented,
+// so cameras stay visible while a screen, video or slide deck is on stage.
+const PRES_W = 1920, PRES_H = 1080;
+const presTrack = () => S.local.pres?.track || null;
+
+// Outgoing audio: the raw mic, or mic + media audio (a video's sound, a tab's sound) while one plays.
+let sendMix = null;
+function outAudio() {
+  if (!S.local.mediaAudio) return S.local.audio || null;
+  const ctx = audioCtx();
+  if (!sendMix) sendMix = { dest: ctx.createMediaStreamDestination(), micSrc: null, micTrack: null };
+  if (sendMix.micTrack !== S.local.audio) {
+    try { sendMix.micSrc?.disconnect(); } catch {}
+    sendMix.micSrc = S.local.audio ? ctx.createMediaStreamSource(new MediaStream([S.local.audio])) : null;
+    sendMix.micSrc?.connect(sendMix.dest);
+    sendMix.micTrack = S.local.audio;
+  }
+  return sendMix.dest.stream.getAudioTracks()[0];
+}
+function mixInMedia(node) {
+  S.local.mediaAudio = (S.local.mediaAudio || 0) + 1;
+  outAudio();
+  node.connect(mixBus); node.connect(sendMix.dest);
+  return { dispose() { try { node.disconnect(); } catch {} S.local.mediaAudio = Math.max(0, S.local.mediaAudio - 1); } };
+}
+
+function startPresentation(pres) {
+  if (S.local.pres) S.local.pres.stop();
+  S.local.pres = pres;
+  syncMedia();
+  autoPresentScene(myId());
+}
+function stopPresentation() {
+  const pres = S.local.pres;
+  if (!pres) return;
+  S.local.pres = null;
+  pres.stop();
+  syncMedia();
+  autoEndPresentScene();
+}
+async function presentScreen() {
   if (!media?.getDisplayMedia) return toast('Screen sharing is not supported in this browser.', { err: true });
   try {
-    const s = await media.getDisplayMedia({ video: { frameRate: { ideal: 30 } }, audio: false });
-    S.local.screen = s.getVideoTracks()[0];
-    S.local.screen.contentHint = 'detail';
-    S.local.screen.onended = stopShare;
-    if (isHost()) promote(myId());
-    syncMedia();
-    toast('You are sharing your screen.');
+    const s = await media.getDisplayMedia({ video: { frameRate: { ideal: 30 } }, audio: true, systemAudio: 'include' });
+    const track = s.getVideoTracks()[0];
+    track.contentHint = 'detail';
+    const v = document.createElement('video'); v.muted = true; v.playsInline = true; v.srcObject = new MediaStream([track]);
+    $('#mediaSink').append(v); v.play().catch(() => {});
+    const at = s.getAudioTracks()[0];
+    const audio = at ? mixInMedia(audioCtx().createMediaStreamSource(new MediaStream([at]))) : null;
+    track.onended = stopPresentation;
+    startPresentation({ kind: 'screen', name: track.label || 'Screen', track, source: v, stop() { s.getTracks().forEach((t) => t.stop()); v.remove(); audio?.dispose(); } });
+    toast(at ? 'Sharing your screen with its sound.' : 'Sharing your screen.');
   } catch (e) { if (e?.name !== 'NotAllowedError') toast('Screen share: ' + mediaErr(e), { err: true }); }
 }
-function stopShare() { S.local.screen?.stop(); S.local.screen = null; syncMedia(); }
+function presCanvas() { const c = document.createElement('canvas'); c.width = PRES_W; c.height = PRES_H; return c; }
+function fitDraw(cg, src, sw, sh, bg = '#05070d') {
+  cg.fillStyle = bg; cg.fillRect(0, 0, PRES_W, PRES_H);
+  if (!sw || !sh) return;
+  const k = Math.min(PRES_W / sw, PRES_H / sh), dw = sw * k, dh = sh * k;
+  cg.drawImage(src, (PRES_W - dw) / 2, (PRES_H - dh) / 2, dw, dh);
+}
+async function presentVideo(file) {
+  if (!file) return;
+  const url = URL.createObjectURL(file);
+  const v = document.createElement('video');
+  v.src = url; v.playsInline = true; v.preload = 'auto';
+  const ctx = audioCtx();
+  const src = ctx.createMediaElementSource(v);
+  src.connect(ctx.destination); // the host hears it too
+  const audio = mixInMedia(src);
+  const c = presCanvas(), cg = c.getContext('2d');
+  const track = c.captureStream(30).getVideoTracks()[0];
+  track.contentHint = 'motion';
+  try { await v.play(); } catch {}
+  startPresentation({
+    kind: 'video', name: file.name, track, source: c, video: v,
+    draw() { fitDraw(cg, v, v.videoWidth, v.videoHeight); },
+    stop() { v.pause(); audio.dispose(); try { src.disconnect(); } catch {} URL.revokeObjectURL(url); track.stop(); },
+  });
+  v.onended = () => renderPresBar();
+}
+let pdfLib = null;
+function loadPdfJs() {
+  if (pdfLib) return pdfLib;
+  pdfLib = new Promise((res, rej) => {
+    const sc = document.createElement('script');
+    sc.src = '/vendor/pdf.min.js';
+    sc.onload = () => { window.pdfjsLib.GlobalWorkerOptions.workerSrc = '/vendor/pdf.worker.min.js'; res(window.pdfjsLib); };
+    sc.onerror = () => { pdfLib = null; rej(new Error('Could not load the PDF reader. Check your connection.')); };
+    document.head.append(sc);
+  });
+  return pdfLib;
+}
+async function presentPDF(file) {
+  if (!file) return;
+  toast('Opening ' + file.name + '…');
+  try {
+    const lib = await loadPdfJs();
+    const doc = await lib.getDocument({ data: await file.arrayBuffer() }).promise;
+    const c = presCanvas(), cg = c.getContext('2d');
+    const page = document.createElement('canvas'); // the rendered slide, repainted onto c every frame
+    const track = c.captureStream(15).getVideoTracks()[0];
+    track.contentHint = 'detail';
+    const pres = {
+      kind: 'pdf', name: file.name, page: 1, pages: doc.numPages, track, source: c,
+      draw() { fitDraw(cg, page, page.width, page.height, '#0b0f1a'); },
+      async go(n) {
+        n = Math.max(1, Math.min(doc.numPages, n));
+        pres.page = n;
+        const pg = await doc.getPage(n);
+        const base = pg.getViewport({ scale: 1 });
+        const vp = pg.getViewport({ scale: Math.min(PRES_W / base.width, PRES_H / base.height) * 1.5 });
+        page.width = Math.round(vp.width); page.height = Math.round(vp.height);
+        await pg.render({ canvasContext: page.getContext('2d'), viewport: vp }).promise;
+        renderPresBar();
+      },
+      stop() { track.stop(); doc.destroy(); },
+    };
+    await pres.go(1);
+    startPresentation(pres);
+  } catch (e) { toast('PDF: ' + (e.message || 'could not open that file'), { err: true }); }
+}
 
-async function listDevices() {
-  if (!media?.enumerateDevices) return;
-  const devs = await media.enumerateDevices();
-  fill($('#camSelect'), devs.filter((d) => d.kind === 'videoinput'), S.local.cam?.getSettings().deviceId || S.prefs.camId, 'camera');
-  fill($('#micSelect'), devs.filter((d) => d.kind === 'audioinput'), S.local.audio?.getSettings().deviceId || S.prefs.micId, 'microphone');
-  function fill(sel, list, cur, kind) {
-    sel.replaceChildren(new Option(`Default ${kind}`, ''), ...list.filter((d) => d.deviceId && d.deviceId !== 'default').map((d, i) => new Option(d.label || `${kind[0].toUpperCase() + kind.slice(1)} ${i + 1}`, d.deviceId)));
-    sel.value = [...sel.options].some((o) => o.value === cur) ? cur : '';
+// Present menu + presenter controls
+$('#shareBtn').onclick = (ev) => {
+  if (S.local.pres) return stopPresentation();
+  const m = $('#presentMenu');
+  m.hidden = !m.hidden;
+  ev.stopPropagation();
+};
+document.addEventListener('click', (ev) => { if (!ev.target.closest('#presentMenu')) $('#presentMenu').hidden = true; });
+$('#presentMenu').addEventListener('click', (ev) => {
+  const b = ev.target.closest('[data-present]'); if (!b) return;
+  $('#presentMenu').hidden = true;
+  const kind = b.dataset.present;
+  if (kind === 'screen') presentScreen();
+  if (kind === 'video') $('#videoFile').click();
+  if (kind === 'pdf') $('#pdfFile').click();
+  if (kind === 'ai') { setTab('ai'); $('#aiInput').focus(); }
+});
+$('#videoFile').onchange = (e) => { presentVideo(e.target.files[0]); e.target.value = ''; };
+$('#pdfFile').onchange = (e) => { presentPDF(e.target.files[0]); e.target.value = ''; };
+function renderPresBar() {
+  const bar = $('#presBar'), pres = S.local.pres;
+  bar.hidden = !pres;
+  if (!pres) return;
+  bar.dataset.kind = pres.kind;
+  $('#presKind').textContent = { screen: 'Screen', video: 'Video', pdf: 'Slides' }[pres.kind];
+  $('#presName').textContent = pres.name;
+  $('#presPdf').hidden = pres.kind !== 'pdf';
+  $('#presVid').hidden = pres.kind !== 'video';
+  if (pres.kind === 'pdf') $('#presPage').textContent = `${pres.page} / ${pres.pages}`;
+  if (pres.kind === 'video') {
+    const v = pres.video;
+    $('#presPlay').textContent = v.paused ? 'Play' : 'Pause';
+    $('#presTime').textContent = `${fmtTime(v.currentTime * 1000)} / ${fmtTime((v.duration || 0) * 1000)}`;
+    if (document.activeElement !== $('#presSeek')) $('#presSeek').value = v.duration ? String(v.currentTime / v.duration) : '0';
+    $('#presLoop').setAttribute('aria-pressed', String(v.loop));
   }
 }
-media?.addEventListener?.('devicechange', listDevices);
+$('#presPrev').onclick = () => S.local.pres?.go?.(S.local.pres.page - 1);
+$('#presNext').onclick = () => S.local.pres?.go?.(S.local.pres.page + 1);
+$('#presPlay').onclick = () => { const v = S.local.pres?.video; if (!v) return; v.paused ? v.play() : v.pause(); renderPresBar(); };
+$('#presSeek').oninput = (e) => { const v = S.local.pres?.video; if (v?.duration) v.currentTime = Number(e.target.value) * v.duration; };
+$('#presLoop').onclick = () => { const v = S.local.pres?.video; if (v) { v.loop = !v.loop; renderPresBar(); } };
+$('#presStop').onclick = stopPresentation;
+setInterval(() => { if (S.local.pres?.kind === 'video') renderPresBar(); }, 250);
 
 // ---------------------------------------------------------------- signaling (HTTP + adaptive polling; runs on Vercel)
 async function api(action, body) {
@@ -318,7 +462,8 @@ async function onServer(m) {
         setStage({ brand: pre.brand, title: pre.title, layout: pre.layout, banner: pre.banner, ticker: pre.ticker, stage: [S.id], feeds: pre.feeds, elements: (pre.elements || []).filter((e) => !(e.type === 'image' && e.asset?.startsWith('local-'))) });
         uploadLocalAssets(pre.elements).then((elements) => { if (S.host === S.id) setStage({ elements }); });
       }
-      sendMeta({ mic: S.local.micOn, cam: S.local.camOn, sharing: !!S.local.screen });
+      sendMeta({ mic: S.local.micOn, cam: S.local.camOn, sharing: !!S.local.pres });
+      uploadAvatar();
       renderAll();
       if (!m.peers.length && S.host === S.id) setTimeout(() => openInvite(), 350);
       else toast(S.host === S.id ? 'Studio ready.' : `You joined ${m.peers.length ? 'the studio' : 'an empty studio'}.`);
@@ -337,7 +482,7 @@ async function onServer(m) {
     case 'signal': onSignal(m.from, m.data); break;
     case 'peer-left': {
       const p = S.peers.get(m.id);
-      if (p) { sysMsg(`${p.name} left`); closePeer(p); }
+      if (p) { sysMsg(`${p.name} left`); closePeer(p); if (p.sharing) setTimeout(autoEndPresentScene, 0); }
       const wasHost = S.host === S.id;
       S.host = m.host; S.state = m.state;
       if (!wasHost && S.host === S.id) toast('You are now the host.');
@@ -347,15 +492,17 @@ async function onServer(m) {
     case 'peer-meta': {
       const p = S.peers.get(m.peer.id);
       if (!p) break;
-      const startedSharing = m.peer.sharing && !p.sharing;
-      Object.assign(p, { name: m.peer.name, mic: m.peer.mic, cam: m.peer.cam, sharing: m.peer.sharing });
-      if (startedSharing && isHost()) promote(p.id);
+      const startedSharing = m.peer.sharing && !p.sharing, stoppedSharing = !m.peer.sharing && p.sharing;
+      Object.assign(p, { name: m.peer.name, mic: m.peer.mic, cam: m.peer.cam, sharing: m.peer.sharing, avatar: m.peer.avatar || '' });
+      if (startedSharing) autoPresentScene(p.id);
+      if (stoppedSharing) autoEndPresentScene();
       renderCrew();
       break;
     }
     case 'state': S.state = m.state; renderAll(); break;
     case 'chat': addMsg(m.msg); break;
     case 'feed': for (const it of m.items || []) addExternal(it); break;
+    case 'ai': upsertAI(m.item, false); break;
     case 'recording': toast(m.on ? `${m.by} started recording` : `${m.by} stopped recording`); break;
     case 'error':
       if ($('#enterDlg').open) { $('#enterErr').textContent = m.message; $('#enterErr').hidden = false; setPhase(S.studio ? 'online' : 'offline'); $('#enterGo').disabled = false; }
@@ -369,7 +516,7 @@ const cssId = (id) => String(id).replace(/[^a-z0-9_-]/gi, '');
 function addPeer(info) {
   let p = S.peers.get(info.id);
   if (!p) { p = { id: info.id, pc: null, stream: new MediaStream(), pending: [], meters: [], rtt: null, conn: 'new' }; S.peers.set(info.id, p); }
-  Object.assign(p, { name: info.name, mic: info.mic, cam: info.cam, sharing: info.sharing, joinedAt: info.joinedAt });
+  Object.assign(p, { name: info.name, mic: info.mic, cam: info.cam, sharing: info.sharing, avatar: info.avatar || '', joinedAt: info.joinedAt });
   return p;
 }
 function createPeer(info, offerer) {
@@ -380,14 +527,23 @@ function createPeer(info, offerer) {
   if (offerer) {
     p.aT = pc.addTransceiver('audio', { direction: 'sendrecv' });
     p.vT = pc.addTransceiver('video', { direction: 'sendrecv' });
-    p.aT.sender.replaceTrack(S.local.audio || null);
+    p.pT = pc.addTransceiver('video', { direction: 'sendrecv' }); // presentation
+    p.aT.sender.replaceTrack(outAudio());
     p.vT.sender.replaceTrack(outVideo() || null);
+    p.pT.sender.replaceTrack(presTrack());
     pc.onnegotiationneeded = async () => {
       try { await pc.setLocalDescription(); sig(p.id, { sdp: pc.localDescription }); } catch (e) { console.warn('offer failed', e); }
     };
   }
   pc.onicecandidate = (e) => { if (e.candidate) sig(p.id, { candidate: e.candidate }); };
   pc.ontrack = (e) => {
+    // The third m-line (mid "2") is the presentation track.
+    if (e.track.kind === 'video' && (e.transceiver === p.pT || e.transceiver.mid === '2')) {
+      let el = $('#pres-' + cssId(p.id));
+      if (!el) { el = document.createElement('video'); el.id = 'pres-' + cssId(p.id); el.muted = true; el.autoplay = true; el.playsInline = true; $('#mediaSink').append(el); }
+      el.srcObject = new MediaStream([e.track]); el.play().catch(() => {});
+      return;
+    }
     for (const t of p.stream.getTracks()) if (t.kind === e.track.kind && t !== e.track) p.stream.removeTrack(t);
     p.stream.addTrack(e.track);
     if (e.track.kind === 'audio') { p.meters.forEach((x) => x.dispose()); p.meters = [meter(e.track)]; }
@@ -413,10 +569,11 @@ async function onSignal(from, data) {
         if (!p.aT) {
           for (const t of pc.getTransceivers()) {
             t.direction = 'sendrecv';
-            if (t.receiver.track.kind === 'audio') p.aT = t; else p.vT = t;
+            if (t.receiver.track.kind === 'audio') p.aT = t; else if (!p.vT) p.vT = t; else p.pT = t;
           }
-          await p.aT?.sender.replaceTrack(S.local.audio || null);
+          await p.aT?.sender.replaceTrack(outAudio());
           await p.vT?.sender.replaceTrack(outVideo() || null);
+          await p.pT?.sender.replaceTrack(presTrack());
         }
         await pc.setLocalDescription();
         sig(from, { sdp: pc.localDescription });
@@ -435,6 +592,7 @@ function closePeer(p) {
   p.meters.forEach((x) => x.dispose());
   S.peers.delete(p.id);
   $('#card-' + cssId(p.id))?.remove();
+  $('#pres-' + cssId(p.id))?.remove();
 }
 function teardownPeers() { for (const p of [...S.peers.values()]) closePeer(p); }
 
@@ -473,10 +631,6 @@ function setStage(patch) {
   else { store.set('accent', S.state.brand.color); store.set('bg', S.state.brand.bg); store.set('title', S.state.title); }
   renderAll();
 }
-function promote(id) {
-  const stage = [id, ...S.state.stage.filter((x) => x !== id)];
-  setStage({ stage, layout: 'spotlight' });
-}
 function toggleStage(id) {
   const on = S.state.stage.includes(id);
   setStage({ stage: on ? S.state.stage.filter((x) => x !== id) : [...S.state.stage, id] });
@@ -484,9 +638,9 @@ function toggleStage(id) {
 
 // ---------------------------------------------------------------- participants model
 function participants() {
-  const me = { id: myId(), me: true, name: S.name || 'You', mic: S.local.micOn && !!S.local.audio, cam: !!outVideo(), sharing: !!S.local.screen, joinedAt: S.local.joinedAt, level: localMeter?.level() || 0 };
+  const me = { id: myId(), me: true, name: S.name || 'You', mic: S.local.micOn && !!S.local.audio, cam: !!outVideo(), sharing: !!S.local.pres, avatar: S.local.avatarId || '', joinedAt: S.local.joinedAt, level: localMeter?.level() || 0 };
   const list = [me];
-  for (const p of S.peers.values()) list.push({ id: p.id, name: p.name, mic: p.mic, cam: p.cam || p.sharing, sharing: p.sharing, joinedAt: p.joinedAt, peer: p, level: p.meters[0]?.level() || 0 });
+  for (const p of S.peers.values()) list.push({ id: p.id, name: p.name, mic: p.mic, cam: p.cam, sharing: p.sharing, avatar: p.avatar || '', joinedAt: p.joinedAt, peer: p, level: p.meters[0]?.level() || 0 });
   return list.sort((a, b) => (a.joinedAt || 0) - (b.joinedAt || 0));
 }
 function cardVideo(id) { return $(`#card-${cssId(id)} video`); }
@@ -538,14 +692,8 @@ function drawTile(p, rect, t) {
   const hasVid = p.cam && el && el.readyState >= 2 && el.videoWidth > 0;
   if (hasVid) {
     const vw = el.videoWidth, vh = el.videoHeight;
-    if (p.sharing) {
-      g.fillStyle = '#0b0e13'; g.fillRect(x, y, w, h);
-      const s = Math.min(w / vw, h / vh), dw = vw * s, dh = vh * s;
-      g.drawImage(el, x + (w - dw) / 2, y + (h - dh) / 2, dw, dh);
-    } else {
-      const s = Math.max(w / vw, h / vh), sw = w / s, sh = h / s;
-      g.drawImage(el, (vw - sw) / 2, (vh - sh) / 2, sw, sh, x, y, w, h);
-    }
+    const s = Math.max(w / vw, h / vh), sw = w / s, sh = h / s;
+    g.drawImage(el, (vw - sw) / 2, (vh - sh) / 2, sw, sh, x, y, w, h);
   } else {
     const grd = g.createLinearGradient(x, y, x + w, y + h);
     grd.addColorStop(0, '#26303d'); grd.addColorStop(1, '#1b222c');
@@ -553,9 +701,17 @@ function drawTile(p, rect, t) {
     const rad = Math.min(w, h) * 0.17;
     const lvl = Math.min(1, p.level * 8);
     if (lvl > .05) { g.fillStyle = hexA(brand.color, .25 * lvl); g.beginPath(); g.arc(x + w / 2, y + h / 2, rad * (1.15 + lvl * .3), 0, Math.PI * 2); g.fill(); }
-    g.fillStyle = brand.color; g.beginPath(); g.arc(x + w / 2, y + h / 2, rad, 0, Math.PI * 2); g.fill();
-    g.fillStyle = '#fff'; g.font = `700 ${Math.round(rad * .8)}px "Plus Jakarta Sans", Inter, sans-serif`; g.textAlign = 'center'; g.textBaseline = 'middle';
-    g.fillText(initials(p.name), x + w / 2, y + h / 2 + 2);
+    const av = assetImg(p.avatar);
+    if (av) {
+      g.save(); g.beginPath(); g.arc(x + w / 2, y + h / 2, rad, 0, Math.PI * 2); g.clip();
+      const k = Math.max((rad * 2) / av.naturalWidth, (rad * 2) / av.naturalHeight);
+      g.drawImage(av, x + w / 2 - (av.naturalWidth * k) / 2, y + h / 2 - (av.naturalHeight * k) / 2, av.naturalWidth * k, av.naturalHeight * k);
+      g.restore();
+    } else {
+      g.fillStyle = brand.color; g.beginPath(); g.arc(x + w / 2, y + h / 2, rad, 0, Math.PI * 2); g.fill();
+      g.fillStyle = '#fff'; g.font = `700 ${Math.round(rad * .8)}px "Plus Jakarta Sans", Inter, sans-serif`; g.textAlign = 'center'; g.textBaseline = 'middle';
+      g.fillText(initials(p.name), x + w / 2, y + h / 2 + 2);
+    }
   }
   g.restore();
 
@@ -636,14 +792,6 @@ function drawChrome() {
   const paper = BGS[S.state.brand.bg]?.[4];
   const ink = paper ? 'rgba(17,24,39,' : 'rgba(255,255,255,';
   g.textBaseline = 'middle';
-  if (S.state.brand.watermark) {
-    g.textAlign = 'right';
-    g.font = '700 15px "Plus Jakarta Sans", Inter, sans-serif'; g.fillStyle = ink + '.95)';
-    const bw = g.measureText('gather.').width;
-    g.fillText('gather.', W - 30, 22);
-    g.font = '400 13px Inter, sans-serif'; g.fillStyle = ink + '.75)';
-    g.fillText('made with ', W - 30 - bw - 2, 22);
-  }
   if (S.state.title) {
     g.textAlign = 'left'; g.font = '600 14px Inter, sans-serif'; g.fillStyle = ink + '.8)';
     g.fillText(S.state.title.toUpperCase().split('').join(String.fromCharCode(8202)), 30, 22);
@@ -698,10 +846,10 @@ function contrastInk(hex) { const n = parseInt(hex.slice(1), 16); const [r, gg, 
 
 // Render loop: rAF while visible; a worker clock keeps recordings smooth in background tabs.
 let lastFrame = 0;
-function frame() { lastFrame = performance.now(); draw(); meters(); speakingCards(); requestAnimationFrame(frame); }
+function frame() { lastFrame = performance.now(); S.local.pres?.draw?.(); draw(); meters(); speakingCards(); requestAnimationFrame(frame); }
 requestAnimationFrame(frame);
 const clock = new Worker(URL.createObjectURL(new Blob(['setInterval(()=>postMessage(0),33)'], { type: 'text/javascript' })));
-clock.onmessage = () => { if (performance.now() - lastFrame > 120) draw(); };
+clock.onmessage = () => { if (performance.now() - lastFrame > 120) { S.local.pres?.draw?.(); draw(); } };
 
 function meters() {
   const lvl = Math.min(100, (localMeter?.level() || 0) * 400 * (S.local.micOn ? 1 : 0));
@@ -879,24 +1027,62 @@ const ELEMENT_DEFAULTS = {
   text: () => ({ type: 'text', x: .05, y: .82, w: .5, h: .1, text: 'Your headline here', size: 40, color: '#ffffff', bold: true, align: 'left', bg: '' }),
   image: () => ({ type: 'image', x: .82, y: .06, w: .14, h: .14, asset: '', fit: 'contain', opacity: 1, radius: 0 }),
   timer: () => ({ type: 'timer', x: .42, y: .025, w: .16, h: .08, mode: 'clock', target: 0, size: 40, color: '#ffffff', bg: '' }),
+  media: () => ({ type: 'media', x: .025, y: .07, w: .7, h: .86, radius: 12 }),
+  ai: () => ({ type: 'ai', x: .62, y: .07, w: .355, h: .62, size: 22 }),
+  tip: () => ({ type: 'tip', x: .025, y: .7, w: .3, h: .25, provider: 'paypal', url: '', label: 'Support the show' }),
 };
 const TEMPLATES = [
+  { id: 'present', name: 'Presentation', els: [
+    { type: 'media', x: .025, y: .07, w: .73, h: .86 },
+    { type: 'slot', index: 0, x: .775, y: .07, w: .2, h: .27 }, { type: 'slot', index: 1, x: .775, y: .365, w: .2, h: .27 }, { type: 'slot', index: 2, x: .775, y: .66, w: .2, h: .27 }] },
+  { id: 'slides-pip', name: 'Slides + speaker', els: [
+    { type: 'media', x: .025, y: .07, w: .95, h: .86, radius: 10 }, { type: 'slot', index: 0, x: .775, y: .64, w: .18, h: .26, radius: 14 }] },
+  { id: 'screen-ai', name: 'Screen + AI', els: [
+    { type: 'media', x: .025, y: .07, w: .59, h: .86 }, { type: 'ai', x: .635, y: .07, w: .34, h: .56 },
+    { type: 'slot', index: 0, x: .635, y: .655, w: .34, h: .275 }] },
+  { id: 'ai-cam', name: 'AI + camera', els: [
+    { type: 'slot', index: 0, x: .025, y: .08, w: .46, h: .84 }, { type: 'ai', x: .51, y: .08, w: .465, h: .84 }] },
   { id: 'duo-chat', name: 'Two + chat', els: [
     { type: 'slot', index: 0, x: .025, y: .08, w: .335, h: .74 }, { type: 'slot', index: 1, x: .375, y: .08, w: .335, h: .74 },
     { type: 'chat', x: .73, y: .08, w: .245, h: .74, max: 8, size: 17, bg: true }] },
-  { id: 'screen-pip', name: 'Screen + camera', els: [
-    { type: 'slot', index: 0, x: .025, y: .07, w: .95, h: .86, radius: 10 }, { type: 'slot', index: 1, x: .755, y: .62, w: .2, h: .28, radius: 14 }] },
   { id: 'solo-chat', name: 'Solo + chat', els: [
     { type: 'slot', index: 0, x: .025, y: .08, w: .66, h: .84 }, { type: 'chat', x: .705, y: .08, w: .27, h: .84, max: 10, size: 18, bg: true }] },
   { id: 'panel-3', name: 'Panel of three', els: [
     { type: 'slot', index: 0, x: .025, y: .1, w: .3, h: .6 }, { type: 'slot', index: 1, x: .35, y: .1, w: .3, h: .6 }, { type: 'slot', index: 2, x: .675, y: .1, w: .3, h: .6 },
     { type: 'chat', x: .025, y: .73, w: .95, h: .22, max: 3, size: 17, bg: true }] },
 ];
+const TPL = Object.fromEntries(TEMPLATES.map((t) => [t.id, t]));
+const BUILTINS = [
+  { id: 'b-solo', name: 'Solo', layout: 'solo' },
+  { id: 'b-split', name: 'Side by side', layout: 'split' },
+  { id: 'b-spotlight', name: 'Spotlight', layout: 'spotlight' },
+];
 function withDefaults(e) { return { ...ELEMENT_DEFAULTS[e.type](), ...e, id: e.id || uid() }; }
-function applyTemplate(tpl) {
-  // Keep the host's own text, images and timers; replace cameras and chat with the template's.
-  const keep = (S.state.elements || []).filter((e) => !['slot', 'chat'].includes(e.type));
-  setStage({ layout: 'custom', elements: [...tpl.els.map(withDefaults), ...keep] });
+const STRUCTURAL = ['slot', 'chat', 'media', 'ai'];
+function templatePatch(tpl) {
+  // Keep the host's own text, images, timers and support cards; replace the template's structure.
+  const keep = (S.state.elements || []).filter((e) => !STRUCTURAL.includes(e.type));
+  return { layout: 'custom', scene: tpl.id, elements: [...tpl.els.map(withDefaults), ...keep] };
+}
+function applyTemplate(tpl) { setStage(templatePatch(tpl)); }
+
+// When anyone starts presenting, the host's stage flips to a presentation scene, and back afterwards.
+const hasMediaScene = () => S.state.layout === 'custom' && (S.state.elements || []).some((e) => e.type === 'media');
+function autoPresentScene(id) {
+  if (!isHost()) return;
+  const patch = { presenter: id };
+  if (!hasMediaScene()) {
+    S.prePres = { layout: S.state.layout, elements: elementsCopy(), scene: S.state.scene || '' };
+    Object.assign(patch, templatePatch(TPL.present));
+  }
+  setStage(patch);
+}
+function autoEndPresentScene() {
+  if (!isHost()) return;
+  const still = participants().find((p) => p.sharing);
+  if (still) return setStage({ presenter: still.id });
+  if (S.prePres) { const pre = S.prePres; S.prePres = null; setStage({ ...pre, presenter: '' }); }
+  else setStage({ presenter: '' });
 }
 
 // Images: uploaded once per studio, cached as decoded <img> for drawing.
@@ -1057,8 +1243,117 @@ function drawTimerEl(e) {
   g.fillText(label, r.x + r.w / 2, r.y + r.h / 2 + 2);
   g.restore();
 }
+function presenterOf() {
+  const people = participants();
+  return people.find((p) => p.id === S.state.presenter && p.sharing) || people.find((p) => p.sharing) || null;
+}
+function drawMediaEl(e) {
+  const r = px(e), R = e.radius ?? 12, who = presenterOf();
+  const src = who ? (who.me ? S.local.pres?.source : $('#pres-' + cssId(who.id))) : null;
+  const sw = src ? (src.videoWidth || src.width) : 0, sh = src ? (src.videoHeight || src.height) : 0;
+  g.save();
+  rr(r.x, r.y, r.w, r.h, R); g.clip();
+  g.fillStyle = '#05070d'; g.fillRect(r.x, r.y, r.w, r.h);
+  if (src && sw && sh && (src.readyState === undefined || src.readyState >= 2)) {
+    const k = Math.min(r.w / sw, r.h / sh), dw = sw * k, dh = sh * k;
+    g.drawImage(src, r.x + (r.w - dw) / 2, r.y + (r.h - dh) / 2, dw, dh);
+  } else {
+    g.fillStyle = 'rgba(255,255,255,.5)'; g.font = '500 17px Inter, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
+    g.fillText(who ? `Waiting for ${who.name}'s screen…` : 'Present a screen, video or PDF to fill this space', r.x + r.w / 2, r.y + r.h / 2);
+  }
+  g.restore();
+  if (who && S.state.brand.names) {
+    const label = who.me ? 'You are presenting' : `${who.name} is presenting`;
+    g.font = '600 14px Inter, sans-serif';
+    const tw = g.measureText(label).width;
+    g.fillStyle = 'rgba(5,8,16,.72)'; rr(r.x + 12, r.y + 12, tw + 24, 28, 8); g.fill();
+    g.fillStyle = '#fff'; g.textAlign = 'left'; g.textBaseline = 'middle'; g.fillText(label, r.x + 24, r.y + 26.5);
+  }
+}
+const AI_COLOR = { claude: '#d97757', openai: '#10a37f', gemini: '#4f8ff7', grok: '#e7e9ea' };
+const AI_NAME = { claude: 'Claude', openai: 'ChatGPT', gemini: 'Gemini', grok: 'Grok' };
+function plainMd(t) {
+  return String(t).replace(/\[([^\]]+)\]\((https?:[^)]+)\)/g, '$1').replace(/\*\*|__|`/g, '').replace(/^#{1,6}\s*/gm, '').replace(/^\s*[-*]\s+/gm, '• ');
+}
+function drawAiEl(e) {
+  const r = px(e), fs = e.size || 22, pad = 22, lh = fs * 1.38;
+  const items = S.ai.items, a = [...items].reverse().find((i) => i.role === 'assistant');
+  const q = a ? items[items.indexOf(a) - 1] : [...items].reverse().find((i) => i.role === 'user');
+  g.save();
+  rr(r.x, r.y, r.w, r.h, 16); g.clip();
+  g.fillStyle = 'rgba(8,14,30,.86)'; g.fillRect(r.x, r.y, r.w, r.h);
+  const grd = g.createLinearGradient(r.x, r.y, r.x, r.y + 80); grd.addColorStop(0, 'rgba(120,170,255,.12)'); grd.addColorStop(1, 'rgba(120,170,255,0)');
+  g.fillStyle = grd; g.fillRect(r.x, r.y, r.w, 80);
+  const prov = (a || q)?.provider || S.aiProv || 'claude';
+  g.fillStyle = AI_COLOR[prov]; g.beginPath(); g.arc(r.x + pad + 6, r.y + pad + 9, 6, 0, Math.PI * 2); g.fill();
+  g.fillStyle = 'rgba(255,255,255,.9)'; g.font = '700 15px Inter, sans-serif'; g.textAlign = 'left'; g.textBaseline = 'middle';
+  g.fillText(`${AI_NAME[prov]} · research`, r.x + pad + 20, r.y + pad + 10);
+  let y = r.y + pad + 40;
+  const maxW = r.w - pad * 2;
+  if (!q) {
+    g.fillStyle = 'rgba(255,255,255,.5)'; g.font = `500 ${fs}px Inter, sans-serif`; g.textBaseline = 'alphabetic';
+    g.fillText('Ask a question in the AI panel.', r.x + pad, y + fs);
+    g.restore(); return;
+  }
+  g.font = `700 ${fs}px "Plus Jakarta Sans", Inter, sans-serif`; g.fillStyle = '#ffffff'; g.textBaseline = 'alphabetic';
+  for (const l of wrapLines(q.text, maxW, 2)) { g.fillText(l, r.x + pad, y + fs); y += lh; }
+  y += 10;
+  g.strokeStyle = 'rgba(255,255,255,.1)'; g.beginPath(); g.moveTo(r.x + pad, y); g.lineTo(r.x + r.w - pad, y); g.stroke();
+  y += 14;
+  if (a) {
+    g.font = `500 ${fs}px Inter, sans-serif`;
+    const lines = [];
+    for (const para of plainMd(a.text).split(/\n+/)) { if (!para.trim()) continue; lines.push(...wrapLines(para, maxW)); lines.push(''); }
+    if (!a.done) { if (!lines.length) lines.push(''); lines[lines.length - (lines[lines.length - 1] === '' ? 2 : 1)] += Date.now() % 900 < 450 ? ' ▍' : ''; }
+    const room = Math.max(1, Math.floor((r.y + r.h - pad - y) / lh));
+    const shown = lines.length > room ? lines.slice(lines.length - room) : lines; // keep the newest text in view
+    g.fillStyle = a.error ? '#ff9b9b' : 'rgba(235,242,255,.95)';
+    for (const l of shown) { g.fillText(l, r.x + pad, y + fs); y += l ? lh : lh * .45; }
+  }
+  g.restore();
+}
+const TIP_INFO = {
+  paypal: { name: 'PayPal', color: '#0070e0' }, venmo: { name: 'Venmo', color: '#008cff' }, cashapp: { name: 'Cash App', color: '#00d64f' },
+  stripe: { name: 'Stripe', color: '#635bff' }, kofi: { name: 'Ko-fi', color: '#ff5e5b' }, patreon: { name: 'Patreon', color: '#f96854' },
+  bmc: { name: 'Buy Me a Coffee', color: '#ffdd00' }, link: { name: 'Website', color: '#4c8dff' },
+};
+const qrCache = new Map();
+let qrLib = null;
+function qrFor(url) {
+  if (qrCache.has(url)) return qrCache.get(url);
+  qrCache.set(url, null);
+  (qrLib ||= new Promise((res, rej) => { const sc = document.createElement('script'); sc.src = '/vendor/qrcode.js'; sc.onload = () => res(window.qrcode); sc.onerror = rej; document.head.append(sc); }))
+    .then((qrcode) => { const q = qrcode(0, 'M'); q.addData(url); q.make(); qrCache.set(url, q); }).catch(() => { qrLib = null; });
+  return null;
+}
+function drawTipEl(e) {
+  const r = px(e), info = TIP_INFO[e.provider] || TIP_INFO.link, pad = 16;
+  g.save();
+  g.shadowColor = 'rgba(0,0,0,.35)'; g.shadowBlur = 24; g.shadowOffsetY = 8;
+  g.fillStyle = '#ffffff'; rr(r.x, r.y, r.w, r.h, 16); g.fill();
+  g.shadowColor = 'transparent';
+  const qs = r.h - pad * 2, q = e.url ? qrFor(e.url) : null;
+  if (q) {
+    const n = q.getModuleCount(), cell = qs / n;
+    g.fillStyle = '#0b1020';
+    for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) if (q.isDark(i, j)) g.fillRect(r.x + pad + j * cell, r.y + pad + i * cell, Math.ceil(cell), Math.ceil(cell));
+  } else { g.fillStyle = '#e8edf6'; rr(r.x + pad, r.y + pad, qs, qs, 8); g.fill(); }
+  const tx = r.x + pad * 2 + qs, tw = r.w - (tx - r.x) - pad;
+  g.textAlign = 'left'; g.textBaseline = 'alphabetic';
+  g.fillStyle = info.color; rr(tx, r.y + pad, Math.min(tw, 14 + g.measureText(info.name).width + 30), 24, 6); g.fill();
+  g.fillStyle = e.provider === 'bmc' ? '#111' : '#fff'; g.font = '700 13px Inter, sans-serif'; g.fillText(info.name, tx + 10, r.y + pad + 16.5);
+  g.fillStyle = '#0b1020'; g.font = '800 22px "Plus Jakarta Sans", Inter, sans-serif';
+  wrapLines(e.label || 'Support the show', tw, 2).forEach((l, i) => g.fillText(l, tx, r.y + pad + 58 + i * 26));
+  g.fillStyle = '#4b5563'; g.font = '500 14px Inter, sans-serif';
+  const handle = (e.url || '').replace(/^https?:\/\/(www\.)?/, '');
+  g.fillText(wrapLines(handle, tw, 1)[0] || '', tx, r.y + r.h - pad - 4);
+  g.restore();
+}
 function drawOverlays(t) {
   for (const e of S.state.elements || []) {
+    if (e.type === 'media') { drawMediaEl(e); continue; }
+    if (e.type === 'ai') { drawAiEl(e); continue; }
+    if (e.type === 'tip') { drawTipEl(e); continue; }
     if (e.type === 'chat') drawChatEl(e, t);
     else if (e.type === 'text') drawTextEl(e);
     else if (e.type === 'image') drawImageEl(e);
@@ -1127,11 +1422,12 @@ function setEditing(on) {
   $('#editToggle').textContent = editor.on ? 'Done editing' : 'Edit on stage';
   renderEditor();
 }
-const ELABEL = { slot: 'Camera', chat: 'Chat box', text: 'Text', image: 'Image', timer: 'Timer' };
+const ELABEL = { slot: 'Camera', chat: 'Chat box', text: 'Text', image: 'Image', timer: 'Timer', media: 'Presentation', ai: 'AI window', tip: 'Support card' };
 function elName(e) {
   if (e.type === 'slot') return `Camera ${e.index + 1}`;
   if (e.type === 'text') return e.text ? `“${e.text.slice(0, 22)}”` : 'Text';
   if (e.type === 'timer') return e.mode === 'countdown' ? 'Countdown' : 'Clock';
+  if (e.type === 'tip') return `${(TIP_INFO[e.provider] || TIP_INFO.link).name} card`;
   return ELABEL[e.type];
 }
 function renderEditor() {
@@ -1216,6 +1512,9 @@ function renderProps() {
     f.push(`<label class="check"><input type="checkbox" data-bg ${e.bg ? 'checked' : ''}> Background box</label>`);
     if (e.bg) field('Box colour', `<input type="color" data-k="bg" value="${e.bg}">`);
   }
+  if (e.type === 'ai') f.push(`<label class="fld"><span>Text size</span><input type="range" min="14" max="34" data-k="size" data-num value="${e.size}"></label><p class="hint">Shows the latest question and answer from the AI panel. Long answers keep the newest lines in view.</p>`);
+  if (e.type === 'media') f.push(`<label class="fld"><span>Corner rounding</span><input type="range" min="0" max="40" data-k="radius" data-num value="${e.radius}"></label><p class="hint">Shows whoever is presenting: a screen, a video or PDF slides.</p>`);
+  if (e.type === 'tip') f.push(`<label class="fld"><span>Card text</span><input data-k="label" maxlength="60" value="${val('label')}"></label><p class="hint">Edit the link in Brand → Support links.</p>`);
   f.push(`<button type="button" class="btn ghost danger-text" data-del>Delete ${ELABEL[e.type].toLowerCase()}</button>`);
   box.innerHTML = f.join('');
   box.querySelectorAll('input, select, textarea').forEach((inp) => { inp.disabled = !isHost() && !inp.dataset.upload; });
@@ -1317,7 +1616,7 @@ $('#saveLayout').onclick = () => {
   try { store.set('layouts', all.slice(0, 20)); localStorage.getItem('gather:layouts') || 0; } catch {}
   if (!savedLayouts().some((l) => l.name === name)) return toast('Could not save. The images may be too large for this browser.', { err: true });
   $('#layoutName').value = '';
-  renderSaved(); toast(`Saved “${name}”.`);
+  renderSaved(); renderScenes(); toast(`Saved scene “${name}”. It's in the scene strip.`);
 };
 async function loadLayout(l) {
   const els = [];
@@ -1325,8 +1624,8 @@ async function loadLayout(l) {
     if (e.type === 'image' && e._data) { const { _data, ...rest } = e; els.push({ ...rest, asset: await storeAsset(_data).catch(() => '') }); }
     else els.push(e);
   }
-  setStage({ layout: l.layout || 'custom', elements: els });
-  toast(`Loaded “${l.name}”.`);
+  setStage({ layout: l.layout || 'custom', elements: els, scene: 'saved:' + l.name });
+  toast(`Scene “${l.name}”.`);
 }
 // Twitch + chat overlay controls (Chat panel)
 $('#twitchForm').addEventListener('submit', (ev) => {
@@ -1388,6 +1687,162 @@ function renderLayoutsPanel() {
   $('#saveLayout').disabled = !isHost();
   $('#layoutsHint').textContent = isHost() ? 'Drag and resize on the stage. Changes show for everyone and in recordings.' : 'Only the host can change layouts. You see them on your stage.';
   if (!isHost() && editor.on) setEditing(false);
+}
+
+// ---------------------------------------------------------------- AI research (host's own Claude, ChatGPT, Gemini or Grok key)
+S.ai = { items: [], busy: false };
+S.aiProv = store.get('aiProv', 'claude');
+const AI_DEFAULT_MODEL = { claude: 'claude-opus-5-5', openai: 'gpt-5.5', gemini: 'gemini-2.5-flash', grok: 'grok-4.7' };
+const aiSync = new Map(); // id -> timer, so streaming answers reach guests a few times a second, not per token
+function upsertAI(item, local = true) {
+  if (!item?.id) return;
+  if (item.id === 'clear') { S.ai.items = []; renderAILog(); return; }
+  const i = S.ai.items.findIndex((x) => x.id === item.id);
+  if (i >= 0) S.ai.items[i] = { ...S.ai.items[i], ...item }; else S.ai.items.push({ ...item });
+  if (S.ai.items.length > 40) S.ai.items.splice(0, S.ai.items.length - 40);
+  renderAILog();
+  if (!local || !S.studio || !isHost()) return;
+  const send = () => { aiSync.delete(item.id); const cur = S.ai.items.find((x) => x.id === item.id); if (cur) wsSend({ type: 'ai', item: cur }); };
+  if (item.done) { clearTimeout(aiSync.get(item.id)); send(); }
+  else if (!aiSync.has(item.id)) aiSync.set(item.id, setTimeout(send, 450));
+}
+function renderAILog() {
+  const log = $('#aiLog');
+  if (!log) return;
+  log.replaceChildren(...S.ai.items.map((it) => {
+    const li = document.createElement('li'); li.className = 'ai-msg ' + it.role + (it.error ? ' error' : '');
+    const who = document.createElement('div'); who.className = 'who';
+    const b = document.createElement('b'); b.textContent = it.role === 'user' ? 'You asked' : AI_NAME[it.provider] || 'AI';
+    if (it.role === 'assistant') b.style.color = AI_COLOR[it.provider];
+    who.append(b);
+    const txt = document.createElement('div'); txt.className = 'txt'; txt.textContent = it.role === 'assistant' ? plainMd(it.text) + (it.done ? '' : ' ▍') : it.text;
+    li.append(who, txt);
+    return li;
+  }));
+  $('#aiEmpty').hidden = !!S.ai.items.length;
+  log.parentElement.scrollTop = log.parentElement.scrollHeight;
+}
+function renderAIPanel() {
+  const host = isHost();
+  $$('#aiProv button').forEach((b) => { const on = b.dataset.prov === S.aiProv; b.classList.toggle('on', on); b.setAttribute('aria-checked', on); });
+  const key = store.get('aiKey:' + S.aiProv, '');
+  if (document.activeElement !== $('#aiKey')) $('#aiKey').value = key;
+  $('#aiModel').placeholder = AI_DEFAULT_MODEL[S.aiProv];
+  if (document.activeElement !== $('#aiModel')) $('#aiModel').value = store.get('aiModel:' + S.aiProv, '');
+  $('#aiKeyLabel').textContent = `${AI_NAME[S.aiProv]} API key`;
+  $('#aiKeyHelp').innerHTML = { claude: 'Get one at <b>console.anthropic.com</b>. Includes live web search.', openai: 'Get one at <b>platform.openai.com</b>.', gemini: 'Get one at <b>aistudio.google.com</b>. Includes Google Search.', grok: 'Get one at <b>console.x.ai</b>.' }[S.aiProv];
+  const onStage = (S.state.elements || []).some((e) => e.type === 'ai');
+  $('#aiStage').checked = onStage; $('#aiStage').disabled = !host;
+  $('#aiInput').disabled = !host || S.ai.busy; $('#aiAsk').disabled = !host || S.ai.busy;
+  $('#aiAsk').textContent = S.ai.busy ? 'Answering…' : 'Ask';
+  $('#aiHostNote').hidden = host;
+}
+$$('#aiProv button').forEach((b) => b.addEventListener('click', () => { S.aiProv = b.dataset.prov; store.set('aiProv', S.aiProv); renderAIPanel(); }));
+$('#aiKey').addEventListener('change', (e) => { store.set('aiKey:' + S.aiProv, e.target.value.trim()); toast(e.target.value.trim() ? `${AI_NAME[S.aiProv]} key saved in this browser.` : 'Key removed.'); });
+$('#aiModel').addEventListener('change', (e) => store.set('aiModel:' + S.aiProv, e.target.value.trim()));
+$('#aiStage').addEventListener('change', (e) => {
+  if (!isHost()) return;
+  if (!e.target.checked) return setStage({ elements: elementsCopy().filter((x) => x.type !== 'ai') });
+  applyTemplate(S.local.pres || participants().some((p) => p.sharing) ? TPL['screen-ai'] : TPL['ai-cam']);
+});
+$('#aiClear').onclick = () => { S.ai.items = []; renderAILog(); if (S.studio && isHost()) wsSend({ type: 'ai', item: { id: 'clear', role: 'system', text: '', done: true } }); };
+$('#aiForm').addEventListener('submit', async (ev) => {
+  ev.preventDefault();
+  const q = $('#aiInput').value.trim();
+  if (!q || S.ai.busy) return;
+  if (!isHost()) return toast('Only the host can use the on-air AI.', { err: true });
+  const key = store.get('aiKey:' + S.aiProv, '');
+  if (!key) { $('#aiKey').focus(); return toast(`Add your ${AI_NAME[S.aiProv]} API key first.`, { err: true }); }
+  const history = S.ai.items.filter((i) => i.done && !i.error && (i.role === 'user' || i.role === 'assistant')).slice(-10).map((i) => ({ role: i.role, text: i.text }));
+  const prov = S.aiProv;
+  const user = { id: uid(), role: 'user', text: q, provider: prov, done: true };
+  const ans = { id: uid(), role: 'assistant', text: '', provider: prov, done: false };
+  $('#aiInput').value = '';
+  S.ai.busy = true; renderAIPanel();
+  upsertAI(user); upsertAI(ans);
+  try {
+    const res = await fetch('/api/ai', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ provider: prov, apiKey: key, model: store.get('aiModel:' + prov, ''), messages: [...history, { role: 'user', text: q }] }) });
+    if (!res.ok) { upsertAI({ ...ans, text: (await res.text()) || `The AI request failed (${res.status}).`, error: true, done: true }); return; }
+    const reader = res.body.getReader(), dec = new TextDecoder();
+    let text = '';
+    for (;;) { const { value, done } = await reader.read(); if (done) break; text += dec.decode(value, { stream: true }); upsertAI({ ...ans, text }); }
+    upsertAI({ ...ans, text: text || '(No answer came back.)', done: true });
+  } catch { upsertAI({ ...ans, text: 'Could not reach the AI. Check your connection and try again.', error: true, done: true }); }
+  finally { S.ai.busy = false; renderAIPanel(); }
+});
+$('#aiInput').addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); $('#aiForm').requestSubmit(); } });
+
+// ---------------------------------------------------------------- support links (PayPal, Venmo, Cash App, Stripe…)
+const TIP_FIELDS = [
+  ['paypal', 'PayPal', 'paypal.me/yourname'], ['venmo', 'Venmo', '@yourname'], ['cashapp', 'Cash App', '$yourtag'],
+  ['stripe', 'Stripe', 'buy.stripe.com/…'], ['kofi', 'Ko-fi', 'ko-fi.com/yourname'], ['patreon', 'Patreon', 'patreon.com/yourname'],
+  ['bmc', 'Buy Me a Coffee', 'buymeacoffee.com/you'], ['link', 'Website', 'yoursite.com/support'],
+];
+function tipUrl(provider, raw) {
+  let v = String(raw || '').trim();
+  if (!v) return '';
+  if (provider === 'venmo' && !/\//.test(v)) return 'https://venmo.com/u/' + v.replace(/^@/, '');
+  if (provider === 'cashapp' && !/\//.test(v)) return 'https://cash.app/$' + v.replace(/^\$/, '');
+  if (provider === 'paypal' && !/[./]/.test(v)) return 'https://paypal.me/' + v;
+  if (!/^https?:\/\//i.test(v)) v = 'https://' + v;
+  return /^https:\/\/[^\s]+\.[^\s]+/.test(v.replace(/^http:/i, 'https:')) ? v.replace(/^http:/i, 'https:') : '';
+}
+function renderTips() {
+  const box = $('#tipList');
+  if (!box) return;
+  const saved = store.get('tips', {});
+  box.replaceChildren(...TIP_FIELDS.map(([id, name, ph]) => {
+    const row = document.createElement('div'); row.className = 'tip-row';
+    const tag = document.createElement('span'); tag.className = 'tip-tag'; tag.textContent = name; tag.style.setProperty('--c', TIP_INFO[id].color);
+    const inp = document.createElement('input'); inp.placeholder = ph; inp.value = saved[id] || ''; inp.spellcheck = false; inp.setAttribute('aria-label', name + ' link');
+    inp.onchange = () => { const all = store.get('tips', {}); all[id] = inp.value.trim(); store.set('tips', all); };
+    const add = document.createElement('button'); add.type = 'button'; add.className = 'btn outline sm'; add.textContent = 'On stage';
+    add.disabled = !isHost();
+    add.onclick = () => {
+      const url = tipUrl(id, inp.value);
+      if (!url) return toast(`Add your ${name} link first.`, { err: true });
+      const all = store.get('tips', {}); all[id] = inp.value.trim(); store.set('tips', all);
+      const els = elementsCopy().filter((e) => !(e.type === 'tip' && e.provider === id));
+      els.push(withDefaults({ type: 'tip', provider: id, url, label: 'Support the show' }));
+      setStage({ elements: els });
+      toast(`${name} card is on stage. Drag it in Layouts → Edit on stage.`);
+    };
+    row.append(tag, inp, add);
+    return row;
+  }));
+}
+
+// ---------------------------------------------------------------- profile photo (shown when the camera is off)
+$('#avatarBtn').onclick = () => $('#avatarFile').click();
+$('#avatarHint').onclick = () => $('#avatarFile').click();
+$('#avatarFile').onchange = async (e) => {
+  const f = e.target.files[0]; e.target.value = '';
+  if (!f) return;
+  try {
+    const data = await squareThumb(f);
+    store.set('avatar', data);
+    renderPreview();
+    if (S.studio) uploadAvatar(true);
+  } catch (err) { toast(err.message, { err: true }); }
+};
+$('#avatarClear').onclick = () => { store.set('avatar', ''); S.local.avatarId = ''; renderPreview(); if (S.studio) sendMeta({ avatar: '' }); };
+function squareThumb(file) {
+  return new Promise((res, rej) => {
+    if (!/^image\//.test(file.type)) return rej(new Error('Choose an image for your photo.'));
+    const img = new Image();
+    img.onload = () => {
+      const s = Math.min(img.width, img.height), c = document.createElement('canvas'); c.width = c.height = 320;
+      c.getContext('2d').drawImage(img, (img.width - s) / 2, (img.height - s) / 2, s, s, 0, 0, 320, 320);
+      URL.revokeObjectURL(img.src); res(c.toDataURL('image/webp', .85));
+    };
+    img.onerror = () => rej(new Error('Could not read that image.'));
+    img.src = URL.createObjectURL(file);
+  });
+}
+async function uploadAvatar(force) {
+  const data = store.get('avatar', '');
+  if (!data || !S.studio || (S.local.avatarId && !force)) return;
+  try { S.local.avatarId = await storeAsset(data); sendMeta({ avatar: S.local.avatarId }); renderCrew(); } catch {}
 }
 
 // ---------------------------------------------------------------- recording
@@ -1486,7 +1941,7 @@ function setPhase(p) {
   $('#statusText').textContent = { offline: 'Studio offline', connecting: 'Connecting…', online: 'Studio connected', reconnecting: 'Reconnecting…' }[p];
   renderAll();
 }
-function renderAll() { renderHeader(); renderStageUI(); renderCrew(); renderDock(); renderPanels(); renderFeedUI(); renderLayoutsPanel(); syncTwitch(); }
+function renderAll() { renderHeader(); renderStageUI(); renderCrew(); renderDock(); renderPanels(); renderFeedUI(); renderLayoutsPanel(); renderAIPanel(); renderTips(); syncTwitch(); }
 function renderHeader() {
   $('#studioTitle').textContent = S.state.title || DEFAULT_TITLE;
   $('#enterTopText').textContent = S.studio ? 'Room details' : 'Enter studio';
@@ -1499,7 +1954,7 @@ function renderStageUI() {
   $('#stageEmpty').hidden = !!S.studio || previewActive();
   $('#stageMeta').classList.toggle('live', !!S.studio);
   $('#stageMeta').lastChild.textContent = S.studio ? `${S.state.stage.length} on stage · 16:9` : 'Stage preview · 16:9';
-  for (const b of $$('.lay')) { const on = b.dataset.layout === S.state.layout; b.classList.toggle('on', on); b.setAttribute('aria-checked', on); b.disabled = !isHost(); }
+  renderScenes();
   $('#hostNote').hidden = isHost();
 }
 function renderCrew() {
@@ -1514,7 +1969,7 @@ function renderCrew() {
       li = document.createElement('li'); li.className = 'crew-card'; li.id = 'card-' + cssId(p.id); li.dataset.id = p.id;
       li.innerHTML = `<div class="crew-thumb"><video autoplay playsinline></video><div class="ini" hidden><span></span></div><div class="tagrow"></div></div><div class="crew-info"><div class="crew-name"><span class="nm"></span></div><div class="crew-sub"></div><button class="crew-act" hidden></button></div>`;
       const v = $('video', li);
-      if (p.me) { v.muted = true; const ov = outVideo(); if (ov) v.srcObject = new MediaStream([ov]); v.classList.toggle('mirror', !S.local.screen); }
+      if (p.me) { v.muted = true; const ov = outVideo(); if (ov) v.srcObject = new MediaStream([ov]); v.classList.add('mirror'); }
       else if (p.peer.stream.getTracks().length) { v.srcObject = p.peer.stream; playEl(v); }
       $('.crew-act', li).addEventListener('click', () => toggleStage(p.id));
       list.insertBefore(li, add);
@@ -1524,11 +1979,14 @@ function renderCrew() {
     const nameRow = $('.crew-name', li);
     nameRow.querySelector('svg')?.remove();
     if (!p.mic) nameRow.insertAdjacentHTML('beforeend', '<svg viewBox="0 0 24 24" aria-label="Muted"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21M4 4l16 16"/></svg>');
-    const ini = $('.ini', li); ini.hidden = !!p.cam; $('span', ini).textContent = initials(p.name);
+    const ini = $('.ini', li); ini.hidden = !!p.cam;
+    const avImg = assetImg(p.avatar), span = $('span', ini);
+    if (avImg) { span.textContent = ''; span.style.backgroundImage = `url("${avImg.src}")`; span.classList.add('has-av'); }
+    else { span.textContent = initials(p.name); span.style.backgroundImage = ''; span.classList.remove('has-av'); }
     const tags = $('.tagrow', li); tags.replaceChildren();
     if (p.id === S.host) tags.insertAdjacentHTML('beforeend', '<span class="mini">Host</span>');
     if (S.state.stage.includes(p.id)) tags.insertAdjacentHTML('beforeend', '<span class="mini live">On stage</span>');
-    if (p.sharing) tags.insertAdjacentHTML('beforeend', '<span class="mini">Screen</span>');
+    if (p.sharing) tags.insertAdjacentHTML('beforeend', '<span class="mini">Presenting</span>');
     const act = $('.crew-act', li);
     act.hidden = !isHost();
     const on = S.state.stage.includes(p.id);
@@ -1542,7 +2000,7 @@ function renderCrewSubs() {
   for (const p of participants()) {
     const sub = $(`#card-${cssId(p.id)} .crew-sub`);
     if (!sub) continue;
-    if (p.me) sub.textContent = S.local.screen ? 'Sharing screen' : S.local.camOn ? (S.local.micOn ? 'Camera and mic on' : 'Camera on · muted') : 'Camera off';
+    if (p.me) sub.textContent = S.local.pres ? `Presenting ${{ screen: 'a screen', video: 'a video', pdf: 'slides' }[S.local.pres.kind]}` : S.local.camOn ? (S.local.micOn ? 'Camera and mic on' : 'Camera on · muted') : 'Camera off';
     else {
       const c = p.peer.conn;
       sub.textContent = c === 'connected' ? `Connected${p.peer.rtt != null ? ` · ${p.peer.rtt} ms` : ''}` : c === 'failed' ? 'Connection failed · retrying' : c === 'disconnected' ? 'Reconnecting…' : 'Connecting…';
@@ -1557,8 +2015,8 @@ function renderDock() {
   const camOff = !S.local.camOn;
   cam.setAttribute('aria-pressed', String(camOff && !!S.studio));
   $('#camLabel').textContent = S.studio ? (camOff ? 'Start camera' : 'Stop camera') : 'Camera';
-  share.classList.toggle('active', !!S.local.screen);
-  $('#shareLabel').textContent = S.local.screen ? 'Stop sharing' : 'Share screen';
+  share.classList.toggle('active', !!S.local.pres);
+  $('#shareLabel').textContent = S.local.pres ? 'Stop presenting' : 'Present';
   share.disabled = !S.studio;
   rec.classList.toggle('recording', !!S.rec);
   $('#recLabel').textContent = S.rec ? fmtTime(Date.now() - S.rec.t0) : 'Record';
@@ -1580,7 +2038,7 @@ function renderDockNote() {
 }
 function renderPanels() {
   const host = isHost();
-  for (const id of ['bannerShow', 'bannerHide', 'tickerShow', 'tickerHide', 'titleApply', 'colorPick', 'namesChk', 'wmChk']) $('#' + id).disabled = !host;
+  for (const id of ['bannerShow', 'bannerHide', 'tickerShow', 'tickerHide', 'titleApply', 'colorPick', 'namesChk']) $('#' + id).disabled = !host;
   $$('#swatches button, #bgs button, #bannerPresets .use').forEach((b) => (b.disabled = !host));
   $('#bannerHint').textContent = host ? 'Banners appear on every participant’s stage and in recordings.' : 'Only the host can show banners. You’ll see them on your stage.';
   $('#brandHint').textContent = host ? 'Brand changes apply to everyone in the studio.' : 'Only the host can change the brand.';
@@ -1588,7 +2046,7 @@ function renderPanels() {
   $$('#swatches button').forEach((x) => x.classList.toggle('on', x.dataset.color.toLowerCase() === b.color.toLowerCase()));
   $$('#bgs button').forEach((x) => x.classList.toggle('on', x.dataset.bg === b.bg));
   $('#colorPick').value = b.color;
-  $('#namesChk').checked = b.names; $('#wmChk').checked = b.watermark;
+  $('#namesChk').checked = b.names;
   if (document.activeElement !== $('#titleInput')) $('#titleInput').value = S.state.title || '';
   renderPresets();
   $('#chatInput').disabled = !S.studio;
@@ -1624,7 +2082,54 @@ function setTab(tab) {
 $$('.rail-btn').forEach((b) => b.addEventListener('click', () => setTab(b.dataset.tab)));
 $('#settingsDock').onclick = () => { setTab('settings'); if (innerWidth <= 900) $('#side').scrollIntoView({ behavior: 'smooth' }); };
 
-$$('.lay').forEach((b) => b.addEventListener('click', () => chooseLayout(b.dataset.layout)));
+function sceneList() {
+  return [...BUILTINS.map((b) => ({ ...b, kind: 'builtin' })), ...TEMPLATES.map((t) => ({ ...t, kind: 'template' })), ...savedLayouts().map((l) => ({ id: 'saved:' + l.name, name: l.name, kind: 'saved', saved: l }))];
+}
+function activeSceneId() {
+  if (S.state.layout !== 'custom') return 'b-' + S.state.layout;
+  return S.state.scene || '';
+}
+function applyScene(sc) {
+  if (sc.kind === 'builtin') return setStage({ layout: sc.layout, scene: sc.id, elements: (S.state.elements || []).filter((e) => !STRUCTURAL.includes(e.type) || e.type === 'chat') });
+  if (sc.kind === 'template') return applyTemplate(sc);
+  return loadLayout(sc.saved);
+}
+function scenePreview(sc) {
+  const pv = document.createElement('span'); pv.className = 'sc-pv';
+  let els = sc.els || sc.saved?.elements;
+  if (sc.kind === 'builtin') {
+    const area = { x: 32, y: 44, w: W - 64, h: H - 76 }; // same geometry the stage uses, then scaled to 0..1
+    const n = sc.layout === 'solo' ? 1 : 3;
+    els = layoutRects(n, sc.layout, area).map((r) => ({ type: 'slot', x: r.x / W, y: r.y / H, w: r.w / W, h: r.h / H }));
+  }
+  for (const e of els || []) {
+    if (!['slot', 'chat', 'media', 'ai', 'tip', 'image', 'text'].includes(e.type)) continue;
+    const i = document.createElement('i'); i.className = 'pv-' + e.type;
+    Object.assign(i.style, { left: e.x * 100 + '%', top: e.y * 100 + '%', width: e.w * 100 + '%', height: e.h * 100 + '%' });
+    pv.append(i);
+  }
+  return pv;
+}
+function renderScenes() {
+  const strip = $('#sceneStrip');
+  if (!strip) return;
+  const active = activeSceneId(), host = isHost();
+  const chips = sceneList().map((sc, i) => {
+    const b = document.createElement('button'); b.type = 'button';
+    b.className = 'scene' + (sc.id === active ? ' on' : '') + (sc.kind === 'saved' ? ' saved' : '');
+    b.disabled = !host; b.title = `${sc.name}${i < 9 ? ` (${i + 1})` : ''}`;
+    b.setAttribute('aria-pressed', String(sc.id === active));
+    const nm = document.createElement('span'); nm.className = 'sc-name'; nm.textContent = sc.name;
+    if (i < 9) { const k = document.createElement('kbd'); k.textContent = i + 1; nm.append(k); }
+    b.append(scenePreview(sc), nm);
+    b.onclick = () => applyScene(sc);
+    return b;
+  });
+  const save = document.createElement('button'); save.type = 'button'; save.className = 'scene add'; save.disabled = !host;
+  save.innerHTML = '<span class="sc-pv add-pv">+</span><span class="sc-name">Save scene</span>';
+  save.onclick = () => { setTab('layouts'); $('#layoutName').focus(); };
+  strip.replaceChildren(...chips, save);
+}
 function chooseLayout(l) {
   if (l === 'custom' && !(S.state.elements || []).some((e) => e.type === 'slot')) return applyTemplate(TEMPLATES[0]);
   setStage({ layout: l });
@@ -1650,7 +2155,6 @@ $$('#swatches button').forEach((b) => b.addEventListener('click', () => setStage
 let colorT; $('#colorPick').addEventListener('input', (e) => { clearTimeout(colorT); colorT = setTimeout(() => setStage({ brand: { color: e.target.value } }), 120); });
 $$('#bgs button').forEach((b) => b.addEventListener('click', () => setStage({ brand: { bg: b.dataset.bg } })));
 $('#namesChk').onchange = (e) => setStage({ brand: { names: e.target.checked } });
-$('#wmChk').onchange = (e) => setStage({ brand: { watermark: e.target.checked } });
 $('#titleApply').onclick = () => { setStage({ title: $('#titleInput').value.trim() }); toast('Title applied.'); };
 
 // Appearance: dark by default; light or follow the OS on request.
@@ -1701,7 +2205,6 @@ for (const k of ['turnUrl', 'turnUser', 'turnPass']) {
 // Dock
 $('#micBtn').onclick = () => setMic(!(S.local.micOn && S.local.audio));
 $('#camBtn').onclick = () => setCam(!S.local.camOn);
-$('#shareBtn').onclick = toggleShare;
 $('#recBtn').onclick = toggleRecord;
 $('#leaveBtn').onclick = leave;
 
@@ -1711,7 +2214,7 @@ function leave() {
   beaconLeave();
   outbox = [];
   teardownPeers();
-  stopShare(); stopCam(); stopMic();
+  stopPresentation(); stopCam(); stopMic();
   S.studio = null; S.id = null; S.tok = null; S.host = null;
   S.state = localState();
   S.local.camOn = S.prefs.startCam; S.local.micOn = S.prefs.startMic;
@@ -1719,6 +2222,7 @@ function leave() {
   $$('.crew-card').forEach((n) => n.remove());
   S.feed = []; seenFeed.clear(); editor.sel = null; if (editor.on) setEditing(false);
   rumble.url = ''; clearTimeout(rumble.timer);
+  S.local.avatarId = ''; S.prePres = null;
   history.replaceState(null, '', '/');
   setPhase('offline');
   toast('You left the studio.');
@@ -1755,7 +2259,12 @@ function renderPreview() {
   const track = S.local.camOn ? S.local.cam : null;
   if ((v.srcObject?.getVideoTracks()[0] || null) !== track) v.srcObject = track ? new MediaStream([track]) : null;
   $('#previewOff').hidden = !!track;
-  $('#previewInitials').textContent = initials($('#enterName').value || S.name);
+  const av = store.get('avatar', '');
+  $('#previewInitials').textContent = av ? '' : initials($('#enterName').value || S.name);
+  $('#previewInitials').style.backgroundImage = av ? `url("${av}")` : '';
+  $('#previewInitials').classList.toggle('has-av', !!av);
+  $('#avatarImg').hidden = !av; if (av) $('#avatarImg').src = av;
+  $('#avatarHint').textContent = av ? 'Change photo' : 'Add a photo';
   $('#previewMsg').textContent = S.local.camError && !track ? S.local.camError : 'Camera is off';
   $('#pMic').setAttribute('aria-pressed', String(!(S.local.micOn && S.local.audio)));
   $('#pCam').setAttribute('aria-pressed', String(!track));
@@ -1822,13 +2331,14 @@ addEventListener('keydown', (e) => {
   const act = {
     m: () => setMic(!(S.local.micOn && S.local.audio)),
     v: () => setCam(!S.local.camOn),
-    s: () => S.studio && toggleShare(),
+    s: () => S.studio && (S.local.pres ? stopPresentation() : presentScreen()),
     r: () => S.studio && toggleRecord(),
     f: () => $('#fsBtn').click(),
-    1: () => isHost() && setStage({ layout: 'solo' }),
-    2: () => isHost() && setStage({ layout: 'split' }),
-    3: () => isHost() && setStage({ layout: 'spotlight' }),
-    4: () => isHost() && chooseLayout('custom'),
+    ...Object.fromEntries([1, 2, 3, 4, 5, 6, 7, 8, 9].map((n) => [n, () => isHost() && sceneList()[n - 1] && applyScene(sceneList()[n - 1])])),
+    arrowright: () => S.local.pres?.kind === 'pdf' && S.local.pres.go(S.local.pres.page + 1),
+    arrowleft: () => S.local.pres?.kind === 'pdf' && S.local.pres.go(S.local.pres.page - 1),
+    pagedown: () => S.local.pres?.kind === 'pdf' && S.local.pres.go(S.local.pres.page + 1),
+    pageup: () => S.local.pres?.kind === 'pdf' && S.local.pres.go(S.local.pres.page - 1),
     delete: () => { if (editor.on && editor.sel) deleteEl(editor.sel); },
     backspace: () => { if (editor.on && editor.sel) deleteEl(editor.sel); },
     escape: () => editor.on && setEditing(false),

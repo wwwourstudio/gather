@@ -4,6 +4,7 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 const { handle } = require('./lib/studio');
+const { handleAI } = require('./lib/ai');
 
 const PORT = Number(process.env.PORT) || 8080;
 const PUBLIC = path.join(__dirname, 'public');
@@ -16,6 +17,12 @@ function json(res, status, obj) {
 
 http.createServer((req, res) => {
   const u = new URL(req.url, 'http://x');
+  if (u.pathname === '/api/ai' && req.method === 'POST') {
+    let raw = '';
+    req.on('data', (c) => { raw += c; if (raw.length > 512 * 1024) req.destroy(); });
+    req.on('end', () => { let body = {}; try { body = JSON.parse(raw || '{}'); } catch {} handleAI(req, res, body); });
+    return;
+  }
   if (u.pathname === '/api/studio') {
     let raw = '';
     req.on('data', (c) => { raw += c; if (raw.length > 256 * 1024) req.destroy(); });

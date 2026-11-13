@@ -3,6 +3,15 @@
 A browser studio for up to six people: live video over WebRTC, a composited 16:9 stage,
 host-controlled layouts, banners, a scrolling ticker, branding, studio chat and one-click recording.
 
+## What's inside
+
+- **Scenes:** one-click scene strip (number keys 1–9) with presets for interviews, panels, presentations, AI research and chat. Build your own on the stage by dragging and resizing elements, and save them as scenes.
+- **Presenting:** share a screen (with its sound), play a video file, or present PDF slides with ← / →. Cameras stay live on a second track, and the stage switches to a presentation scene by itself.
+- **On-air AI:** research live with your own Claude, ChatGPT, Gemini or Grok API key, and put the answer on screen as it streams. Claude and Gemini can search the web.
+- **Platform chat:** Twitch and Rumble chat in studio chat and in the on-stage overlay, with host moderation (hide, time out, block).
+- **Support links:** PayPal, Venmo, Cash App, Stripe, Ko-fi, Patreon and Buy Me a Coffee as scannable QR cards on stage.
+- **Profile photos** for guests whose camera is off, banners, a ticker, brand colours and stage backgrounds, and recording to a local video file.
+
 ## Deploy to Vercel
 
 1. Import this repository in Vercel (**Add New → Project**). No build settings are needed;
@@ -56,4 +65,12 @@ Camera and screen capture need **HTTPS or localhost**.
 An idle participant costs about one Redis command per second. A one-hour session with six people
 uses roughly 25–30k commands. Studios expire after six hours without activity.
 
-Shortcuts: M mute · V camera · S share · R record · 1/2/3 layouts · F full screen · / chat.
+### On-air AI keys
+
+Each host pastes their own provider key in the AI panel. It is kept in that browser's local storage and sent with each question through `/api/ai` to the provider; gather never stores or logs it. Claude requests use the official Anthropic SDK with web search and server-side refusal fallback.
+
+### Third-party code
+
+pdf.js and qrcode-generator are served from `public/vendor/` (licences in `public/vendor/LICENSES.md`).
+
+Shortcuts: M mute · V camera · S share screen · ← → slides · 1–9 scenes · R record · F full screen · / chat.
