@@ -355,6 +355,7 @@ async function onServer(m) {
     }
     case 'state': S.state = m.state; renderAll(); break;
     case 'chat': addMsg(m.msg); break;
+    case 'feed': for (const it of m.items || []) addExternal(it); break;
     case 'recording': toast(m.on ? `${m.by} started recording` : `${m.by} stopped recording`); break;
     case 'error':
       if ($('#enterDlg').open) { $('#enterErr').textContent = m.message; $('#enterErr').hidden = false; setPhase(S.studio ? 'online' : 'offline'); $('#enterGo').disabled = false; }
@@ -714,7 +715,8 @@ function speakingCards() {
 
 // ---------------------------------------------------------------- chat feed (studio + Twitch) for overlays
 const FEED_MAX = 200;
-const SRC_COLOR = { studio: null, twitch: '#9146ff', youtube: '#ff0033' };
+const SRC_COLOR = { studio: null, twitch: '#9146ff', youtube: '#ff0033', rumble: '#85c742', x: '#e7e9ea', kick: '#53fc18' };
+const SRC_NAME = { studio: 'Studio', twitch: 'Twitch', youtube: 'YouTube', rumble: 'Rumble', x: 'X', kick: 'Kick' };
 S.feed = [];
 function pushFeed(m) { S.feed.push(m); if (S.feed.length > FEED_MAX) S.feed.splice(0, S.feed.length - FEED_MAX); }
 
@@ -767,29 +769,104 @@ function setTwitchStatus(st) {
   el.dataset.state = st;
   el.textContent = { off: 'Not connected', connecting: 'Connecting…', live: `Reading #${twitch.want}`, reconnecting: 'Reconnecting…' }[st];
 }
+const seenFeed = new Set();
 function addExternal(m) {
+  if (seenFeed.has(m.id)) return;
+  seenFeed.add(m.id);
   pushFeed(m);
   const li = document.createElement('li');
-  li.className = 'msg ext';
-  li.dataset.fid = m.id;
+  li.className = 'msg ext' + (m.paid ? ' paid' : '');
+  setMsgData(li, m);
   const who = document.createElement('div'); who.className = 'who';
-  const badge = document.createElement('span'); badge.className = 'src src-' + m.src; badge.textContent = m.src === 'twitch' ? 'Twitch' : 'YouTube';
+  const badge = document.createElement('span'); badge.className = 'src src-' + m.src; badge.textContent = SRC_NAME[m.src] || m.src;
   const b = document.createElement('b'); b.textContent = m.name; if (m.color) b.style.color = m.color;
   who.append(badge, b);
+  if (m.paid) { const amt = document.createElement('span'); amt.className = 'paid-amt'; amt.textContent = m.paid; who.append(amt); }
   const txt = document.createElement('div'); txt.className = 'txt'; txt.textContent = m.text;
-  li.append(who, txt, featureBtn(m));
+  li.append(who, txt, msgActions(m));
   appendLog(li);
+  applyModeration(li);
   const log = $('#msgs'); while (log.children.length > 300) log.firstChild.remove();
 }
-function featureBtn(m) {
-  const btn = document.createElement('button');
-  btn.className = 'feat'; btn.type = 'button'; btn.textContent = 'Show on stage';
-  btn.hidden = !isHost();
-  btn.onclick = () => {
+function setMsgData(li, m) { li.dataset.fid = m.id; li.dataset.src = m.src; li.dataset.user = String(m.name || '').toLowerCase(); }
+
+// Moderation is enforced by gather for every platform: hidden, timed-out and blocked viewers
+// disappear from the overlay and from everyone's studio chat. Lists live in the shared stage state.
+const modState = () => S.state.mod || { hidden: [], blocked: [], timeouts: [] };
+function isModerated(m) {
+  const mod = modState(), user = String(m.name || m.user || '').toLowerCase(), src = m.src || 'studio', now = Date.now();
+  if (mod.hidden.includes(m.id)) return 'by host';
+  if (mod.blocked.some((x) => x.src === src && x.user === user)) return 'blocked';
+  if (mod.timeouts.some((x) => x.src === src && x.user === user && x.until > now)) return 'timed out';
+  return '';
+}
+function moderate(kind, m, secs) {
+  if (!isHost()) return;
+  const mod = structuredClone(modState()), user = String(m.name).toLowerCase(), src = m.src || 'studio';
+  if (kind === 'hide') mod.hidden.push(m.id);
+  if (kind === 'unhide') { mod.hidden = mod.hidden.filter((x) => x !== m.id); mod.blocked = mod.blocked.filter((x) => !(x.src === src && x.user === user)); mod.timeouts = mod.timeouts.filter((x) => !(x.src === src && x.user === user)); }
+  if (kind === 'block') mod.blocked.push({ src, user });
+  if (kind === 'timeout') mod.timeouts.push({ src, user, until: Date.now() + secs * 1000 });
+  const patch = { mod };
+  const f = S.state.featured;
+  if (kind !== 'unhide' && f && (f.id === m.id || (kind !== 'hide' && f.src === src && String(f.name).toLowerCase() === user))) patch.featured = null;
+  setStage(patch);
+  const label = { hide: 'Message hidden', block: `${m.name} blocked`, timeout: `${m.name} timed out for ${secs >= 3600 ? secs / 3600 + ' h' : secs / 60 + ' min'}`, unhide: `${m.name} restored` }[kind];
+  const platformSide = { twitch: 'Twitch', youtube: 'YouTube', x: 'X' }[src];
+  toast(label + (kind !== 'unhide' && platformSide ? ` in gather. Connect ${platformSide} sign-in to also apply it on ${platformSide}.` : '.'));
+}
+function msgActions(m) {
+  const bar = document.createElement('div'); bar.className = 'mact';
+  const mk = (txt, cls, fn) => { const b = document.createElement('button'); b.type = 'button'; b.className = cls; b.textContent = txt; b.onclick = fn; return b; };
+  bar.append(mk('Show on stage', 'feat', () => {
     const on = S.state.featured?.id === m.id;
     setStage({ featured: on ? null : { id: m.id, src: m.src, name: m.name, text: m.text, color: m.color || '' } });
-  };
-  return btn;
+  }));
+  bar.append(mk('Hide', 'mod-hide', () => moderate('hide', m)));
+  const tm = document.createElement('details'); tm.className = 'tmenu';
+  const sum = document.createElement('summary'); sum.textContent = 'Time out';
+  tm.append(sum, ...[[300, '5 min'], [3600, '1 hour'], [86400, '24 hours']].map(([sec, l]) => mk(l, 'tbtn', () => { tm.open = false; moderate('timeout', m, sec); })));
+  bar.append(tm, mk('Block', 'mod-block', () => moderate('block', m)), mk('Restore', 'mod-restore', () => moderate('unhide', m)));
+  return bar;
+}
+function applyModeration(li) {
+  const m = { id: li.dataset.fid, src: li.dataset.src, name: li.dataset.user };
+  const why = isModerated(m);
+  li.classList.toggle('modded', !!why);
+  li.dataset.why = why;
+}
+function applyModerationAll() { $$('#msgs li[data-fid]').forEach(applyModeration); }
+
+// Rumble: the host's personal Live Stream API URL (contains a key) stays in the host's browser.
+// The host polls it through our proxy and relays new messages to the studio.
+const rumble = { timer: null, url: '', status: 'off', fails: 0 };
+function syncRumble() {
+  const want = isHost() && S.studio ? store.get('rumbleUrl', '') : '';
+  if (want === rumble.url) return;
+  rumble.url = want; rumble.fails = 0;
+  clearTimeout(rumble.timer);
+  if (want) pollRumble(); else setRumbleStatus(store.get('rumbleUrl', '') ? 'saved' : 'off');
+}
+async function pollRumble() {
+  if (!rumble.url || !S.studio) return;
+  try {
+    const r = await api('rumble', { ...creds(), url: rumble.url });
+    rumble.fails = 0;
+    setRumbleStatus(r.live ? 'live' : 'idle', r.title);
+    const fresh = r.msgs.filter((m) => !seenFeed.has(m.id));
+    fresh.forEach(addExternal);
+    if (fresh.length) wsSend({ type: 'feed', items: fresh });
+  } catch (e) {
+    rumble.fails++;
+    setRumbleStatus('error', e.message);
+  }
+  rumble.timer = setTimeout(pollRumble, rumble.fails ? Math.min(60000, 5000 * 2 ** rumble.fails) : 5000);
+}
+function setRumbleStatus(st, detail = '') {
+  rumble.status = st;
+  const el = $('#rumbleStatus'); if (!el) return;
+  el.dataset.state = st === 'live' ? 'live' : st === 'error' ? 'error' : 'off';
+  el.textContent = { off: 'Not connected', saved: 'Connects when you enter a studio', idle: 'Connected · not live right now', live: `Reading ${detail ? '“' + detail + '”' : 'your live chat'}`, error: detail || 'Could not read Rumble chat' }[st];
 }
 
 // ---------------------------------------------------------------- stage elements: custom layouts + overlays
@@ -899,7 +976,7 @@ const px = (e) => ({ x: e.x * W, y: e.y * H, w: e.w * W, h: e.h * H });
 function drawChatEl(e, t) {
   const r = px(e), pad = 14, fs = e.size, lh = fs * 1.35;
   const now = Date.now();
-  const msgs = S.feed.filter((m) => !e.fade || now - m.ts < 90_000).slice(-e.max);
+  const msgs = S.feed.filter((m) => !isModerated(m) && (!e.fade || now - m.ts < 90_000)).slice(-e.max);
   g.save();
   rr(r.x, r.y, r.w, r.h, 12); g.clip();
   if (e.bg) { g.fillStyle = 'rgba(10,14,22,.55)'; g.fillRect(r.x, r.y, r.w, r.h); }
@@ -1016,7 +1093,7 @@ function drawFeatured(t, bottom) {
   g.textAlign = 'left'; g.fillStyle = '#111827'; g.font = '700 20px Inter, sans-serif';
   g.fillText(f.name, x + pad + 54, y + pad + 12);
   g.fillStyle = '#6b7280'; g.font = '500 14px Inter, sans-serif';
-  g.fillText(f.src === 'twitch' ? 'on Twitch' : f.src === 'youtube' ? 'on YouTube' : 'in the studio', x + pad + 54, y + pad + 33);
+  g.fillText(f.src === 'studio' ? 'in the studio' : 'on ' + (SRC_NAME[f.src] || f.src), x + pad + 54, y + pad + 33);
   g.fillStyle = '#111827'; g.font = '500 24px Inter, sans-serif'; g.textBaseline = 'alphabetic';
   lines.forEach((l, i) => g.fillText(l, x + pad + 6, y + 64 + 26 + i * 32));
   g.restore();
@@ -1260,12 +1337,23 @@ $('#twitchForm').addEventListener('submit', (ev) => {
   if (!v) return toast('Enter a Twitch channel name.');
   setStage({ feeds: { twitch: v } });
 });
-$('#chatOverlayBtn').onclick = () => {
-  if (!isHost()) return toast('Only the host can change the stage.', { err: true });
+// One switch shows or hides the chat overlay; it carries every connected platform's chat.
+$('#overlaySwitch').addEventListener('change', (ev) => {
+  if (!isHost()) { ev.target.checked = !ev.target.checked; return toast('Only the host can change the stage.', { err: true }); }
   const existing = (S.state.elements || []).find((e) => e.type === 'chat');
-  if (existing) { setStage({ elements: elementsCopy().filter((e) => e.id !== existing.id) }); toast('Chat overlay removed.'); }
-  else { addElement('chat'); setEditing(false); toast('Chat overlay added. Drag it in Layouts → Edit on stage.'); }
-};
+  if (!ev.target.checked && existing) setStage({ elements: elementsCopy().filter((e) => e.type !== 'chat') });
+  if (ev.target.checked && !existing) { addElement('chat'); setEditing(false); toast('Chat overlay on. Move it in Layouts → Edit on stage.'); }
+});
+$('#rumbleForm').addEventListener('submit', (ev) => {
+  ev.preventDefault();
+  if (!isHost()) return toast('Only the host can connect platform chat.', { err: true });
+  if (store.get('rumbleUrl', '')) { store.set('rumbleUrl', ''); $('#rumbleInput').value = ''; syncRumble(); renderFeedUI(); return toast('Rumble chat disconnected.'); }
+  const v = $('#rumbleInput').value.trim();
+  if (!/^https:\/\/(www\.)?rumble\.com\/-livestream-api\//.test(v)) return toast('Paste the Live Stream API URL from Rumble → Account → Live Stream API.', { err: true });
+  store.set('rumbleUrl', v);
+  syncRumble(); renderFeedUI();
+  toast(S.studio ? 'Rumble connected.' : 'Saved. Rumble chat connects when you enter a studio.');
+});
 $('#featHide').onclick = () => setStage({ featured: null });
 function renderFeedUI() {
   const host = isHost();
@@ -1273,14 +1361,25 @@ function renderFeedUI() {
   $('#twitchGo').disabled = !host;
   $('#twitchGo').textContent = S.state.feeds?.twitch ? 'Disconnect' : 'Connect';
   if (document.activeElement !== $('#twitchInput')) $('#twitchInput').value = S.state.feeds?.twitch || '';
+  const rumbleSaved = !!store.get('rumbleUrl', '');
+  $('#rumbleInput').disabled = !host || rumbleSaved;
+  $('#rumbleGo').disabled = !host;
+  $('#rumbleGo').textContent = rumbleSaved ? 'Disconnect' : 'Connect';
+  if (rumbleSaved && document.activeElement !== $('#rumbleInput')) $('#rumbleInput').value = '••••••••••••';
   const hasChat = (S.state.elements || []).some((e) => e.type === 'chat');
-  $('#chatOverlayBtn').textContent = hasChat ? 'Remove chat from stage' : 'Show chat on stage';
-  $('#chatOverlayBtn').disabled = !host;
+  $('#overlaySwitch').checked = hasChat;
+  $('#overlaySwitch').disabled = !host;
+  const n = 1 + (S.state.feeds?.twitch ? 1 : 0) + (rumbleSaved && host ? 1 : 0);
+  $('#overlayHint').textContent = `${n} chat source${n === 1 ? '' : 's'}: studio${S.state.feeds?.twitch ? ', Twitch' : ''}${rumbleSaved && host ? ', Rumble' : ''}`;
   $('#featBar').hidden = !S.state.featured;
   if (S.state.featured) $('#featText').textContent = `${S.state.featured.name}: ${S.state.featured.text}`;
   $('#featHide').disabled = !host;
-  $$('#msgs .feat').forEach((b) => { b.hidden = !host; b.textContent = S.state.featured?.id === b.closest('li')?.dataset.fid ? 'On stage' : 'Show on stage'; });
+  $('#msgs').classList.toggle('is-host', host);
+  $$('#msgs .feat').forEach((b) => { b.textContent = S.state.featured?.id === b.closest('li')?.dataset.fid ? 'On stage' : 'Show on stage'; });
+  applyModerationAll();
   setTwitchStatus(twitch.status);
+  syncRumble();
+  if (rumble.status === 'off' && rumbleSaved) setRumbleStatus('saved');
 }
 function renderLayoutsPanel() {
   renderTemplates(); renderSaved(); renderEditor();
@@ -1356,9 +1455,10 @@ function addMsg(msg) {
   }
   const fm = { id: msg.id, src: 'studio', name: msg.name, color: '', text: msg.text, ts: msg.ts };
   pushFeed(fm);
-  li.dataset.fid = msg.id;
-  li.append(who, txt, featureBtn(fm));
+  setMsgData(li, fm);
+  li.append(who, txt, msgActions(fm));
   appendLog(li);
+  applyModeration(li);
   if (!mine && S.tab !== 'chat') { S.unread++; $('#chatBadge').hidden = false; }
 }
 function sysMsg(text) { const li = document.createElement('li'); li.className = 'msg sys'; li.textContent = text; appendLog(li); }
@@ -1617,7 +1717,8 @@ function leave() {
   S.local.camOn = S.prefs.startCam; S.local.micOn = S.prefs.startMic;
   $$('#msgs > *').forEach((n) => n.remove());
   $$('.crew-card').forEach((n) => n.remove());
-  S.feed = []; editor.sel = null; if (editor.on) setEditing(false);
+  S.feed = []; seenFeed.clear(); editor.sel = null; if (editor.on) setEditing(false);
+  rumble.url = ''; clearTimeout(rumble.timer);
   history.replaceState(null, '', '/');
   setPhase('offline');
   toast('You left the studio.');

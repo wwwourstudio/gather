@@ -89,14 +89,25 @@
             <strong>Your crew, connected.</strong>
             <p>Messages are shared with connected studio participants, not a public audience.</p>
           </div>
-          <div class="feeds">
-            <form class="feed-row" id="twitchForm" autocomplete="off">
+          <div class="platforms">
+            <div class="plat-head"><strong>Platform chat</strong><span>Connected chats flow into this chat and the overlay.</span></div>
+            <form class="plat" id="twitchForm" autocomplete="off">
               <span class="src src-twitch">Twitch</span>
-              <input id="twitchInput" maxlength="60" placeholder="channel name" aria-label="Twitch channel to read chat from" spellcheck="false">
+              <div class="plat-body"><input id="twitchInput" maxlength="60" placeholder="channel name" aria-label="Twitch channel" spellcheck="false"><i class="plat-st" id="twitchStatus" data-state="off">Not connected</i></div>
               <button class="btn outline sm" id="twitchGo">Connect</button>
             </form>
-            <p class="feed-status"><i id="twitchStatus" data-state="off">Not connected</i> · YouTube chat arrives with Google sign-in</p>
-            <button type="button" class="btn outline block sm" id="chatOverlayBtn">Show chat on stage</button>
+            <form class="plat" id="rumbleForm" autocomplete="off">
+              <span class="src src-rumble">Rumble</span>
+              <div class="plat-body"><input id="rumbleInput" type="password" placeholder="Live Stream API URL" aria-label="Rumble Live Stream API URL" spellcheck="false"><i class="plat-st" id="rumbleStatus" data-state="off">Not connected</i></div>
+              <button class="btn outline sm" id="rumbleGo">Connect</button>
+            </form>
+            <div class="plat soon"><span class="src src-youtube">YouTube</span><div class="plat-body"><b>Chat, bans and timeouts</b><i class="plat-st">Arrives with Google sign-in</i></div></div>
+            <div class="plat soon"><span class="src src-x">X</span><div class="plat-body"><b>Chat and timeouts</b><i class="plat-st">Needs an X developer app</i></div></div>
+            <div class="plat soon"><span class="src src-tiktok">TikTok</span><div class="plat-body"><b>Live chat</b><i class="plat-st">TikTok offers no official chat access</i></div></div>
+            <label class="switch-row">
+              <span><b>Chat overlay on stage</b><small id="overlayHint">1 chat source: studio</small></span>
+              <input type="checkbox" class="switch" id="overlaySwitch" role="switch">
+            </label>
           </div>
           <div class="feat-bar" id="featBar" hidden>
             <span class="feat-label">On stage</span>
