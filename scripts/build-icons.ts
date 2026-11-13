@@ -13,8 +13,8 @@ const path = require('node:path') as typeof import('node:path');
 
 const ICONS = [
   'arrow-down', 'arrow-up', 'arrow-up-right', 'check', 'chevron-down', 'chevron-left', 'chevron-right', 'circle', 'circle-dot', 'circle-help', 'clock',
-  'copy', 'eye-off', 'file-text', 'flag', 'image', 'layout-dashboard', 'link', 'lock', 'log-out', 'message-square', 'mic', 'mic-off',
-  'monitor', 'monitor-up', 'palette', 'pause', 'phone', 'play', 'plus', 'qr-code', 'radio', 'repeat', 'search', 'send', 'shield-check',
+  'copy', 'eye', 'eye-off', 'file-text', 'flag', 'image', 'layout-dashboard', 'link', 'lock', 'lock-open', 'log-out', 'message-square', 'mic', 'mic-off',
+  'monitor', 'monitor-up', 'palette', 'pause', 'phone', 'play', 'plus', 'qr-code', 'radio', 'repeat', 'rotate-ccw', 'search', 'send', 'shield-check',
   'sliders-horizontal', 'sparkles', 'square', 'trash-2', 'upload', 'user', 'users', 'video', 'video-off', 'x',
 ] as const;
 

@@ -134,6 +134,11 @@ hr { border: 0; border-top: 1px solid var(--line); margin: var(--sp-1) 0; width:
 .pv-ai { background: rgba(217, 119, 87, 0.85); }
 .pv-tip { background: rgba(255, 255, 255, 0.95); }
 .pv-image, .pv-text { background: rgba(255, 255, 255, 0.35); }
+.pv-callin { background: rgba(255, 255, 255, 0.9); }
+.pv-timer { background: rgba(255, 255, 255, 0.5); }
+.pv-banner { background: var(--accent); }
+.pv-ticker { background: color-mix(in srgb, var(--accent) 70%, white); }
+.pv-logo { background: rgba(255, 255, 255, 0.6); }
 .add-pv { display: grid; place-items: center; color: var(--ink-3); background: transparent; border: 1.5px dashed var(--line-2); }
 .sc-name { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-1); font-size: var(--fs-12); font-weight: 600; white-space: nowrap; overflow: hidden; min-height: 16px; }
 .scene.saved .sc-pv { outline: 1px solid color-mix(in srgb, var(--cyan) 45%, transparent); }
@@ -293,20 +298,37 @@ hr { border: 0; border-top: 1px solid var(--line); margin: var(--sp-1) 0; width:
 
 /* layouts editor */
 .edit-layer { position: absolute; inset: 0; z-index: 2; }
-.ebox { position: absolute; border: 1.5px dashed rgba(255, 255, 255, 0.55); border-radius: 6px; cursor: move; touch-action: none; transition: transform var(--dur-spring) var(--ease-spring), box-shadow var(--dur) var(--ease-out); }
+/* 8px grid appears while dragging; safe areas always while editing */
+.edit-layer.dragging { background-image: linear-gradient(to right, rgba(255, 255, 255, 0.06) 1px, transparent 1px), linear-gradient(to bottom, rgba(255, 255, 255, 0.06) 1px, transparent 1px); background-size: var(--grid-x) var(--grid-y); }
+.safe-guides { position: absolute; inset: 0; pointer-events: none; }
+.safe-guides .safe { position: absolute; border: 1px dashed rgba(124, 196, 255, 0.35); border-radius: 2px; }
+.safe-guides .safe.title { border-color: rgba(250, 204, 21, 0.3); }
+.snap-guides { position: absolute; inset: 0; pointer-events: none; }
+.snap-guides .guide { position: absolute; background: #ff3ea5; }
+.snap-guides .guide.x { top: 0; bottom: 0; width: 1px; }
+.snap-guides .guide.y { left: 0; right: 0; height: 1px; }
+.snap-guides .guide.safe, .snap-guides .guide.title { background: var(--focus); }
+.ebox { position: absolute; border: 1.5px dashed rgba(255, 255, 255, 0.55); border-radius: 6px; cursor: move; touch-action: none; transition: transform var(--dur-spring) var(--ease-spring), box-shadow var(--dur) var(--ease-out), border-color var(--dur) var(--ease-out); }
 .ebox:hover { border-color: #fff; background: rgba(255, 255, 255, 0.05); }
-.ebox.sel { border: 2px solid var(--cyan); background: rgba(56, 189, 248, 0.08); }
+.ebox.sel { border: 2px solid var(--cyan); background: rgba(56, 189, 248, 0.08); z-index: 2; } /* the layer you picked is always the one you grab */
+.ebox.stacked { border-style: dotted; }
+.ebox.locked { cursor: not-allowed; border-color: rgba(255, 255, 255, 0.3); }
+.ebox.ghost { cursor: default; opacity: 0.45; background: repeating-linear-gradient(135deg, rgba(255, 255, 255, 0.05) 0 8px, transparent 8px 16px); }
 .ebox.dragging { transform: scale(1.015); box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45); transition: box-shadow var(--dur) var(--ease-out); }
-.elab { position: absolute; left: var(--sp-1); top: var(--sp-1); max-width: calc(100% - var(--sp-2)); pointer-events: none; overflow: hidden; text-overflow: ellipsis; }
-.ehandle { position: absolute; right: -7px; bottom: -7px; width: 14px; height: 14px; border-radius: 4px; background: #fff; border: 2px solid var(--cyan); cursor: nwse-resize; }
+.ebox.blocked { border-color: var(--live); box-shadow: 0 0 0 2px var(--live-soft); }
+.ebox.blocking { border: 2px solid var(--live); background: var(--live-soft); }
+.elab { position: absolute; left: var(--sp-1); top: var(--sp-1); max-width: calc(100% - var(--sp-2)); pointer-events: none; overflow: hidden; text-overflow: ellipsis; gap: 2px; }
+.elab .i { width: 12px; height: 12px; }
+.ehandle { position: absolute; width: 12px; height: 12px; border-radius: 3px; background: #fff; border: 2px solid var(--cyan); }
+.ehandle::after { content: ""; position: absolute; inset: -8px; } /* bigger hit area than it looks */
+.ehandle.h-nw { left: -6px; top: -6px; cursor: nwse-resize; }
+.ehandle.h-ne { right: -6px; top: -6px; cursor: nesw-resize; }
+.ehandle.h-sw { left: -6px; bottom: -6px; cursor: nesw-resize; }
+.ehandle.h-se { right: -6px; bottom: -6px; cursor: nwse-resize; }
+.ebox:not(.sel) .ehandle { opacity: 0; }
+.ebox:hover .ehandle { opacity: 1; }
 .tpls { display: grid; grid-template-columns: 1fr 1fr; gap: var(--sp-2); }
 .tpl { font-size: var(--fs-12); font-weight: 600; }
-.tpl-pv { position: relative; aspect-ratio: 16 / 9; border-radius: 6px; background: linear-gradient(135deg, #18305e, #2b2d6b); overflow: hidden; }
-.tpl-pv i { position: absolute; border-radius: 2px; }
-.tpl-slot { background: rgba(226, 236, 255, 0.78); }
-.tpl-chat { background: rgba(145, 70, 255, 0.8); }
-.tpl-media { background: rgba(56, 189, 248, 0.75); }
-.tpl-ai { background: rgba(217, 119, 87, 0.85); }
 .adds { display: flex; flex-wrap: wrap; gap: var(--sp-2); }
 .el-list { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--sp-1); }
 .el-row { display: flex; align-items: center; gap: 2px; border: 1px solid var(--glass-border); border-radius: var(--r-sm); padding: 2px; background: var(--fill); }
@@ -314,6 +336,10 @@ hr { border: 0; border-top: 1px solid var(--line); margin: var(--sp-1) 0; width:
 .el-row.dim .menu-item { color: var(--ink-3); }
 .el-row > .menu-item { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 600; }
 .el-row > .pill { margin-left: var(--sp-1); }
+.layer-head { padding: var(--sp-2) var(--sp-1) 0; list-style: none; }
+.layer-head:first-child { padding-top: 0; }
+.el-row .layer-toggle[aria-pressed="false"] { color: var(--ink-3); }
+.el-row .layer-toggle[aria-pressed="true"] { --ib-bg: transparent; }
 .el-props { border: 1px solid var(--glass-border); border-radius: var(--r-md); padding: var(--sp-4); background: var(--fill); gap: var(--sp-3); }
 .el-props h3 { margin: 0; }
 
@@ -503,3 +529,4 @@ hr { border: 0; border-top: 1px solid var(--line); margin: var(--sp-1) 0; width:
   .sc-name kbd { display: none; } /* number-key shortcuts don't exist on phones */
   .tip-row { grid-template-columns: 80px minmax(0, 1fr) auto; }
 }
+.ebox.ghost:not(.sel):not(:hover) .elab { opacity: 0; } /* hidden layers often share a spot; name them on hover */

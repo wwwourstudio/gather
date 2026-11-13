@@ -1,5 +1,6 @@
 import { createAudioChain, createVideoFx, needsProcessing } from './fx.js';
 import { icon, busy, togglePopover } from './ui.js';
+import { TIERS, tierOf, drawOrder, isSystem, ensureSystem, blockerFor, overlaps, snapMove, snapResize, resolve, SAFE, GRID, PRESETS, materialize } from './layout.js';
 // gather — client. Full-mesh WebRTC studio with a canvas-composited stage.
 // The stage canvas is the single source of truth for what you see AND what gets recorded.
 
@@ -9,7 +10,7 @@ const smooth = () => (reduceMotion() ? 'auto' : 'smooth');
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
 // Pictures (avatar, camera and camera-off backgrounds, brand images) are too big for localStorage's
 // ~5 MB quota, so they live in IndexedDB behind the same synchronous store API.
-const BIG_KEYS = new Set(['avatar', 'fxBg', 'offBg', 'brandImgs']);
+const BIG_KEYS = new Set(['avatar', 'fxBg', 'offBg', 'brandImgs', 'arrangements']);
 const bigMem = new Map();
 function bigDb() {
   return new Promise((res, rej) => {
@@ -572,7 +573,7 @@ async function onServer(m) {
       pollLoop(++pollGen);
       if (S.host === S.id && wasHosting) {
         // Bring the look you set up before creating the studio.
-        setStage({ aspect: pre.aspect, captions: pre.captions, brand: { ...pre.brand, bgImage: '', overlay: '', logo: '' }, title: pre.title, layout: pre.layout, banner: pre.banner, ticker: pre.ticker, stage: [S.id], feeds: pre.feeds, elements: (pre.elements || []).filter((e) => !(e.type === 'image' && e.asset?.startsWith('local-'))) });
+        setStage({ aspect: pre.aspect, captions: pre.captions, brand: { ...pre.brand, bgImage: '', overlay: '', logo: '' }, title: pre.title, layout: pre.layout, banner: pre.banner, ticker: pre.ticker, stage: [S.id], feeds: pre.feeds, scene: pre.scene || '', elements: (pre.elements || []).filter((e) => !(e.type === 'image' && e.asset?.startsWith('local-'))) });
         uploadLocalAssets(pre.elements).then((elements) => { if (S.host === S.id) setStage({ elements }); });
         uploadBrandAssets(pre.brand);
         if (S.pendingStream?.id) acctApi('streamStart', { id: S.pendingStream.id }).catch(() => {});
@@ -749,7 +750,10 @@ setInterval(async () => {
 // ---------------------------------------------------------------- stage state (host-owned)
 function setStage(patch) {
   if (!isHost()) return toast('Only the host can change the stage.', { err: true });
+  if (patch.elements) patch = { ...patch, elements: ensureSystem(patch.elements, (patch.aspect || S.state.aspect) === '9:16', uid) };
   S.state = { ...S.state, ...patch, brand: { ...S.state.brand, ...(patch.brand || {}) } };
+  if ('scene' in patch) store.set('lastScene', S.state.scene || '');
+  else if (patch.elements) rememberArrangement();
   if (S.studio) wsSend({ type: 'state', state: S.state });
   else { store.set('accent', S.state.brand.color); store.set('bg', S.state.brand.bg); store.set('title', S.state.title); }
   renderAll();
@@ -889,7 +893,7 @@ function entrance(t0, t, len) {
   if (kind === 'type') return { alpha: 1, dx: 0, scale: 1, clip: 1, chars: Math.ceil(len * k) };
   return { alpha: e, dx: -(1 - e) * 40, scale: 1, clip: 1, chars: len };
 }
-function drawBanner(t, bottom) {
+function drawBanner(t, r) {
   const b = S.state.banner;
   if (!b) return;
   const key = b.id + b.text + b.sub;
@@ -897,16 +901,17 @@ function drawBanner(t, bottom) {
   const brand = S.state.brand, style = brand.bannerStyle || 'classic', F = stageFont();
   const an = entrance(S.banner.t0, t, b.text.length);
   const text = b.text.slice(0, an.chars);
-  const big = style === 'bold' ? 40 : 30;
+  const k = Math.max(.5, r.h / ((style === 'bold' ? 78 : 64) + 40));
+  const big = (style === 'bold' ? 40 : 30) * k, subF = 19 * k, padX = 28 * k;
   g.save();
   g.globalAlpha = an.alpha;
   g.font = `800 ${big}px ${F}`;
-  const tw = Math.min(g.measureText(style === 'bold' ? b.text.toUpperCase() : b.text).width, W - 140);
+  const tw = Math.min(g.measureText(style === 'bold' ? b.text.toUpperCase() : b.text).width, r.w - padX * 2);
   let subW = 0;
-  if (b.sub) { g.font = `500 19px ${F}`; subW = Math.min(g.measureText(b.sub).width, W - 140); }
-  const bw = Math.max(tw, subW) + 56;
-  const mainH = style === 'bold' ? 78 : 64, subH = b.sub ? 40 : 0;
-  const x = 48 + an.dx, y = bottom - mainH - subH - 22;
+  if (b.sub) { g.font = `500 ${subF}px ${F}`; subW = Math.min(g.measureText(b.sub).width, r.w - padX * 2); }
+  const bw = Math.min(r.w, Math.max(tw, subW) + padX * 2);
+  const mainH = (style === 'bold' ? 78 : 64) * k, subH = b.sub ? 40 * k : 0;
+  const x = r.x + an.dx, y = r.y + r.h - mainH - subH;
   // scale around the banner's left edge, clip for the wipe
   g.translate(x, y + (mainH + subH) / 2); g.scale(an.scale, an.scale); g.translate(-x, -(y + (mainH + subH) / 2));
   g.beginPath(); g.rect(x - 4, y - 30, (bw + 8) * an.clip, mainH + subH + 60); g.clip();
@@ -925,27 +930,26 @@ function drawBanner(t, bottom) {
     if (b.sub) { g.fillStyle = '#0b1020'; g.fillRect(x, y + mainH, bw, subH); subInk = '#ffffff'; }
   } else {
     ink = '#ffffff'; subInk = 'rgba(230,238,255,.9)';
-    g.fillStyle = brand.color; g.fillRect(x + 28, y + mainH - 8, Math.min(tw, 220), 4);
+    g.fillStyle = brand.color; g.fillRect(x + padX, y + mainH - 8 * k, Math.min(tw, 220 * k), 4 * k);
   }
   g.textBaseline = 'middle'; g.textAlign = 'left';
   if (style === 'minimal') { g.shadowColor = 'rgba(0,0,0,.7)'; g.shadowBlur = 12; }
   g.fillStyle = ink; g.font = `800 ${big}px ${F}`;
-  g.fillText(style === 'bold' ? text.toUpperCase() : text, x + 28, y + mainH / 2 + 1);
-  if (b.sub && an.chars >= b.text.length) { g.fillStyle = subInk; g.font = `500 19px ${F}`; g.fillText(b.sub, x + 28, y + mainH + subH / 2 + 1); }
+  g.fillText(style === 'bold' ? text.toUpperCase() : text, x + padX, y + mainH / 2 + 1);
+  if (b.sub && an.chars >= b.text.length) { g.fillStyle = subInk; g.font = `500 ${subF}px ${F}`; g.fillText(b.sub, x + padX, y + mainH + subH / 2 + 1); }
   g.restore();
 }
-function drawTicker(t) {
+function drawTicker(t, r) {
   const text = S.state.ticker;
-  if (!text) return 0;
-  const h = 46, y = H - h, brand = S.state.brand;
-  g.fillStyle = brand.color; g.fillRect(0, y, W, h);
-  g.font = '600 20px Inter, sans-serif'; g.textBaseline = 'middle'; g.textAlign = 'left';
-  const unit = text + '     •     ';
-  const uw = g.measureText(unit).width;
-  const off = (t / 1000 * 90) % uw;
+  if (!text) return;
+  const brand = S.state.brand, fs = Math.max(12, Math.round(r.h * .43));
+  g.save(); g.beginPath(); g.rect(r.x, r.y, r.w, r.h); g.clip();
+  g.fillStyle = brand.color; g.fillRect(r.x, r.y, r.w, r.h);
+  g.font = `600 ${fs}px Inter, sans-serif`; g.textBaseline = 'middle'; g.textAlign = 'left';
+  const unit = text + '     •     ', uw = g.measureText(unit).width, off = (t / 1000 * 90) % uw;
   g.fillStyle = contrastInk(brand.color);
-  for (let x = -off; x < W; x += uw) g.fillText(unit, x, y + h / 2 + 1);
-  return h;
+  for (let x = r.x - off; x < r.x + r.w; x += uw) g.fillText(unit, x, r.y + r.h / 2 + 1);
+  g.restore();
 }
 function drawFrame() {
   const brand = S.state.brand, f = brand.frame;
@@ -957,12 +961,17 @@ function drawFrame() {
   }
   const ov = assetImg(brand.overlay);
   if (ov) g.drawImage(ov, 0, 0, W, H);
-  const logo = assetImg(brand.logo);
-  if (logo) {
-    const lw = W * (brand.logoSize || .12), lh = lw * logo.naturalHeight / logo.naturalWidth, m = 26;
-    const x = brand.logoPos?.includes('l') ? m : W - m - lw, y = brand.logoPos?.startsWith('b') ? H - m - lh : m;
-    g.drawImage(logo, x, y, lw, lh);
-  }
+}
+function drawLogo(r) {
+  const logo = assetImg(S.state.brand.logo);
+  if (!logo) return;
+  const k = Math.min(r.w / logo.naturalWidth, r.h / logo.naturalHeight), w = logo.naturalWidth * k, h = logo.naturalHeight * k;
+  const right = r.x + r.w / 2 > W / 2;
+  g.drawImage(logo, right ? r.x + r.w - w : r.x, r.y + (r.h - h) / 2, w, h);
+}
+function drawShapeEl(e) {
+  const r = px(e);
+  g.save(); g.globalAlpha = e.opacity ?? 1; g.fillStyle = e.color || '#000000'; rr(r.x, r.y, r.w, r.h, e.radius || 0); g.fill(); g.restore();
 }
 function drawChrome() {
   const paper = BGS[S.state.brand.bg]?.[4];
@@ -970,30 +979,53 @@ function drawChrome() {
   g.textBaseline = 'middle';
   if (S.state.title) {
     g.textAlign = 'left'; g.font = `700 14px ${stageFont()}`; g.fillStyle = ink + '.8)';
-    const hasLogoTL = assetImg(S.state.brand.logo) && S.state.brand.logoPos === 'tl';
+    const lg = stageElements().find((e) => e.type === 'logo' && !e.hidden);
+    const hasLogoTL = assetImg(S.state.brand.logo) && lg && lg.x < .2 && lg.y < .12;
     g.fillText(S.state.title.toUpperCase().split('').join(String.fromCharCode(8202)), 30, hasLogoTL ? H - 22 : 22);
   }
 }
+// The program is painted tier by tier: stage → media → (brand frame) → overlays → chat → ticker → system.
+const TIER_Z = Object.fromEntries(TIERS.map((x) => [x.id, x.z]));
+/** The scene's elements, with any missing system element (lower third, ticker, logo…) at its default spot. */
+function stageElements() { return ensureSystem(S.state.elements || [], isVertical(), () => 'sys'); }
 function draw() {
   const t = performance.now();
   syncAspect();
   drawBackground(t);
   const inStudio = !!S.studio;
-  if (!inStudio && !previewActive()) { drawFrame(); drawChrome(); return; }
+  const els = drawOrder(stageElements()).filter((e) => !e.hidden);
+  if (!inStudio && !previewActive()) {
+    drawFrame();
+    const lg = els.find((e) => e.type === 'logo'); if (lg) drawLogo(px(lg));
+    drawChrome(); return;
+  }
   const people = participants();
   const byId = new Map(people.map((p) => [p.id, p]));
   const stageIds = inStudio ? S.state.stage : [myId()];
   const onStage = stageIds.map((id) => byId.get(id)).filter(Boolean);
-  const tickH = drawTicker(t);
-  const area = { x: 32, y: 44, w: W - 64, h: H - 44 - 32 - (tickH ? tickH - 10 : 0) };
+  const custom = S.state.layout === 'custom';
   if (!onStage.length) {
     editorOnly((c) => { c.fillStyle = 'rgba(255,255,255,.7)'; c.font = '600 22px Inter, sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText('Add someone to the stage from “In the studio”.', W / 2, H / 2); });
   }
-  const slots = (S.state.elements || []).filter((e) => e.type === 'slot');
-  if (S.state.layout === 'custom') for (const e of S.state.elements || []) if (e.type === 'media') drawMediaEl(e);
-  if (S.state.layout === 'custom' && slots.length) {
-    // Custom layout: each camera slot shows whoever holds that stage position.
-    for (const e of slots) {
+  // Built-in layouts place cameras automatically, above the ticker when it runs along the bottom.
+  if (!custom || !els.some((e) => e.type === 'slot')) {
+    const tick = els.find((e) => e.type === 'ticker');
+    const bottom = tick && S.state.ticker && tick.y > .7 ? tick.y * H - 12 : H - 32;
+    const rects = layoutRects(onStage.length, custom ? 'split' : S.state.layout, { x: 32, y: 44, w: W - 64, h: bottom - 44 });
+    onStage.forEach((p, i) => rects[i] && drawTile(p, rects[i], t));
+  }
+  let framed = false;
+  for (const e of els) {
+    if (!framed && TIER_Z[tierOf(e)] >= 300) { drawFrame(); framed = true; }
+    drawElement(e, t, onStage, custom);
+  }
+  if (!framed) drawFrame();
+  drawChrome();
+}
+function drawElement(e, t, onStage, custom) {
+  switch (e.type) {
+    case 'slot': {
+      if (!custom) return;
       const p = onStage[e.index], r = { ...px(e), r: e.radius };
       if (p) drawTile(p, r, t);
       else editorOnly((c) => {
@@ -1001,19 +1033,24 @@ function draw() {
         c.fillStyle = 'rgba(255,255,255,.45)'; c.font = '500 15px Inter, sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle';
         c.fillText(`Stage position ${e.index + 1}`, r.x + r.w / 2, r.y + r.h / 2);
       });
+      return;
     }
-  } else {
-    const rects = layoutRects(onStage.length, S.state.layout === 'custom' ? 'split' : S.state.layout, area);
-    onStage.forEach((p, i) => rects[i] && drawTile(p, rects[i], t));
+    case 'media': if (custom) drawMediaEl(e); return;
+    case 'shape': drawShapeEl(e); return;
+    case 'ai': drawAiEl(e); return;
+    case 'tip': drawTipEl(e); return;
+    case 'callin': drawCallinEl(e); return;
+    case 'chat': drawChatEl(e, t); return;
+    case 'text': drawTextEl(e); return;
+    case 'image': drawImageEl(e); return;
+    case 'timer': drawTimerEl(e); return;
+    case 'banner': drawBanner(t, px(e)); return;
+    case 'ticker': drawTicker(t, px(e)); return;
+    case 'logo': drawLogo(px(e)); return;
+    case 'ads': drawAds(px(e)); return;
+    case 'featured': drawFeatured(t, px(e)); return;
+    case 'captions': drawCaptions(px(e)); return;
   }
-  drawOverlays(t);
-  if (S.state.ticker) drawTicker(t); // keep ticker above tiles
-  drawFrame();
-  drawAds();
-  drawBanner(t, H - (tickH || 0) - 10);
-  drawFeatured(t, H - (tickH || 0) - 10);
-  drawCaptions(H - (tickH || 0) - (S.state.banner ? 150 : 24));
-  drawChrome();
 }
 function hexA(hex, a) { const n = parseInt(hex.slice(1), 16); return `rgba(${n >> 16},${(n >> 8) & 255},${n & 255},${a})`; }
 function contrastInk(hex) { const n = parseInt(hex.slice(1), 16); const [r, gg, b] = [n >> 16, (n >> 8) & 255, n & 255]; return (0.299 * r + 0.587 * gg + 0.114 * b) > 170 ? '#111827' : '#ffffff'; }
@@ -1219,30 +1256,23 @@ const ELEMENT_DEFAULTS = {
   ai: () => ({ type: 'ai', x: .62, y: .07, w: .355, h: .62, size: 22 }),
   tip: () => ({ type: 'tip', x: .025, y: .64, w: .34, h: .31, provider: 'paypal', url: '', label: 'Support the show' }),
   callin: () => ({ type: 'callin', x: .66, y: .66, w: .31, h: .28, url: '', label: 'Call in live', phone: '' }),
+  shape: () => ({ type: 'shape', x: .4, y: .4, w: .2, h: .2, color: '#0b1020', opacity: 1, radius: 0, label: '' }),
 };
+const px720 = (x, y, w, h) => ({ x: x / 1280, y: y / 720, w: w / 1280, h: h / 720 });
 const TEMPLATES = [
+  // Used automatically when someone presents: the slides fill the frame, cameras float on top.
   { id: 'present-full', name: 'Full-screen slides', els: [
-    { type: 'media', x: 0, y: 0, w: 1, h: 1, radius: 0 },
-    { type: 'slot', index: 0, x: .835, y: .045, w: .145, h: .19, radius: 12 }, { type: 'slot', index: 1, x: .835, y: .255, w: .145, h: .19, radius: 12 },
-    { type: 'slot', index: 2, x: .835, y: .465, w: .145, h: .19, radius: 12 }] },
-  { id: 'present', name: 'Presentation', els: [
-    { type: 'media', x: .025, y: .07, w: .73, h: .86 },
-    { type: 'slot', index: 0, x: .775, y: .07, w: .2, h: .27 }, { type: 'slot', index: 1, x: .775, y: .365, w: .2, h: .27 }, { type: 'slot', index: 2, x: .775, y: .66, w: .2, h: .27 }] },
-  { id: 'slides-pip', name: 'Slides + speaker', els: [
-    { type: 'media', x: .025, y: .07, w: .95, h: .86, radius: 10 }, { type: 'slot', index: 0, x: .775, y: .64, w: .18, h: .26, radius: 14 }] },
+    { type: 'media', x: 0, y: 0, w: 1, h: 1, radius: 0, stack: true },
+    { type: 'slot', index: 0, ...px720(1064, 32, 184, 136), radius: 12, pip: true, stack: true },
+    { type: 'slot', index: 1, ...px720(1064, 184, 184, 136), radius: 12, pip: true, stack: true },
+    { type: 'slot', index: 2, ...px720(1064, 336, 184, 136), radius: 12, pip: true, stack: true }] },
+  // Used by "AI window on stage" while someone presents.
   { id: 'screen-ai', name: 'Screen + AI', els: [
-    { type: 'media', x: .025, y: .07, w: .59, h: .86 }, { type: 'ai', x: .635, y: .07, w: .34, h: .56 },
-    { type: 'slot', index: 0, x: .635, y: .655, w: .34, h: .275 }] },
-  { id: 'ai-cam', name: 'AI + camera', els: [
-    { type: 'slot', index: 0, x: .025, y: .08, w: .46, h: .84 }, { type: 'ai', x: .51, y: .08, w: .465, h: .84 }] },
-  { id: 'duo-chat', name: 'Two + chat', els: [
-    { type: 'slot', index: 0, x: .025, y: .08, w: .335, h: .74 }, { type: 'slot', index: 1, x: .375, y: .08, w: .335, h: .74 },
-    { type: 'chat', x: .73, y: .08, w: .245, h: .74, max: 8, size: 17, bg: true }] },
-  { id: 'solo-chat', name: 'Solo + chat', els: [
-    { type: 'slot', index: 0, x: .025, y: .08, w: .66, h: .84 }, { type: 'chat', x: .705, y: .08, w: .27, h: .84, max: 10, size: 18, bg: true }] },
-  { id: 'panel-3', name: 'Panel of three', els: [
-    { type: 'slot', index: 0, x: .025, y: .1, w: .3, h: .6 }, { type: 'slot', index: 1, x: .35, y: .1, w: .3, h: .6 }, { type: 'slot', index: 2, x: .675, y: .1, w: .3, h: .6 },
-    { type: 'chat', x: .025, y: .73, w: .95, h: .22, max: 3, size: 17, bg: true }] },
+    { type: 'media', ...px720(48, 48, 752, 520) }, { type: 'ai', ...px720(832, 48, 400, 352) },
+    { type: 'slot', index: 0, ...px720(832, 424, 400, 144) },
+    { type: 'banner', ...px720(48, 584, 752, 104) }, { type: 'logo', ...px720(832, 592, 400, 88) },
+    { type: 'captions', ...px720(160, 488, 960, 64), stack: true }] },
+  ...PRESETS,
 ];
 const V_TEMPLATES = [
   { id: 'v-solo', name: 'Vertical solo', els: [{ type: 'slot', index: 0, x: .04, y: .06, w: .92, h: .8, radius: 18 }] },
@@ -1258,14 +1288,68 @@ const BUILTINS = [
   { id: 'b-split', name: 'Side by side', layout: 'split' },
   { id: 'b-spotlight', name: 'Spotlight', layout: 'spotlight' },
 ];
-function withDefaults(e) { return { ...ELEMENT_DEFAULTS[e.type](), ...e, id: e.id || uid() }; }
-const STRUCTURAL = ['slot', 'chat', 'media', 'ai'];
-function templatePatch(tpl) {
-  // Keep the host's own text, images, timers and support cards; replace the template's structure.
-  const keep = (S.state.elements || []).filter((e) => !STRUCTURAL.includes(e.type));
-  return { layout: 'custom', scene: tpl.id, elements: [...tpl.els.map(withDefaults), ...keep] };
+function withDefaults(e) { return { ...(ELEMENT_DEFAULTS[e.type]?.() || {}), ...e, id: e.id || uid() }; }
+// Cards the host added (QR / support, call-in, images) follow them from scene to scene; if one would overlap the
+// new scene it is hidden rather than allowed to collide, and the Layers list shows it.
+const CARRIED = ['tip', 'callin', 'image'];
+function carryInto(base) {
+  const placed = [], hidden = [];
+  for (const e of (S.state.elements || []).filter((x) => CARRIED.includes(x.type))) {
+    const c = { ...e };
+    if (!c.hidden && !c.stack && blockerFor(c, c, [...base, ...placed])) { c.hidden = true; hidden.push(elName(c)); }
+    placed.push(c);
+  }
+  if (hidden.length) setTimeout(() => toast(`${hidden.join(', ')} hidden in this scene so nothing overlaps. Show it from Layouts → Layers.`, { ms: 5200 }), 50);
+  return placed;
 }
+/** Elements for a scene: what the host arranged there last time, or the scene's design plus carried cards. */
+function sceneElements(id, design) {
+  const saved = arrangement(id);
+  if (saved) return saved;
+  const base = materialize(design.map(withDefaults), uid);
+  return ensureSystem([...base, ...carryInto(base)], isVertical(), uid);
+}
+function templatePatch(tpl) { return { layout: 'custom', scene: tpl.id, elements: sceneElements(tpl.id, tpl.els) }; }
 function applyTemplate(tpl) { setStage(templatePatch(tpl)); }
+
+// ---- per-scene arrangements: saved on every edit, restored when the scene comes back (and after a reload)
+let arrT = 0;
+function rememberArrangement() {
+  if (!isHost() || !S.state.scene) return;
+  clearTimeout(arrT);
+  const id = S.state.scene, els = S.state.elements;
+  arrT = setTimeout(() => {
+    const all = store.get('arrangements', {});
+    all[id] = { layout: S.state.layout, elements: els.map((e) => (e.type === 'image' && S.assets.get(e.asset)?.data ? { ...e, _data: S.assets.get(e.asset).data } : e)), t: Date.now() };
+    store.set('arrangements', all);
+  }, 300);
+}
+function arrangement(id) {
+  const a = store.get('arrangements', {})[id];
+  if (!a?.elements?.length) return null;
+  const els = a.elements.map(({ _data, ...e }) => e);
+  const missing = a.elements.filter((e) => e._data && !assetImg(e.asset));
+  if (missing.length) rehydrate(missing);
+  return els;
+}
+// Images saved with a scene come back into a new studio by uploading their pixels again.
+async function rehydrate(list) {
+  for (const m of list) {
+    try {
+      const asset = await storeAsset(m._data);
+      const els = elementsCopy(), e = els.find((x) => x.id === m.id);
+      if (e) { e.asset = asset; setStage({ elements: els }); }
+    } catch {}
+  }
+}
+function resetScene() {
+  const id = S.state.scene;
+  if (!id) return toast('Pick a scene first.');
+  const all = store.get('arrangements', {}); delete all[id]; store.set('arrangements', all);
+  const sc = sceneList().find((x) => x.id === id);
+  if (sc) applyScene(sc);
+  toast('Scene reset to its original layout.');
+}
 
 // When anyone starts presenting, the host's stage flips to a presentation scene, and back afterwards.
 const hasMediaScene = () => S.state.layout === 'custom' && (S.state.elements || []).some((e) => e.type === 'media');
@@ -1552,34 +1636,19 @@ function drawTipEl(e) {
   g.fillText(wrapLines(handle, tw, 1)[0] || '', tx, r.y + r.h - pad - 4);
   g.restore();
 }
-function drawOverlays(t) {
-  for (const e of S.state.elements || []) {
-    if (e.type === 'media') continue; // drawn before the cameras
-    if (e.type === 'ai') { drawAiEl(e); continue; }
-    if (e.type === 'tip') { drawTipEl(e); continue; }
-    if (e.type === 'callin') { drawCallinEl(e); continue; }
-    if (e.type === 'chat') drawChatEl(e, t);
-    else if (e.type === 'text') drawTextEl(e);
-    else if (e.type === 'image') drawImageEl(e);
-    else if (e.type === 'timer') drawTimerEl(e);
-  }
-}
 const featAnim = { key: '', t0: 0 };
-function drawFeatured(t, bottom) {
+function drawFeatured(t, r) {
   const f = S.state.featured;
   if (!f) return;
   if (featAnim.key !== f.id) { featAnim.key = f.id; featAnim.t0 = t; }
   const an = entrance(featAnim.t0, t, f.text.length), e = an.alpha;
-  const brand = S.state.brand, cw = 560, pad = 22;
+  const brand = S.state.brand, cw = 560, pad = 22, k = r.w / cw;
   g.save();
   g.font = '500 24px Inter, sans-serif';
-  const lines = wrapLines(f.text, cw - pad * 2 - 64, 3);
-  const ch = 64 + lines.length * 32 + 10;
-  // Sit opposite the chat overlay, and above the banner when both share the left side.
-  const chatEl = (S.state.elements || []).find((el) => el.type === 'chat');
-  const left = chatEl && chatEl.x + chatEl.w / 2 > 0.5;
-  if (left && S.state.banner) bottom -= S.state.banner.sub ? 140 : 100;
-  const x = left ? 44 + an.dx : W - cw - 44 - an.dx, y = bottom - ch - 20;
+  const lines = wrapLines(f.text, cw - pad * 2 - 64, Math.max(1, Math.min(3, Math.floor((r.h / k - 74) / 32))));
+  const ch = Math.min(r.h / k, 64 + lines.length * 32 + 10);
+  g.translate(r.x, r.y + r.h - ch * k); g.scale(k, k);
+  const x = an.dx * (r.x + r.w / 2 > W / 2 ? -1 : 1), y = 0;
   g.globalAlpha = e;
   g.shadowColor = 'rgba(0,0,0,.35)'; g.shadowBlur = 28; g.shadowOffsetY = 10;
   g.fillStyle = '#ffffff'; rr(x, y, cw, ch, 14); g.fill();
@@ -1612,12 +1681,29 @@ function addElement(type) {
     const used = new Set((S.state.elements || []).filter((x) => x.type === 'slot').map((x) => x.index));
     e.index = [0, 1, 2, 3, 4, 5].find((i) => !used.has(i)) ?? 0;
   }
-  const patch = { elements: [...elementsCopy(), e] };
+  const els = stageElements();
+  const spot = freeSpot(e, els);
+  if (spot) Object.assign(e, spot);
+  else { e.stack = true; toast(`No free space for the ${ELABEL[type].toLowerCase()}, so it’s stacked on top. Drag it where you want it.`, { ms: 4200 }); }
+  e.home = [e.x, e.y, e.w, e.h];
+  const patch = { elements: [...els, e] };
   if (type === 'slot' && S.state.layout !== 'custom') patch.layout = 'custom';
   setStage(patch);
   editor.sel = e.id;
   setEditing(true);
   return e;
+}
+/** First position on the 8px grid (scanning in 32px steps, inside action-safe) where a rect overlaps nothing. */
+function freeSpot(e, els) {
+  if (!blockerFor(e, e, els)) return null;
+  const step = 32;
+  for (let y = Math.round(SAFE.action * H / GRID) * GRID; y + e.h * H <= H * (1 - SAFE.action); y += step) {
+    for (let x = Math.round(SAFE.action * W / GRID) * GRID; x + e.w * W <= W * (1 - SAFE.action); x += step) {
+      const r = { x: x / W, y: y / H, w: e.w, h: e.h };
+      if (!blockerFor(r, e, els)) return { x: r.x, y: r.y };
+    }
+  }
+  return false;
 }
 function setEditing(on) {
   editor.on = on && isHost();
@@ -1626,51 +1712,112 @@ function setEditing(on) {
   $('#editToggle').textContent = editor.on ? 'Done editing' : 'Edit on stage';
   renderEditor();
 }
-const ELABEL = { slot: 'Camera', chat: 'Chat box', text: 'Text', image: 'Image', timer: 'Timer', media: 'Presentation', ai: 'AI window', tip: 'Support card' };
+const ELABEL = { slot: 'Camera', chat: 'Chat box', text: 'Text', image: 'Image', timer: 'Timer', media: 'Presentation', ai: 'AI window', tip: 'Support card', callin: 'Call-in card', shape: 'Colour block', banner: 'Lower third', ticker: 'Ticker', logo: 'Logo', ads: 'Sponsor ads', featured: 'Featured chat', captions: 'Captions' };
 function elName(e) {
   if (e.type === 'slot') return `Camera ${e.index + 1}`;
   if (e.type === 'text') return e.text ? `“${e.text.slice(0, 22)}”` : 'Text';
   if (e.type === 'timer') return e.mode === 'countdown' ? 'Countdown' : 'Clock';
   if (e.type === 'tip') return `${(TIP_INFO[e.provider] || TIP_INFO.link).name} card`;
+  if (e.type === 'shape' && e.label) return e.label;
+  if (e.type === 'slot' && e.pip) return `Camera ${e.index + 1} (PiP)`;
   return ELABEL[e.type];
+}
+function editableEls() {
+  const custom = S.state.layout === 'custom';
+  return (S.state.elements || []).filter((e) => custom || !['slot', 'media'].includes(e.type));
 }
 function renderEditor() {
   const els = S.state.elements || [];
   if (editor.sel && !els.some((e) => e.id === editor.sel)) editor.sel = null;
-  // Boxes on the stage
+  if (editor.on && isHost() && els.length && ensureSystem(els, isVertical(), uid).length !== els.length) { setStage({ elements: els }); return; }
+  // Boxes on the stage, painted in the same order as the program
   const layer = $('#editLayer');
   if (editor.on) {
-    const custom = S.state.layout === 'custom';
-    layer.replaceChildren(...els.filter((e) => custom || e.type !== 'slot').map((e) => {
+    const boxes = drawOrder(editableEls()).map((e) => {
       const d = document.createElement('div');
-      d.className = 'ebox' + (e.id === editor.sel ? ' sel' : '');
-      d.dataset.id = e.id;
+      d.className = 'ebox' + (e.id === editor.sel ? ' sel' : '') + (e.locked ? ' locked' : '') + (e.hidden ? ' ghost' : '') + (e.stack ? ' stacked' : '');
+      d.dataset.id = e.id; d.dataset.tier = tierOf(e);
       Object.assign(d.style, { left: e.x * 100 + '%', top: e.y * 100 + '%', width: e.w * 100 + '%', height: e.h * 100 + '%' });
-      const lab = document.createElement('span'); lab.className = 'pill on-media elab'; lab.textContent = elName(e);
-      const hd = document.createElement('i'); hd.className = 'ehandle'; hd.dataset.h = '1';
-      d.append(lab, hd);
+      const lab = document.createElement('span'); lab.className = 'pill on-media elab';
+      lab.innerHTML = (e.locked ? icon('lock', { size: 'sm' }) : '') + (e.hidden ? icon('eye-off', { size: 'sm' }) : '');
+      lab.append(document.createTextNode(elName(e)));
+      d.append(lab);
+      if (!e.locked && !e.hidden) for (const h of ['nw', 'ne', 'sw', 'se']) { const k = document.createElement('i'); k.className = 'ehandle h-' + h; k.dataset.h = h; d.append(k); }
       return d;
-    }));
+    });
+    const safe = document.createElement('div'); safe.className = 'safe-guides'; safe.setAttribute('aria-hidden', 'true');
+    safe.innerHTML = `<i class="safe action" style="inset:${SAFE.action * 100}%"></i><i class="safe title" style="inset:${SAFE.title * 100}%"></i>`;
+    const guides = document.createElement('div'); guides.className = 'snap-guides'; guides.id = 'snapGuides';
+    layer.replaceChildren(safe, ...boxes, guides);
+    layer.style.setProperty('--grid-x', (GRID / W * 100) + '%'); layer.style.setProperty('--grid-y', (GRID / H * 100) + '%');
   }
-  // Element list
-  const list = $('#elList');
-  if (!list) return;
-  list.replaceChildren(...els.map((e, i) => {
-    const li = document.createElement('li');
-    li.className = 'el-row' + (e.id === editor.sel ? ' sel' : '') + (e.type === 'slot' && S.state.layout !== 'custom' ? ' dim' : '');
-    const b = document.createElement('button'); b.type = 'button'; b.className = 'menu-item compact el-pick'; b.textContent = elName(e);
-    b.onclick = () => { editor.sel = e.id; setEditing(true); };
-    const up = mkBtn('arrow-up', 'Bring forward', () => moveEl(i, 1)), dn = mkBtn('arrow-down', 'Send backward', () => moveEl(i, -1)), del = mkBtn('trash-2', 'Delete', () => deleteEl(e.id));
-    li.append(b, up, dn, del);
-    return li;
-  }));
-  $('#elEmpty').hidden = !!els.length;
+  renderLayers();
   renderProps();
 }
+// Layers: top of the list is on top of the picture, grouped by tier. Eye hides, lock freezes, reset sends home.
+function renderLayers() {
+  const list = $('#elList');
+  if (!list) return;
+  const els = editableEls(), host = isHost();
+  const rows = [];
+  for (const tier of [...TIERS].reverse()) {
+    const inTier = els.filter((e) => tierOf(e) === tier.id).reverse();
+    if (!inTier.length) continue;
+    const head = document.createElement('li'); head.className = 'layer-head caps'; head.textContent = tier.label;
+    rows.push(head);
+    for (const e of inTier) {
+      const li = document.createElement('li');
+      li.className = 'el-row' + (e.id === editor.sel ? ' sel' : '') + (e.hidden ? ' dim' : '');
+      li.dataset.id = e.id;
+      const eye = toggleBtn(e.hidden ? 'eye-off' : 'eye', e.hidden ? `Show ${elName(e)}` : `Hide ${elName(e)}`, !e.hidden, () => patchEl(e.id, { hidden: !e.hidden }, e.hidden ? 'show' : 'hide'));
+      const b = document.createElement('button'); b.type = 'button'; b.className = 'menu-item compact el-pick'; b.textContent = elName(e);
+      b.onclick = () => { editor.sel = e.id; setEditing(true); };
+      const lock = toggleBtn(e.locked ? 'lock' : 'lock-open', e.locked ? `Unlock ${elName(e)}` : `Lock ${elName(e)}`, !!e.locked, () => patchEl(e.id, { locked: !e.locked }));
+      const reset = mkBtn('rotate-ccw', `Reset ${elName(e)}`, () => resetEl(e.id));
+      reset.disabled = !host || !e.home;
+      const tags = [];
+      if (e.stack) { const t = document.createElement('span'); t.className = 'pill caps'; t.textContent = 'Stacked'; t.dataset.tip = 'Allowed to overlap other layers'; tags.push(t); }
+      li.append(eye, b, ...tags, lock, reset);
+      rows.push(li);
+    }
+  }
+  list.replaceChildren(...rows);
+  $('#elEmpty').hidden = !!els.length;
+}
+function toggleBtn(name, label, pressed, fn) {
+  const b = mkBtn(name, label, fn);
+  b.setAttribute('aria-pressed', String(pressed));
+  b.classList.add('layer-toggle');
+  return b;
+}
+function patchEl(id, patch, verb) {
+  const els = elementsCopy(), e = els.find((x) => x.id === id);
+  if (!e) return;
+  // Showing a layer must not create an overlap: if its spot is taken, it comes back stacked and says so.
+  if (verb === 'show' && !e.stack) {
+    const blocker = blockerFor({ ...e }, e, els.filter((o) => o.id !== id));
+    if (blocker) { patch = { ...patch, stack: true }; toast(`${elName(e)} overlaps ${elName(blocker)}, so it’s shown stacked. Move it, or turn off “Allow overlap” in its settings.`, { ms: 5000 }); }
+  }
+  Object.assign(e, patch);
+  setStage({ elements: els });
+}
+function resetEl(id) {
+  const els = elementsCopy(), e = els.find((x) => x.id === id);
+  if (!e?.home) return;
+  const [x, y, w, h] = e.home;
+  Object.assign(e, { x, y, w, h, hidden: false, locked: false });
+  const blocker = !e.stack && blockerFor(e, e, els);
+  if (blocker) { e.stack = true; toast(`${elName(e)} is back home, stacked over ${elName(blocker)}.`); }
+  setStage({ elements: els });
+}
 function mkBtn(name, title, fn) { const b = document.createElement('button'); b.type = 'button'; b.className = 'icon-btn sm'; b.innerHTML = icon(name, { size: 'sm' }); b.setAttribute('aria-label', title); b.onclick = fn; b.disabled = !isHost(); return b; }
-function moveEl(i, dir) {
-  const els = elementsCopy(), j = i + dir;
-  if (j < 0 || j >= els.length) return;
+function moveEl(id, dir) {
+  const els = elementsCopy(), i = els.findIndex((e) => e.id === id);
+  if (i < 0) return;
+  const tier = tierOf(els[i]);
+  let j = i + dir;
+  while (j >= 0 && j < els.length && tierOf(els[j]) !== tier) j += dir;
+  if (j < 0 || j >= els.length) return toast(dir > 0 ? 'Already the top of its layer.' : 'Already the bottom of its layer.');
   [els[i], els[j]] = [els[j], els[i]];
   setStage({ elements: els });
 }
@@ -1703,14 +1850,14 @@ function renderProps() {
     f.push(`<p class="hint">Shows studio chat${S.state.feeds?.twitch ? ` and Twitch #${S.state.feeds.twitch}` : '. Connect Twitch in the Chat panel to show viewer chat'}.</p>`);
   }
   if (e.type === 'image') {
-    f.push(`<label class="btn outline upload-btn"><input type="file" accept="image/png,image/jpeg,image/webp,image/gif" data-upload hidden>${e.asset ? 'Replace image' : 'Choose image'}</label>`);
+    f.push(`<label class="btn sm"><input type="file" accept="image/png,image/jpeg,image/webp,image/gif" data-upload hidden>${e.asset ? 'Replace image' : 'Choose image'}</label>`);
     field('Fit', `<select data-k="fit"><option value="contain" ${e.fit === 'contain' ? 'selected' : ''}>Fit inside</option><option value="cover" ${e.fit === 'cover' ? 'selected' : ''}>Fill box</option></select>`);
     field('Opacity', `<input type="range" min="0.1" max="1" step="0.05" data-k="opacity" data-num value="${e.opacity}">`);
     field('Corner rounding', `<input type="range" min="0" max="120" data-k="radius" data-num value="${e.radius}">`);
   }
   if (e.type === 'timer') {
     field('Shows', `<select data-k="mode"><option value="clock" ${e.mode === 'clock' ? 'selected' : ''}>Current time</option><option value="countdown" ${e.mode === 'countdown' ? 'selected' : ''}>Countdown</option></select>`);
-    if (e.mode === 'countdown') f.push(`<div class="row">${[1, 3, 5, 10, 15].map((m) => `<button type="button" class="btn outline sm" data-count="${m}">${m} min</button>`).join('')}</div>`);
+    if (e.mode === 'countdown') f.push(`<div class="row">${[1, 3, 5, 10, 15].map((m) => `<button type="button" class="btn sm" data-count="${m}">${m} min</button>`).join('')}</div>`);
     field('Size', `<input type="range" min="16" max="140" data-k="size" data-num value="${e.size}">`);
     f.push(`<div class="row2"><label class="fld"><span>Colour</span><input type="color" data-k="color" value="${e.color}"></label></div>`);
     f.push(`<label class="toggle-inline"><input type="checkbox" class="toggle sm" data-bg ${e.bg ? 'checked' : ''}><span>Background box</span></label>`);
@@ -1719,7 +1866,20 @@ function renderProps() {
   if (e.type === 'ai') f.push(`<label class="fld"><span>Text size</span><input type="range" min="14" max="34" data-k="size" data-num value="${e.size}"></label><p class="hint">Shows the latest question and answer from the AI panel. Long answers keep the newest lines in view.</p>`);
   if (e.type === 'media') f.push(`<label class="fld"><span>Corner rounding</span><input type="range" min="0" max="40" data-k="radius" data-num value="${e.radius}"></label><p class="hint">Shows whoever is presenting: a screen, a video or PDF slides.</p>`);
   if (e.type === 'tip') f.push(`<label class="fld"><span>Card text</span><input data-k="label" maxlength="60" value="${val('label')}"></label><p class="hint">Edit the link in Brand → Support links.</p>`);
-  f.push(`<button type="button" class="btn ghost danger-text" data-del>Delete ${ELABEL[e.type].toLowerCase()}</button>`);
+  if (e.type === 'shape') {
+    field('Name', `<input data-k="label" maxlength="40" value="${val('label')}" placeholder="Colour block">`);
+    f.push(`<div class="row2"><label class="fld"><span>Colour</span><input type="color" data-k="color" value="${e.color}"></label><label class="fld"><span>Opacity</span><input type="range" min="0.05" max="1" step="0.05" data-k="opacity" data-num value="${e.opacity ?? 1}"></label></div>`);
+    field('Corner rounding', `<input type="range" min="0" max="120" data-k="radius" data-num value="${e.radius || 0}">`);
+  }
+  if (isSystem(e)) f.push(`<p class="hint">${{ banner: 'Shows the banner from the Banners panel.', ticker: 'Shows the ticker text from the Banners panel.', logo: 'Shows your logo from Brand.', ads: 'Rotates your sponsor images from Brand.', featured: 'Shows a chat message you put on stage.', captions: 'Shows live captions when they’re on (Stream tab).' }[e.type]}</p>`);
+  const pxs = (v, n) => Math.round(v * n);
+  f.push(`<p class="hint num">${pxs(e.w, W)} × ${pxs(e.h, H)} px at ${pxs(e.x, W)}, ${pxs(e.y, H)} · ${TIERS.find((t) => t.id === tierOf(e)).label} layer</p>`);
+  f.push(`<label class="toggle-inline"><input type="checkbox" class="toggle sm" data-k="stack" ${e.stack ? 'checked' : ''}><span>Allow overlap <em class="dim">— stack it over other layers on purpose</em></span></label>`);
+  if (e.type === 'slot') f.push(`<label class="toggle-inline"><input type="checkbox" class="toggle sm" data-k="pip" ${e.pip ? 'checked' : ''}><span>Picture-in-picture <em class="dim">— draw above the presentation</em></span></label>`);
+  f.push(`<label class="toggle-inline"><input type="checkbox" class="toggle sm" data-k="hidden" ${e.hidden ? 'checked' : ''}><span>Hidden</span></label>`);
+  f.push(`<label class="toggle-inline"><input type="checkbox" class="toggle sm" data-k="locked" ${e.locked ? 'checked' : ''}><span>Locked</span></label>`);
+  f.push(`<div class="row"><button type="button" class="btn sm" data-order="1">${icon('arrow-up', { size: 'sm' })}Bring forward</button><button type="button" class="btn sm" data-order="-1">${icon('arrow-down', { size: 'sm' })}Send back</button><button type="button" class="btn sm" data-reset ${e.home ? '' : 'disabled'}>${icon('rotate-ccw', { size: 'sm' })}Reset</button></div>`);
+  if (!isSystem(e)) f.push(`<button type="button" class="btn sm danger" data-del>${icon('trash-2', { size: 'sm' })}Delete ${ELABEL[e.type].toLowerCase()}</button>`);
   box.innerHTML = f.join('');
   box.querySelectorAll('input, select, textarea').forEach((inp) => { inp.disabled = !isHost() && !inp.dataset.upload; });
 }
@@ -1727,8 +1887,17 @@ $('#elProps').addEventListener('input', (ev) => {
   const e = selEl(), t = ev.target;
   if (!e || !isHost()) return;
   if (t.dataset.k) {
-    e[t.dataset.k] = t.type === 'checkbox' ? t.checked : t.dataset.num !== undefined ? Number(t.value) : t.value;
-    if (t.dataset.k === 'mode') { renderProps(); }
+    const k = t.dataset.k, v = t.type === 'checkbox' ? t.checked : t.dataset.num !== undefined ? Number(t.value) : t.value;
+    if (['hidden', 'locked', 'stack', 'pip'].includes(k)) {
+      // Turning stacking off (or showing a layer) must not leave an overlap behind.
+      if ((k === 'stack' && !v) || (k === 'hidden' && !v)) {
+        const blocker = blockerFor(e, { ...e, stack: k === 'stack' ? false : e.stack, hidden: false }, (S.state.elements || []).filter((o) => o.id !== e.id));
+        if (blocker) { t.checked = !v; return toast(`${elName(e)} overlaps ${elName(blocker)}. Move one of them first.`, { err: true }); }
+      }
+      return patchEl(e.id, { [k]: v });
+    }
+    e[k] = v;
+    if (k === 'mode') { renderProps(); }
     commitElements(t.type === 'range' || t.tagName === 'TEXTAREA' ? 250 : 0);
   }
   if (t.dataset.bg !== undefined) { e.bg = t.checked ? (e.type === 'text' ? '#1f6feb' : '#111827') : ''; renderProps(); commitElements(); }
@@ -1747,56 +1916,115 @@ $('#elProps').addEventListener('change', async (ev) => {
 });
 $('#elProps').addEventListener('click', (ev) => {
   const e = selEl(); if (!e) return;
-  if (ev.target.dataset.del !== undefined) deleteEl(e.id);
-  if (ev.target.dataset.count) { e.target = Date.now() + Number(ev.target.dataset.count) * 60_000; commitElements(); toast(`Countdown set to ${ev.target.dataset.count} min.`); }
+  const btn = ev.target.closest('button');
+  if (!btn) return;
+  if (btn.dataset.del !== undefined) deleteEl(e.id);
+  if (btn.dataset.order) moveEl(e.id, Number(btn.dataset.order));
+  if (btn.dataset.reset !== undefined) resetEl(e.id);
+  if (btn.dataset.count) { e.target = Date.now() + Number(btn.dataset.count) * 60_000; commitElements(); toast(`Countdown set to ${btn.dataset.count} min.`); }
 });
 
-// Drag and resize on the stage
+// Drag and resize on the stage: snaps to the 8px grid, safe areas and other layers' edges; refuses to overlap
+// another layer unless it's stacked. Hold Alt (Option) while dragging to stack on purpose.
+function showGuides(guides, blocked) {
+  const box = $('#snapGuides');
+  if (!box) return;
+  box.replaceChildren(...guides.map((gd) => { const i = document.createElement('i'); i.className = `guide ${gd.axis} ${gd.kind}`; i.style[gd.axis === 'x' ? 'left' : 'top'] = gd.at * 100 + '%'; return i; }));
+  $$('.ebox.blocking').forEach((b) => b.classList.remove('blocking'));
+  if (blocked) $(`.ebox[data-id="${blocked.id}"]`)?.classList.add('blocking');
+}
 $('#editLayer').addEventListener('pointerdown', (ev) => {
   const box = ev.target.closest('.ebox');
   if (!box || !isHost()) { editor.sel = null; renderEditor(); return; }
   const e = (S.state.elements || []).find((x) => x.id === box.dataset.id);
   if (!e) return;
   editor.sel = e.id;
+  if (e.locked || e.hidden) { renderEditor(); toast(`${elName(e)} is ${e.locked ? 'locked' : 'hidden'}. Change that in Layers.`); return; }
   const rect = $('#stage').getBoundingClientRect();
   box.classList.add('dragging');
-  editor.drag = { e, mode: ev.target.dataset.h ? 'size' : 'move', sx: ev.clientX, sy: ev.clientY, o: { x: e.x, y: e.y, w: e.w, h: e.h }, rw: rect.width, rh: rect.height };
+  $('#editLayer').classList.add('dragging');
+  editor.drag = { e, handle: ev.target.dataset.h || '', sx: ev.clientX, sy: ev.clientY, o: { x: e.x, y: e.y, w: e.w, h: e.h }, last: { x: e.x, y: e.y, w: e.w, h: e.h }, rw: rect.width, rh: rect.height, blocked: null, moved: false };
   box.setPointerCapture(ev.pointerId);
-  renderEditor();
+  renderProps(); renderLayers();
+  $$('.ebox.sel').forEach((b) => b.classList.toggle('sel', b === box)); box.classList.add('sel');
   ev.preventDefault();
 });
-const snap = (v) => { for (const s of [0, .5, 1]) if (Math.abs(v - s) < .012) return s; return Math.round(v * 200) / 200; };
+const clampRect = (r) => ({ ...r, x: Math.min(1 - r.w, Math.max(0, r.x)), y: Math.min(1 - r.h, Math.max(0, r.y)) });
 $('#editLayer').addEventListener('pointermove', (ev) => {
   const d = editor.drag; if (!d) return;
-  const dx = (ev.clientX - d.sx) / d.rw, dy = (ev.clientY - d.sy) / d.rh;
-  if (d.mode === 'move') {
-    const nx = snap(d.o.x + dx), ny = snap(d.o.y + dy);
-    // also snap the right/bottom edges and the centre
-    d.e.x = Math.abs(nx + d.o.w - snap(nx + d.o.w)) < 1e-9 ? nx : snap(nx + d.o.w) - d.o.w;
-    d.e.y = Math.abs(ny + d.o.h - snap(ny + d.o.h)) < 1e-9 ? ny : snap(ny + d.o.h) - d.o.h;
-    d.e.x = Math.min(1 - .02, Math.max(-d.o.w + .02, d.e.x)); d.e.y = Math.min(1 - .02, Math.max(-d.o.h + .02, d.e.y));
-  } else {
-    d.e.w = Math.max(.03, Math.min(1.2, snap(d.o.x + d.o.w + dx) - d.o.x));
-    d.e.h = Math.max(.03, Math.min(1.2, snap(d.o.y + d.o.h + dy) - d.o.y));
+  const dx = (ev.clientX - d.sx) / d.rw, dy = (ev.clientY - d.sy) / d.rh, o = d.o;
+  const others = (S.state.elements || []).filter((x) => x !== d.e);
+  let snapped;
+  if (!d.handle) snapped = snapMove(clampRect({ ...o, x: o.x + dx, y: o.y + dy }), d.e, others, W, H);
+  else {
+    const c = { ...o };
+    if (d.handle.includes('e')) c.w = o.w + dx;
+    if (d.handle.includes('s')) c.h = o.h + dy;
+    if (d.handle.includes('w')) { c.x = o.x + dx; c.w = o.w - dx; }
+    if (d.handle.includes('n')) { c.y = o.y + dy; c.h = o.h - dy; }
+    snapped = snapResize(c, d.handle, d.e, others, W, H);
+    snapped.rect = { ...snapped.rect, x: Math.max(0, snapped.rect.x), y: Math.max(0, snapped.rect.y) };
+    snapped.rect.w = Math.min(snapped.rect.w, 1 - snapped.rect.x); snapped.rect.h = Math.min(snapped.rect.h, 1 - snapped.rect.y);
   }
+  let rect = snapped.rect, blocked = null;
+  d.alt = ev.altKey;
+  if (!ev.altKey && !d.e.stack) ({ rect, blocked } = resolve(d.last, rect, d.e, others));
+  d.last = rect; d.blocked = blocked; d.moved = true;
+  Object.assign(d.e, rect);
   const box = $(`.ebox[data-id="${d.e.id}"]`);
-  if (box) Object.assign(box.style, { left: d.e.x * 100 + '%', top: d.e.y * 100 + '%', width: d.e.w * 100 + '%', height: d.e.h * 100 + '%' });
+  if (box) {
+    Object.assign(box.style, { left: rect.x * 100 + '%', top: rect.y * 100 + '%', width: rect.w * 100 + '%', height: rect.h * 100 + '%' });
+    box.classList.toggle('blocked', !!blocked);
+  }
+  showGuides(snapped.guides, blocked);
 });
 // Released boxes settle back with a spring (transition on .ebox, see style.css).
-const endDrag = () => { $$('.ebox.dragging').forEach((b) => b.classList.remove('dragging')); };
-$('#editLayer').addEventListener('pointerup', () => { endDrag(); if (editor.drag) { editor.drag = null; commitElements(); } });
-$('#editLayer').addEventListener('pointercancel', () => { endDrag(); editor.drag = null; });
+function endDrag() {
+  const d = editor.drag;
+  $$('.ebox.dragging, .ebox.blocked').forEach((b) => b.classList.remove('dragging', 'blocked'));
+  $('#editLayer').classList.remove('dragging');
+  showGuides([], null);
+  editor.drag = null;
+  if (!d?.moved) return;
+  if (d.blocked) toast(`Kept clear of ${elName(d.blocked)}. Hold Alt while dragging to stack on top of it.`);
+  if (d.alt && !d.e.stack) {
+    const over = blockerFor(d.e, { ...d.e, stack: false }, (S.state.elements || []).filter((x) => x !== d.e));
+    if (over) { d.e.stack = true; toast(`${elName(d.e)} is now stacked over ${elName(over)}.`); }
+  }
+  commitElements();
+  renderLayers(); renderProps();
+}
+$('#editLayer').addEventListener('pointerup', endDrag);
+$('#editLayer').addEventListener('pointercancel', endDrag);
+// Keyboard: arrows nudge the selected layer 8px (Shift: 40px), with the same snapping rules; Esc deselects.
+document.addEventListener('keydown', (ev) => {
+  if (!editor.on || !editor.sel || !isHost() || ev.target.closest?.('input, textarea, select, [contenteditable]')) return;
+  const e = (S.state.elements || []).find((x) => x.id === editor.sel);
+  if (!e) return;
+  if (ev.key === 'Escape') { editor.sel = null; renderEditor(); return; }
+  const dir = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] }[ev.key];
+  if (!dir || e.locked || e.hidden) return;
+  ev.preventDefault();
+  const step = GRID * (ev.shiftKey ? 5 : 1);
+  const cand = clampRect({ ...e, x: e.x + dir[0] * step / W, y: e.y + dir[1] * step / H });
+  const others = (S.state.elements || []).filter((x) => x !== e);
+  const { rect, blocked } = e.stack ? { rect: cand, blocked: null } : resolve(e, cand, e, others);
+  if (blocked && rect.x === e.x && rect.y === e.y) return toast(`${elName(e)} would overlap ${elName(blocked)}.`);
+  Object.assign(e, { x: rect.x, y: rect.y });
+  renderEditor(); commitElements(250);
+});
 
 // Panel wiring
 $('#editToggle').onclick = () => setEditing(!editor.on);
+$('#resetScene').onclick = () => { if (isHost()) resetScene(); };
 $$('[data-add]').forEach((b) => b.addEventListener('click', () => { if (!isHost()) return toast('Only the host can change the stage.', { err: true }); addElement(b.dataset.add); }));
 function renderTemplates() {
   const wrap = $('#tplList');
   wrap.replaceChildren(...TEMPLATES.map((tpl) => {
     const b = document.createElement('button'); b.type = 'button'; b.className = 'tile tpl'; b.disabled = !isHost();
-    const pv = document.createElement('span'); pv.className = 'tpl-pv';
-    for (const e of tpl.els) { const i = document.createElement('i'); i.className = 'tpl-' + e.type; Object.assign(i.style, { left: e.x * 100 + '%', top: e.y * 100 + '%', width: e.w * 100 + '%', height: e.h * 100 + '%' }); pv.append(i); }
+    const pv = scenePreview(tpl);
     const nm = document.createElement('span'); nm.textContent = tpl.name;
+    if (tpl.desc) b.dataset.tip = tpl.desc;
     b.append(pv, nm);
     b.onclick = () => applyTemplate(tpl);
     return b;
@@ -1952,7 +2180,7 @@ $('#aiModel').addEventListener('change', (e) => store.set('aiModel:' + S.aiProv,
 $('#aiStage').addEventListener('change', (e) => {
   if (!isHost()) return;
   if (!e.target.checked) return setStage({ elements: elementsCopy().filter((x) => x.type !== 'ai') });
-  applyTemplate(isVertical() ? TPL['v-ai'] : S.local.pres || participants().some((p) => p.sharing) ? TPL['screen-ai'] : TPL['ai-cam']);
+  applyTemplate(isVertical() ? TPL['v-ai'] : S.local.pres || participants().some((p) => p.sharing) ? TPL['screen-ai'] : TPL['p-arena']);
 });
 $('#aiClear').onclick = () => { S.ai.items = []; renderAILog(); if (S.studio && isHost()) wsSend({ type: 'ai', item: { id: 'clear', role: 'system', text: '', done: true } }); };
 $('#aiForm').addEventListener('submit', async (ev) => {
@@ -2274,11 +2502,27 @@ for (const [kind, pick, file, clear] of [['bgImage', '#bgImgPick', '#bgImgFile',
 function segWire(sel, attr, key) {
   $$(sel + ' button').forEach((b) => b.addEventListener('click', () => { if (!isHost()) return; brandPref({ [key]: b.dataset[attr] }); }));
 }
-segWire('#tagSeg', 'tag', 'tag'); segWire('#bannerStyleSeg', 'bs', 'bannerStyle'); segWire('#frameSeg', 'frame', 'frame'); segWire('#logoPosSeg', 'lp', 'logoPos');
+segWire('#tagSeg', 'tag', 'tag'); segWire('#bannerStyleSeg', 'bs', 'bannerStyle'); segWire('#frameSeg', 'frame', 'frame');
+$$('#logoPosSeg button').forEach((b) => b.addEventListener('click', () => { if (!isHost()) return; brandPref({ logoPos: b.dataset.lp }); placeLayer('logo', b.dataset.lp, S.state.brand.logoSize || .12); }));
 $('#fontSel').onchange = (e) => brandPref({ font: e.target.value });
 $('#animSel').onchange = (e) => { brandPref({ anim: e.target.value }); previewAnimation(); };
 $('#bgDim').oninput = (e) => brandPref({ dim: Number(e.target.value) });
-$('#logoSize').oninput = (e) => brandPref({ logoSize: Number(e.target.value) });
+$('#logoSize').oninput = (e) => { brandPref({ logoSize: Number(e.target.value) }); placeLayer('logo', S.state.brand.logoPos || 'tr', Number(e.target.value)); };
+/** Put the logo or sponsor layer in a corner (inside action-safe, on the grid). If the corner is taken it goes stacked and says so. */
+function placeLayer(type, pos, size) {
+  const els = elementsCopy(), e = els.find((x) => x.type === type);
+  if (!e) return;
+  const g8 = (v, n) => Math.round(v * n / GRID) * GRID / n;
+  const bottomBand = pos === 'bottom';
+  const w = bottomBand ? .5 : type === 'logo' ? size : .2, h = bottomBand ? .13 : type === 'logo' ? (size * W / 3) / H : .2;
+  const mx = SAFE.action + GRID / W, my = SAFE.action + GRID / H;
+  const x = bottomBand ? (1 - w) / 2 : pos.includes('l') ? mx : 1 - mx - w;
+  const y = bottomBand ? 1 - my - h : pos.startsWith('b') ? 1 - my - h : my;
+  Object.assign(e, { x: g8(x, W), y: g8(y, H), w: g8(w, W), h: g8(h, H), hidden: false });
+  const blocker = !e.stack && blockerFor(e, e, els);
+  if (blocker) { e.stack = true; toast(`${elName(e)} overlaps ${elName(blocker)} there, so it’s stacked on top. Fine-tune it in Layouts.`, { ms: 4200 }); }
+  setStage({ elements: els });
+}
 function previewAnimation() {
   S.banner.key = ''; featAnim.key = '';
   if (!S.state.banner && !S.state.featured) toast('Show a banner to see the animation on stage.');
@@ -2308,7 +2552,7 @@ $$('#aspectSeg button').forEach((b) => b.addEventListener('click', () => {
   const aspect = b.dataset.aspect;
   setStreamPref({ aspect });
   const patch = { aspect };
-  if (S.state.layout === 'custom') { const t = aspect === '9:16' ? TPL['v-solo'] : TPL['duo-chat']; Object.assign(patch, templatePatch(t)); patch.aspect = aspect; }
+  if (S.state.layout === 'custom') { const t = aspect === '9:16' ? TPL['v-solo'] : TPL['p-interview']; Object.assign(patch, templatePatch(t)); patch.aspect = aspect; }
   setStage(patch);
   toast(aspect === '9:16' ? 'Vertical 9:16 — ready for TikTok, Reels and Shorts.' : 'Landscape 16:9.');
 }));
@@ -2559,13 +2803,13 @@ function sendCaption(text, final) {
   if (final || Date.now() - capLast > 400) go(); else capTimer = setTimeout(go, 400);
 }
 function showCaption(id, name, text, final) { cap.lines.set(id, { name, text, final, t: Date.now() }); }
-function drawCaptions(bottom) {
+function drawCaptions(r) {
   const c = S.state.captions;
   if (!c?.on) return;
   const now = Date.now();
   const live = [...cap.lines.values()].filter((l) => now - l.t < (l.final ? 4000 : 6000)).sort((a, b) => a.t - b.t).slice(-2);
   if (!live.length) return;
-  const fs = c.size || 26, F = stageFont(), maxW = Math.min(W - 120, 1000), lh = fs * 1.3, many = cap.lines.size > 1;
+  const fs = c.size || 26, F = stageFont(), maxW = Math.max(120, r.w - 48), cx = r.x + r.w / 2, lh = fs * 1.3, many = cap.lines.size > 1;
   const rows = [];
   for (const l of live) {
     g.font = `600 ${fs}px ${F}`;
@@ -2575,17 +2819,17 @@ function drawCaptions(bottom) {
   }
   const shown = rows.slice(-3);
   const blockH = shown.length * lh + 18;
-  const y0 = bottom - blockH;
+  const y0 = r.y + r.h - blockH;
   g.save(); g.textAlign = 'center'; g.textBaseline = 'middle';
-  if (c.style === 'bar') { g.fillStyle = 'rgba(0,0,0,.72)'; rr(W / 2 - maxW / 2 - 24, y0, maxW + 48, blockH, 10); g.fill(); }
+  if (c.style === 'bar') { g.fillStyle = 'rgba(0,0,0,.72)'; rr(cx - maxW / 2 - 24, y0, maxW + 48, blockH, 10); g.fill(); }
   shown.forEach((r, i) => {
     const y = y0 + 9 + lh * (i + .5);
     const label = r.name ? r.name + ': ' : '';
     g.font = `600 ${fs}px ${F}`;
     const full = g.measureText(label + r.text).width;
-    if (c.style === 'box') { g.fillStyle = 'rgba(0,0,0,.78)'; rr(W / 2 - full / 2 - 12, y - lh / 2 + 2, full + 24, lh - 4, 6); g.fill(); }
+    if (c.style === 'box') { g.fillStyle = 'rgba(0,0,0,.78)'; rr(cx - full / 2 - 12, y - lh / 2 + 2, full + 24, lh - 4, 6); g.fill(); }
     if (c.style === 'plain') { g.shadowColor = 'rgba(0,0,0,.9)'; g.shadowBlur = 8; }
-    let x = W / 2 - full / 2;
+    let x = cx - full / 2;
     g.textAlign = 'left';
     if (label) { g.fillStyle = S.state.brand.color; g.fillText(label, x, y); x += g.measureText(label).width; }
     g.fillStyle = '#ffffff'; g.fillText(r.text, x, y);
@@ -2928,7 +3172,7 @@ function activeSceneId() {
   return S.state.scene || '';
 }
 function applyScene(sc) {
-  if (sc.kind === 'builtin') return setStage({ layout: sc.layout, scene: sc.id, elements: (S.state.elements || []).filter((e) => !STRUCTURAL.includes(e.type) || e.type === 'chat') });
+  if (sc.kind === 'builtin') return setStage({ layout: sc.layout, scene: sc.id, elements: sceneElements(sc.id, []) });
   if (sc.kind === 'template') return applyTemplate(sc);
   return loadLayout(sc.saved);
 }
@@ -2940,9 +3184,10 @@ function scenePreview(sc) {
     const n = sc.layout === 'solo' ? 1 : 3;
     els = layoutRects(n, sc.layout, area).map((r) => ({ type: 'slot', x: r.x / W, y: r.y / H, w: r.w / W, h: r.h / H }));
   }
-  for (const e of els || []) {
-    if (!['slot', 'chat', 'media', 'ai', 'tip', 'image', 'text'].includes(e.type)) continue;
+  for (const e of drawOrder(els || [])) {
+    if (e.hidden || ['captions', 'featured', 'ads'].includes(e.type)) continue;
     const i = document.createElement('i'); i.className = 'pv-' + e.type;
+    if (e.type === 'shape') i.style.background = e.color;
     Object.assign(i.style, { left: e.x * 100 + '%', top: e.y * 100 + '%', width: e.w * 100 + '%', height: e.h * 100 + '%' });
     pv.append(i);
   }
@@ -3252,25 +3497,16 @@ function drawAudioTile(p, x, y, w, h, t) {
 }
 
 // ---------------------------------------------------------------- sponsor ads and the call-in card
-function drawAds() {
-  let a = S.state.ads;
+function drawAds(r) {
+  const a = S.state.ads;
   if (!a?.on || !a.items?.length) return;
   const per = (a.every || 12) * 1000, now = Date.now();
   const idx = Math.floor(now / per) % a.items.length, into = now % per;
   const img = assetImg(a.items[idx]);
   if (!img) return;
   const alpha = Math.min(1, into / 450, (per - into) / 450);
-  let w, h, x, y;
-  const callin = (S.state.elements || []).find((e) => e.type === 'callin');
-  let pos = a.pos || 'br';
-  if (callin && pos === 'br' && callin.x + callin.w > .6 && callin.y + callin.h > .6) pos = 'tr';
-  if (callin && pos === 'bl' && callin.x < .4 && callin.y + callin.h > .6) pos = 'tr';
-  a = { ...a, pos };
-  if (a.pos === 'bottom') { h = H * .12; w = Math.min(W - 80, h * img.naturalWidth / img.naturalHeight); x = (W - w) / 2; y = H - h - 18; }
-  else {
-    w = Math.min(W * .22, (H * .22) * img.naturalWidth / img.naturalHeight); h = w * img.naturalHeight / img.naturalWidth;
-    x = a.pos === 'bl' ? 28 : W - w - 28; y = a.pos === 'tr' ? 70 : H - h - 28;
-  }
+  const k = Math.min(r.w / img.naturalWidth, r.h / img.naturalHeight), w = img.naturalWidth * k, h = img.naturalHeight * k;
+  const cx = r.x + r.w / 2, x = cx > W * .6 ? r.x + r.w - w : cx < W * .4 ? r.x : cx - w / 2, y = r.y + r.h - h;
   g.save(); g.globalAlpha = alpha;
   g.shadowColor = 'rgba(0,0,0,.35)'; g.shadowBlur = 20; g.shadowOffsetY = 6;
   rr(x, y, w, h, 10); g.clip(); g.shadowColor = 'transparent';
@@ -3436,7 +3672,7 @@ $$('#panelSeg button').forEach((b) => b.addEventListener('click', () => { if (is
 $('#panelColor').oninput = (e) => { if (isHost()) brandPref({ panelColor: e.target.value }); };
 $('#adsSwitch').onchange = (e) => { if (!isHost()) return; setStage({ ads: { ...S.state.ads, on: e.target.checked } }); };
 $('#adEvery').onchange = (e) => setStage({ ads: { ...S.state.ads, every: Number(e.target.value) } });
-$$('#adPosSeg button').forEach((b) => b.addEventListener('click', () => setStage({ ads: { ...S.state.ads, pos: b.dataset.ap } })));
+$$('#adPosSeg button').forEach((b) => b.addEventListener('click', () => { setStage({ ads: { ...S.state.ads, pos: b.dataset.ap } }); placeLayer('ads', b.dataset.ap); }));
 $('#adPick').onclick = () => { if (!isHost()) return; $('#adFile').click(); };
 $('#adFile').onchange = async (e) => {
   const files = [...e.target.files].slice(0, 8); e.target.value = '';
@@ -3872,6 +4108,13 @@ setTab('chat');
 setPhase('offline');
 renderHelp();
 acctBoot();
+// Bring back the last scene (and how it was arranged) before anyone joins.
+(function restoreLastScene() {
+  const id = store.get('lastScene', '');
+  const sc = id && sceneList().find((x) => x.id === id);
+  if (!sc || sc.kind === 'saved') { S.state.elements = ensureSystem(S.state.elements || [], isVertical(), uid); return; }
+  S.state = { ...S.state, layout: sc.kind === 'builtin' ? sc.layout : 'custom', scene: sc.id, elements: sceneElements(sc.id, sc.els || []) };
+})();
 const linkCode = /^\/[sc]\//.test(location.pathname) ? parseCode(location.pathname.replace(/^\/c\//, '/s/')) : '';
 S.callin = location.pathname.startsWith('/c/');
 if (linkCode) openEnter('join', linkCode);

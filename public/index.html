@@ -287,8 +287,9 @@
       <section class="panel" data-panel="layouts" hidden>
         <header class="panel-head"><h2>Layouts</h2><p>Build scenes from cameras, slides, chat, AI, text and images.</p></header>
         <div class="panel-body form">
-          <div class="row"><button type="button" class="btn primary" id="editToggle" aria-pressed="false">Edit on stage</button></div>
+          <div class="row"><button type="button" class="btn primary" id="editToggle" aria-pressed="false">Edit on stage</button><button type="button" class="btn" id="resetScene"><svg class="i sm" aria-hidden="true"><use href="/icons.svg#i-rotate-ccw"/></svg>Reset scene</button></div>
           <p class="hint" id="layoutsHint">Drag and resize on the stage. Changes show for everyone and in recordings.</p>
+          <p class="hint">Layers snap to an 8px grid, the safe areas and each other, and never overlap unless you allow it: hold <kbd>Alt</kbd> while dragging to stack. Arrow keys nudge 8px. Each scene remembers its arrangement.</p>
           <div class="fld"><span>Start from a template</span><div class="tpls" id="tplList"></div></div>
           <div class="fld"><span>Add to stage</span>
             <div class="adds">
@@ -299,9 +300,10 @@
               <button type="button" class="btn sm" data-add="text">+ Text</button>
               <button type="button" class="btn sm" data-add="image">+ Image or logo</button>
               <button type="button" class="btn sm" data-add="timer">+ Clock / countdown</button>
+              <button type="button" class="btn sm" data-add="shape">+ Colour block</button>
             </div>
           </div>
-          <div class="fld"><span>On stage <em>top of the list is drawn first</em></span>
+          <div class="fld"><span>Layers <em>top of the list is on top of the picture</em></span>
             <ul class="el-list" id="elList"></ul>
             <p class="hint" id="elEmpty">Nothing added yet. Pick a template or add an element.</p>
           </div>
