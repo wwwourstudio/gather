@@ -5,7 +5,8 @@
   "outputDirectory": "public",
   "cleanUrls": false,
   "rewrites": [
-    { "source": "/s/:code", "destination": "/index.html" }
+    { "source": "/s/:code", "destination": "/index.html" },
+    { "source": "/c/:code", "destination": "/index.html" }
   ],
   "headers": [
     {

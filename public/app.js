@@ -4,12 +4,46 @@ import { createAudioChain, createVideoFx, needsProcessing } from './fx.js';
 
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
-const store = mkStore(() => localStorage);
+// Pictures (avatar, camera and camera-off backgrounds, brand images) are too big for localStorage's
+// ~5 MB quota, so they live in IndexedDB behind the same synchronous store API.
+const BIG_KEYS = new Set(['avatar', 'fxBg', 'offBg', 'brandImgs']);
+const bigMem = new Map();
+function bigDb() {
+  return new Promise((res, rej) => {
+    const r = indexedDB.open('gather-images', 1);
+    r.onupgradeneeded = () => r.result.createObjectStore('kv');
+    r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error);
+  });
+}
+let bigDbP = null;
+function bigPut(k, v) {
+  (bigDbP ||= bigDb()).then((db) => { const tx = db.transaction('kv', 'readwrite'); v === undefined ? tx.objectStore('kv').delete(k) : tx.objectStore('kv').put(v, k); }).catch(() => {});
+}
+try {
+  const db = await Promise.race([(bigDbP = bigDb()), new Promise((_, rej) => setTimeout(() => rej(new Error('slow')), 1500))]);
+  await new Promise((res) => {
+    const tx = db.transaction('kv', 'readonly'), st = tx.objectStore('kv');
+    const keys = st.getAllKeys(), vals = st.getAll();
+    tx.oncomplete = () => { keys.result.forEach((k, i) => bigMem.set(k, vals.result[i])); res(); };
+    tx.onerror = () => res();
+  });
+} catch {}
+for (const k of BIG_KEYS) {
+  // One-time move out of localStorage.
+  try { const raw = localStorage.getItem('gather:' + k); if (raw != null) { if (!bigMem.has(k)) { bigMem.set(k, JSON.parse(raw)); bigPut(k, JSON.parse(raw)); } localStorage.removeItem('gather:' + k); } } catch {}
+}
+const store = mkStore(() => localStorage, true);
 const sess = mkStore(() => sessionStorage);
-function mkStore(get) {
+function mkStore(get, big) {
   return {
-    get(k, d) { try { const v = get().getItem('gather:' + k); return v == null ? d : JSON.parse(v); } catch { return d; } },
-    set(k, v) { try { get().setItem('gather:' + k, JSON.stringify(v)); } catch {} },
+    get(k, d) {
+      if (big && BIG_KEYS.has(k)) return bigMem.has(k) ? bigMem.get(k) : d;
+      try { const v = get().getItem('gather:' + k); return v == null ? d : JSON.parse(v); } catch { return d; }
+    },
+    set(k, v) {
+      if (big && BIG_KEYS.has(k)) { bigMem.set(k, v); bigPut(k, v); return; }
+      try { get().setItem('gather:' + k, JSON.stringify(v)); } catch {}
+    },
   };
 }
 
@@ -57,6 +91,7 @@ function toast(msg, opts = {}) {
   const t = document.createElement('div');
   t.className = 'toast' + (opts.err ? ' err' : '');
   t.textContent = msg;
+  if (opts.action) { const b = document.createElement('button'); b.type = 'button'; b.textContent = opts.action[0]; b.onclick = () => { opts.action[1](); t.remove(); }; t.append(b); }
   $('#toasts').append(t);
   setTimeout(() => t.remove(), opts.ms || 3200);
 }
@@ -379,6 +414,7 @@ $('#presentMenu').addEventListener('click', (ev) => {
   if (kind === 'screen') presentScreen();
   if (kind === 'video') $('#videoFile').click();
   if (kind === 'pdf') $('#pdfFile').click();
+  if (kind === 'image') $('#imageFile').click();
   if (kind === 'ai') { setTab('ai'); $('#aiInput').focus(); }
 });
 $('#videoFile').onchange = (e) => { presentVideo(e.target.files[0]); e.target.value = ''; };
@@ -443,6 +479,7 @@ async function flush() {
     for (const m of r.results || []) if (m.type !== 'state') onServer(m);
   } catch (e) {
     flushing = false;
+    if (e.status === 403) return kickedOut(e.message);
     if (e.status === 410) return lostStudio();
     outbox.unshift(...ops); flushT = setTimeout(flush, 1000); return;
   }
@@ -467,6 +504,7 @@ async function pollLoop(gen) {
       if (fails) { fails = 0; setPhase('online'); }
     } catch (e) {
       if (gen !== pollGen) return;
+      if (e.status === 403) return kickedOut(e.message);
       if (e.status === 410) return lostStudio();
       if (++fails === 2) setPhase('reconnecting');
     }
@@ -482,7 +520,7 @@ function lostStudio() {
   teardownPeers();
   S.studio = null; S.id = null; S.tok = null;
   setPhase('reconnecting');
-  setTimeout(() => join(code).catch((e) => { toast(e.message, { err: true }); setPhase('offline'); }), 800);
+  setTimeout(() => join(code).catch((e) => { if (e.status === 403) return kickedOut(e.message); toast(e.message, { err: true }); setPhase('offline'); }), 800);
 }
 function beaconLeave() {
   if (!S.studio) return;
@@ -499,10 +537,18 @@ async function iceConfig(serverIce) {
   return ice;
 }
 
-async function join(code) {
+async function join(code, opts = {}) {
   setPhase(S.phase === 'reconnecting' ? 'reconnecting' : 'connecting');
   audioCtx();
-  const r = await api('join', { studio: code, name: S.name || 'Guest', mic: S.local.micOn, cam: S.local.camOn, acct: acct.token || undefined });
+  const pass = opts.pass || S.joinPass?.[code];
+  let r;
+  try { r = await api('join', { studio: code, name: S.name || 'Guest', mic: S.local.micOn, cam: S.local.camOn, acct: acct.token || undefined, pass, callin: opts.callin || undefined }); }
+  catch (e) {
+    if (e.status === 423 && $('#enterDlg').open) { setPhase('offline'); startKnock(code, opts.callin); return; }
+    if (e.status === 403) { setPhase('offline'); }
+    throw e;
+  }
+  if (pass) (S.joinPass ||= {})[code] = pass; // a reconnect after a network drop keeps our admission
   await onServer(r);
 }
 
@@ -532,7 +578,9 @@ async function onServer(m) {
         S.pendingStream = null;
       }
       sendMeta({ mic: S.local.micOn, cam: S.local.camOn, sharing: !!S.local.pres });
-      uploadAvatar();
+      uploadAvatar(); S.local.offbgId = ''; uploadOffBg();
+      $('#knockWait').hidden = true; $('#enterFields').hidden = false;
+      if (S.host === S.id) refreshLobby();
       renderAll();
       if (!m.peers.length && S.host === S.id) setTimeout(() => openInvite(), 350);
       else toast(S.host === S.id ? 'Studio ready.' : `You joined ${m.peers.length ? 'the studio' : 'an empty studio'}.`);
@@ -562,7 +610,7 @@ async function onServer(m) {
       const p = S.peers.get(m.peer.id);
       if (!p) break;
       const startedSharing = m.peer.sharing && !p.sharing, stoppedSharing = !m.peer.sharing && p.sharing;
-      Object.assign(p, { name: m.peer.name, mic: m.peer.mic, cam: m.peer.cam, sharing: m.peer.sharing, avatar: m.peer.avatar || '' });
+      Object.assign(p, { name: m.peer.name, mic: m.peer.mic, cam: m.peer.cam, sharing: m.peer.sharing, avatar: m.peer.avatar || '', offbg: m.peer.offbg || '' });
       if (startedSharing) autoPresentScene(p.id);
       if (stoppedSharing) autoEndPresentScene();
       renderCrew();
@@ -573,7 +621,10 @@ async function onServer(m) {
     case 'feed': for (const it of m.items || []) addExternal(it); break;
     case 'ai': upsertAI(m.item, false); break;
     case 'caption': showCaption(m.from, m.name, m.text, m.final); break;
-    case 'host': S.host = m.host; if (S.host === S.id) toast('You are now the host.'); renderAll(); break;
+    case 'host': S.host = m.host; if (S.host === S.id) { toast('You are now the host.'); refreshLobby(); } renderAll(); break;
+    case 'mute': if (S.local.micOn) { setMic(false); toast(`${m.by || 'The host'} muted you. Unmute when you’re ready to talk.`); } break;
+    case 'knock': S.lobby = m.lobby || []; renderLobby(); setDeck('lobby'); chime(); toast(`${m.who?.name || 'Someone'} ${m.who?.callin ? 'is calling in' : 'is waiting to join'}.`, { action: ['Open', () => setDeck('lobby')] }); break;
+    case 'lobby': S.lobby = m.lobby || []; renderLobby(); break;
     case 'recording': toast(m.on ? `${m.by} started recording` : `${m.by} stopped recording`); break;
     case 'error':
       if ($('#enterDlg').open) { $('#enterErr').textContent = m.message; $('#enterErr').hidden = false; setPhase(S.studio ? 'online' : 'offline'); $('#enterGo').disabled = false; }
@@ -587,7 +638,7 @@ const cssId = (id) => String(id).replace(/[^a-z0-9_-]/gi, '');
 function addPeer(info) {
   let p = S.peers.get(info.id);
   if (!p) { p = { id: info.id, pc: null, stream: new MediaStream(), pending: [], meters: [], rtt: null, conn: 'new' }; S.peers.set(info.id, p); }
-  Object.assign(p, { name: info.name, mic: info.mic, cam: info.cam, sharing: info.sharing, avatar: info.avatar || '', joinedAt: info.joinedAt });
+  Object.assign(p, { name: info.name, mic: info.mic, cam: info.cam, sharing: info.sharing, avatar: info.avatar || '', offbg: info.offbg || '', joinedAt: info.joinedAt });
   return p;
 }
 function createPeer(info, offerer) {
@@ -709,9 +760,9 @@ function toggleStage(id) {
 
 // ---------------------------------------------------------------- participants model
 function participants() {
-  const me = { id: myId(), me: true, name: S.name || 'You', mic: S.local.micOn && !!S.local.audio, cam: !!outVideo(), sharing: !!S.local.pres, avatar: S.local.avatarId || '', joinedAt: S.local.joinedAt, level: localMeter?.level() || 0 };
+  const me = { id: myId(), me: true, name: S.name || 'You', mic: S.local.micOn && !!S.local.audio, cam: !!outVideo(), sharing: !!S.local.pres, avatar: S.local.avatarId || '', offbg: S.local.offbgId || '', joinedAt: S.local.joinedAt, level: localMeter?.level() || 0 };
   const list = [me];
-  for (const p of S.peers.values()) list.push({ id: p.id, name: p.name, mic: p.mic, cam: p.cam, sharing: p.sharing, avatar: p.avatar || '', joinedAt: p.joinedAt, peer: p, level: p.meters[0]?.level() || 0 });
+  for (const p of S.peers.values()) list.push({ id: p.id, name: p.name, mic: p.mic, cam: p.cam, sharing: p.sharing, avatar: p.avatar || '', offbg: p.offbg || '', joinedAt: p.joinedAt, peer: p, level: p.meters[0]?.level() || 0 });
   return list.sort((a, b) => (a.joinedAt || 0) - (b.joinedAt || 0));
 }
 function cardVideo(id) { return $(`#card-${cssId(id)} video`); }
@@ -722,6 +773,15 @@ const g = canvas.getContext('2d');
 const speaking = new Map(); // id -> last time above threshold
 
 function rr(x, y, w, h, r) { g.beginPath(); g.roundRect(x, y, w, h, r); }
+const edCanvas = $('#editorCanvas'), ed = edCanvas.getContext('2d');
+const editorLayers = [];
+/** Queue a host-only hint. Layers flagged editorOnly draw on the editor canvas, never on the program canvas. */
+function editorOnly(paint) { editorLayers.push({ editorOnly: true, paint }); }
+function flushEditorLayers() {
+  if (edCanvas.width !== W || edCanvas.height !== H) { edCanvas.width = W; edCanvas.height = H; }
+  ed.clearRect(0, 0, W, H);
+  for (const l of editorLayers.splice(0)) if (l.editorOnly && isHost()) { ed.save(); l.paint(ed); ed.restore(); }
+}
 function layoutRects(n, layout, area) {
   const { x, y, w, h } = area, gap = 16;
   if (!n) return [];
@@ -775,25 +835,7 @@ function drawTile(p, rect, t) {
     const vw = el.videoWidth, vh = el.videoHeight;
     const s = Math.max(w / vw, h / vh), sw = w / s, sh = h / s;
     g.drawImage(el, (vw - sw) / 2, (vh - sh) / 2, sw, sh, x, y, w, h);
-  } else {
-    const grd = g.createLinearGradient(x, y, x + w, y + h);
-    grd.addColorStop(0, '#26303d'); grd.addColorStop(1, '#1b222c');
-    g.fillStyle = grd; g.fillRect(x, y, w, h);
-    const rad = Math.min(w, h) * 0.17;
-    const lvl = Math.min(1, p.level * 8);
-    if (lvl > .05) { g.fillStyle = hexA(brand.color, .25 * lvl); g.beginPath(); g.arc(x + w / 2, y + h / 2, rad * (1.15 + lvl * .3), 0, Math.PI * 2); g.fill(); }
-    const av = assetImg(p.avatar);
-    if (av) {
-      g.save(); g.beginPath(); g.arc(x + w / 2, y + h / 2, rad, 0, Math.PI * 2); g.clip();
-      const k = Math.max((rad * 2) / av.naturalWidth, (rad * 2) / av.naturalHeight);
-      g.drawImage(av, x + w / 2 - (av.naturalWidth * k) / 2, y + h / 2 - (av.naturalHeight * k) / 2, av.naturalWidth * k, av.naturalHeight * k);
-      g.restore();
-    } else {
-      g.fillStyle = brand.color; g.beginPath(); g.arc(x + w / 2, y + h / 2, rad, 0, Math.PI * 2); g.fill();
-      g.fillStyle = '#fff'; g.font = `700 ${Math.round(rad * .8)}px "Plus Jakarta Sans", Inter, sans-serif`; g.textAlign = 'center'; g.textBaseline = 'middle';
-      g.fillText(initials(p.name), x + w / 2, y + h / 2 + 2);
-    }
-  }
+  } else drawAudioTile(p, x, y, w, h, t);
   g.restore();
 
   // Active speaker ring.
@@ -944,20 +986,20 @@ function draw() {
   const tickH = drawTicker(t);
   const area = { x: 32, y: 44, w: W - 64, h: H - 44 - 32 - (tickH ? tickH - 10 : 0) };
   if (!onStage.length) {
-    g.fillStyle = 'rgba(255,255,255,.7)'; g.font = '600 22px Inter, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
-    g.fillText(isHost() ? 'Add someone to the stage from “In the studio”.' : 'The host will bring people on stage.', W / 2, H / 2);
+    editorOnly((c) => { c.fillStyle = 'rgba(255,255,255,.7)'; c.font = '600 22px Inter, sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText('Add someone to the stage from “In the studio”.', W / 2, H / 2); });
   }
   const slots = (S.state.elements || []).filter((e) => e.type === 'slot');
+  if (S.state.layout === 'custom') for (const e of S.state.elements || []) if (e.type === 'media') drawMediaEl(e);
   if (S.state.layout === 'custom' && slots.length) {
     // Custom layout: each camera slot shows whoever holds that stage position.
     for (const e of slots) {
       const p = onStage[e.index], r = { ...px(e), r: e.radius };
       if (p) drawTile(p, r, t);
-      else if (isHost()) {
-        g.save(); g.strokeStyle = 'rgba(255,255,255,.28)'; g.setLineDash([8, 8]); g.lineWidth = 2; rr(r.x, r.y, r.w, r.h, r.r ?? 10); g.stroke();
-        g.fillStyle = 'rgba(255,255,255,.45)'; g.font = '500 15px Inter, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
-        g.fillText(`Stage position ${e.index + 1}`, r.x + r.w / 2, r.y + r.h / 2); g.restore();
-      }
+      else editorOnly((c) => {
+        c.strokeStyle = 'rgba(255,255,255,.28)'; c.setLineDash([8, 8]); c.lineWidth = 2; c.beginPath(); c.roundRect(r.x, r.y, r.w, r.h, r.r ?? 10); c.stroke();
+        c.fillStyle = 'rgba(255,255,255,.45)'; c.font = '500 15px Inter, sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle';
+        c.fillText(`Stage position ${e.index + 1}`, r.x + r.w / 2, r.y + r.h / 2);
+      });
     }
   } else {
     const rects = layoutRects(onStage.length, S.state.layout === 'custom' ? 'split' : S.state.layout, area);
@@ -966,6 +1008,7 @@ function draw() {
   drawOverlays(t);
   if (S.state.ticker) drawTicker(t); // keep ticker above tiles
   drawFrame();
+  drawAds();
   drawBanner(t, H - (tickH || 0) - 10);
   drawFeatured(t, H - (tickH || 0) - 10);
   drawCaptions(H - (tickH || 0) - (S.state.banner ? 150 : 24));
@@ -976,10 +1019,10 @@ function contrastInk(hex) { const n = parseInt(hex.slice(1), 16); const [r, gg, 
 
 // Render loop: rAF while visible; a worker clock keeps recordings smooth in background tabs.
 let lastFrame = 0;
-function frame() { lastFrame = performance.now(); S.local.pres?.draw?.(); draw(); meters(); speakingCards(); requestAnimationFrame(frame); }
+function frame() { lastFrame = performance.now(); S.local.pres?.draw?.(); draw(); flushEditorLayers(); meters(); speakingCards(); requestAnimationFrame(frame); }
 requestAnimationFrame(frame);
 const clock = new Worker(URL.createObjectURL(new Blob(['setInterval(()=>postMessage(0),33)'], { type: 'text/javascript' })));
-clock.onmessage = () => { if (performance.now() - lastFrame > 120) { S.local.pres?.draw?.(); draw(); } };
+clock.onmessage = () => { if (performance.now() - lastFrame > 120) { S.local.pres?.draw?.(); draw(); flushEditorLayers(); } };
 
 function meters() {
   const lvl = Math.min(100, (localMeter?.level() || 0) * 400 * (S.local.micOn ? 1 : 0));
@@ -1159,9 +1202,14 @@ const ELEMENT_DEFAULTS = {
   timer: () => ({ type: 'timer', x: .42, y: .025, w: .16, h: .08, mode: 'clock', target: 0, size: 40, color: '#ffffff', bg: '' }),
   media: () => ({ type: 'media', x: .025, y: .07, w: .7, h: .86, radius: 12 }),
   ai: () => ({ type: 'ai', x: .62, y: .07, w: .355, h: .62, size: 22 }),
-  tip: () => ({ type: 'tip', x: .025, y: .7, w: .3, h: .25, provider: 'paypal', url: '', label: 'Support the show' }),
+  tip: () => ({ type: 'tip', x: .025, y: .64, w: .34, h: .31, provider: 'paypal', url: '', label: 'Support the show' }),
+  callin: () => ({ type: 'callin', x: .66, y: .66, w: .31, h: .28, url: '', label: 'Call in live', phone: '' }),
 };
 const TEMPLATES = [
+  { id: 'present-full', name: 'Full-screen slides', els: [
+    { type: 'media', x: 0, y: 0, w: 1, h: 1, radius: 0 },
+    { type: 'slot', index: 0, x: .835, y: .045, w: .145, h: .19, radius: 12 }, { type: 'slot', index: 1, x: .835, y: .255, w: .145, h: .19, radius: 12 },
+    { type: 'slot', index: 2, x: .835, y: .465, w: .145, h: .19, radius: 12 }] },
   { id: 'present', name: 'Presentation', els: [
     { type: 'media', x: .025, y: .07, w: .73, h: .86 },
     { type: 'slot', index: 0, x: .775, y: .07, w: .2, h: .27 }, { type: 'slot', index: 1, x: .775, y: .365, w: .2, h: .27 }, { type: 'slot', index: 2, x: .775, y: .66, w: .2, h: .27 }] },
@@ -1211,7 +1259,7 @@ function autoPresentScene(id) {
   const patch = { presenter: id };
   if (!hasMediaScene()) {
     S.prePres = { layout: S.state.layout, elements: elementsCopy(), scene: S.state.scene || '' };
-    Object.assign(patch, templatePatch(isVertical() ? TPL['v-present'] : TPL.present));
+    Object.assign(patch, templatePatch(isVertical() ? TPL['v-present'] : TPL['present-full']));
   }
   setStage(patch);
 }
@@ -1307,7 +1355,7 @@ function drawChatEl(e, t) {
   const msgs = S.feed.filter((m) => !isModerated(m) && (!e.fade || now - m.ts < 90_000)).slice(-e.max);
   g.save();
   rr(r.x, r.y, r.w, r.h, 12); g.clip();
-  if (e.bg) { g.fillStyle = 'rgba(10,14,22,.55)'; g.fillRect(r.x, r.y, r.w, r.h); }
+  if (e.bg) drawPanel(r.x, r.y, r.w, r.h, 12);
   let y = r.y + r.h - pad;
   g.textBaseline = 'alphabetic'; g.textAlign = 'left';
   for (let i = msgs.length - 1; i >= 0 && y > r.y + pad; i--) {
@@ -1360,9 +1408,9 @@ function drawImageEl(e) {
   const r = px(e), img = assetImg(e.asset);
   g.save();
   if (!img) {
-    if (isHost()) { g.strokeStyle = 'rgba(255,255,255,.35)'; g.setLineDash([6, 6]); g.lineWidth = 2; rr(r.x, r.y, r.w, r.h, 8); g.stroke();
-      g.fillStyle = 'rgba(255,255,255,.6)'; g.font = '500 14px Inter, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
-      g.fillText(e.asset ? 'Loading image…' : 'Choose an image', r.x + r.w / 2, r.y + r.h / 2); }
+    editorOnly((c) => { c.strokeStyle = 'rgba(255,255,255,.35)'; c.setLineDash([6, 6]); c.lineWidth = 2; c.beginPath(); c.roundRect(r.x, r.y, r.w, r.h, 8); c.stroke();
+      c.fillStyle = 'rgba(255,255,255,.6)'; c.font = '500 14px Inter, sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle';
+      c.fillText(e.asset ? 'Loading image…' : 'Choose an image', r.x + r.w / 2, r.y + r.h / 2); });
     g.restore(); return;
   }
   g.globalAlpha = e.opacity;
@@ -1400,12 +1448,12 @@ function drawMediaEl(e) {
     const k = Math.min(r.w / sw, r.h / sh), dw = sw * k, dh = sh * k;
     g.drawImage(src, r.x + (r.w - dw) / 2, r.y + (r.h - dh) / 2, dw, dh);
   } else {
-    g.fillStyle = 'rgba(255,255,255,.5)'; g.font = '500 17px Inter, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
-    g.fillText(who ? `Waiting for ${who.name}'s screen…` : 'Present a screen, video or PDF to fill this space', r.x + r.w / 2, r.y + r.h / 2);
+    const hint = who ? `Waiting for ${who.name}'s screen…` : 'Click or drop a PDF, video or image here';
+    editorOnly((c) => { c.fillStyle = 'rgba(255,255,255,.5)'; c.font = '500 17px Inter, sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText(hint, r.x + r.w / 2, r.y + r.h / 2); });
   }
   g.restore();
   if (who && S.state.brand.names) {
-    const label = who.me ? 'You are presenting' : `${who.name} is presenting`;
+    const label = `${who.name} is presenting`; // the program is shared, so never "you"
     g.font = '600 14px Inter, sans-serif';
     const tw = g.measureText(label).width;
     g.fillStyle = 'rgba(5,8,16,.72)'; rr(r.x + 12, r.y + 12, tw + 24, 28, 8); g.fill();
@@ -1421,15 +1469,17 @@ function drawAiEl(e) {
   const r = px(e), fs = e.size || 22, pad = 22, lh = fs * 1.38;
   const items = S.ai.items, a = [...items].reverse().find((i) => i.role === 'assistant');
   const q = a ? items[items.indexOf(a) - 1] : [...items].reverse().find((i) => i.role === 'user');
+  if (a && a.say && !a.text) a.text = a.say;
   g.save();
   rr(r.x, r.y, r.w, r.h, 16); g.clip();
-  g.fillStyle = 'rgba(8,14,30,.86)'; g.fillRect(r.x, r.y, r.w, r.h);
-  const grd = g.createLinearGradient(r.x, r.y, r.x, r.y + 80); grd.addColorStop(0, 'rgba(120,170,255,.12)'); grd.addColorStop(1, 'rgba(120,170,255,0)');
-  g.fillStyle = grd; g.fillRect(r.x, r.y, r.w, 80);
+  drawPanel(r.x, r.y, r.w, r.h, 16);
   const prov = (a || q)?.provider || S.aiProv || 'claude';
-  g.fillStyle = AI_COLOR[prov]; g.beginPath(); g.arc(r.x + pad + 6, r.y + pad + 9, 6, 0, Math.PI * 2); g.fill();
-  g.fillStyle = 'rgba(255,255,255,.9)'; g.font = '700 15px Inter, sans-serif'; g.textAlign = 'left'; g.textBaseline = 'middle';
-  g.fillText(`${AI_NAME[prov]} · research`, r.x + pad + 20, r.y + pad + 10);
+  drawOrb(r.x + pad + 10, r.y + pad + 10, 10, performance.now());
+  g.fillStyle = 'rgba(255,255,255,.95)'; g.font = `800 17px ${stageFont()}`; g.textAlign = 'left'; g.textBaseline = 'middle';
+  g.fillText(S.aiName, r.x + pad + 30, r.y + pad + 10);
+  const nw = g.measureText(S.aiName).width;
+  g.fillStyle = 'rgba(220,230,255,.6)'; g.font = '600 13px Inter, sans-serif';
+  g.fillText(`${AI_NAME[prov]} · ${{ thinking: 'thinking…', speaking: 'speaking', listening: 'listening' }[S.aiStatus] || 'producer'}`, r.x + pad + 40 + nw, r.y + pad + 11);
   let y = r.y + pad + 40;
   const maxW = r.w - pad * 2;
   if (!q) {
@@ -1474,12 +1524,8 @@ function drawTipEl(e) {
   g.shadowColor = 'rgba(0,0,0,.35)'; g.shadowBlur = 24; g.shadowOffsetY = 8;
   g.fillStyle = '#ffffff'; rr(r.x, r.y, r.w, r.h, 16); g.fill();
   g.shadowColor = 'transparent';
-  const qs = r.h - pad * 2, q = e.url ? qrFor(e.url) : null;
-  if (q) {
-    const n = q.getModuleCount(), cell = qs / n;
-    g.fillStyle = '#0b1020';
-    for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) if (q.isDark(i, j)) g.fillRect(r.x + pad + j * cell, r.y + pad + i * cell, Math.ceil(cell), Math.ceil(cell));
-  } else { g.fillStyle = '#e8edf6'; rr(r.x + pad, r.y + pad, qs, qs, 8); g.fill(); }
+  const qs = r.h - pad * 2;
+  drawQr(tipUrl(e.provider, e.url) || e.url, r.x + pad, r.y + pad, qs);
   const tx = r.x + pad * 2 + qs, tw = r.w - (tx - r.x) - pad;
   g.textAlign = 'left'; g.textBaseline = 'alphabetic';
   g.fillStyle = info.color; rr(tx, r.y + pad, Math.min(tw, 14 + g.measureText(info.name).width + 30), 24, 6); g.fill();
@@ -1493,9 +1539,10 @@ function drawTipEl(e) {
 }
 function drawOverlays(t) {
   for (const e of S.state.elements || []) {
-    if (e.type === 'media') { drawMediaEl(e); continue; }
+    if (e.type === 'media') continue; // drawn before the cameras
     if (e.type === 'ai') { drawAiEl(e); continue; }
     if (e.type === 'tip') { drawTipEl(e); continue; }
+    if (e.type === 'callin') { drawCallinEl(e); continue; }
     if (e.type === 'chat') drawChatEl(e, t);
     else if (e.type === 'text') drawTextEl(e);
     else if (e.type === 'image') drawImageEl(e);
@@ -1754,7 +1801,7 @@ $('#saveLayout').onclick = () => {
   const name = $('#layoutName').value.trim() || `Layout ${savedLayouts().length + 1}`;
   const els = elementsCopy().map((e) => (e.type === 'image' && S.assets.get(e.asset)?.data ? { ...e, _data: S.assets.get(e.asset).data } : e));
   const all = savedLayouts().filter((l) => l.name !== name);
-  all.unshift({ name, layout: S.state.layout, elements: els });
+  all.unshift({ name, layout: S.state.layout, elements: els, media: $('#sceneMedia').value || '' });
   try { store.set('layouts', all.slice(0, 20)); localStorage.getItem('gather:layouts') || 0; } catch {}
   if (!savedLayouts().some((l) => l.name === name)) return toast('Could not save. The images may be too large for this browser.', { err: true });
   $('#layoutName').value = '';
@@ -1767,6 +1814,8 @@ async function loadLayout(l) {
     else els.push(e);
   }
   setStage({ layout: l.layout || 'custom', elements: els, scene: 'saved:' + l.name });
+  const it = l.media && S.library.find((x) => x.id === l.media);
+  if (it) { if (S.local.pres) stopPresentation(); await presentLibrary(it); }
   toast(`Scene “${l.name}”.`);
 }
 // Twitch + chat overlay controls (Chat panel)
@@ -2485,32 +2534,6 @@ $('#wDoneClose').onclick = () => $('#wizDlg').close();
 
 // ---------------------------------------------------------------- live captions (Web Speech API, each person's own mic)
 const cap = { rec: null, want: false, lang: '', lines: new Map(), warned: false };
-function syncCaptions() {
-  const c = S.state.captions || {};
-  const want = !!(S.studio && c.on && S.local.micOn && S.local.audio);
-  if (want === cap.want && (!want || cap.lang === c.lang)) return;
-  cap.want = want; stopCaptionRec();
-  if (want) startCaptionRec(c.lang || 'en-US');
-}
-function startCaptionRec(lang) {
-  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if (!SR) { if (!cap.warned) { cap.warned = true; toast('Your browser can’t transcribe speech, so your captions won’t show. Chrome and Edge can.'); } return; }
-  const r = new SR();
-  r.continuous = true; r.interimResults = true; r.lang = lang; cap.lang = lang;
-  r.onresult = (e) => {
-    let interim = '', fin = '';
-    for (let i = e.resultIndex; i < e.results.length; i++) { const t = e.results[i][0].transcript; if (e.results[i].isFinal) fin += t; else interim += t; }
-    const text = (fin || interim).trim();
-    if (!text) return;
-    showCaption(S.id, S.name || 'You', text, !!fin);
-    sendCaption(text, !!fin);
-  };
-  r.onerror = (e) => { if (e.error === 'not-allowed' || e.error === 'service-not-allowed') { cap.want = false; toast('Captions need permission to use speech recognition.', { err: true }); } };
-  r.onend = () => { if (cap.want && cap.rec === r) setTimeout(() => { try { r.start(); } catch {} }, 250); };
-  cap.rec = r;
-  try { r.start(); } catch {}
-}
-function stopCaptionRec() { const r = cap.rec; cap.rec = null; try { r?.stop(); } catch {} }
 let capLast = 0, capTimer = null;
 function sendCaption(text, final) {
   clearTimeout(capTimer);
@@ -2727,7 +2750,7 @@ function setPhase(p) {
   $('#statusText').textContent = { offline: 'Studio offline', connecting: 'Connecting…', online: 'Studio connected', reconnecting: 'Reconnecting…' }[p];
   renderAll();
 }
-function renderAll() { renderHeader(); renderStageUI(); renderCrew(); renderDock(); renderPanels(); renderFeedUI(); renderLayoutsPanel(); renderAIPanel(); renderTips(); renderBrandPanel(); renderStreamPanel(); renderGuestView(); syncTwitch(); syncCaptions(); }
+function renderAll() { renderHeader(); renderStageUI(); renderCrew(); renderDock(); renderPanels(); renderFeedUI(); renderLayoutsPanel(); renderAIPanel(); renderTips(); renderBrandPanel(); renderStreamPanel(); renderGuestView(); syncTwitch(); syncCaptions(); renderDeck(); renderAds(); renderCallin(); renderProducerUI(); renderGreenRoom(); }
 function renderHeader() {
   $('#studioTitle').textContent = S.state.title || DEFAULT_TITLE;
   $('#enterTopText').textContent = S.studio ? 'Room details' : 'Enter studio';
@@ -2740,21 +2763,36 @@ function renderStageUI() {
   renderScenes();
   $('#hostNote').hidden = isHost();
 }
+const ICON = {
+  stage: '<svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="12" rx="2"/><path d="M8 21h8M12 17v4"/></svg>',
+  mute: '<svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21M4 4l16 16"/></svg>',
+  kick: '<svg viewBox="0 0 24 24"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4M10 17l-5-5 5-5M5 12h11"/></svg>',
+};
 function renderCrew() {
   const list = $('#crewList'), add = $('.crew-add');
   const people = S.studio ? participants() : [];
   $('#crewCount').textContent = `${people.length} / ${MAX}`;
+  $('#peopleTabCount').textContent = people.length || '';
   const keep = new Set(people.map((p) => 'card-' + cssId(p.id)));
   for (const li of $$('.crew-card', list)) if (!keep.has(li.id)) li.remove();
+  const host = isHost();
   for (const p of people) {
     let li = $('#card-' + cssId(p.id));
     if (!li) {
       li = document.createElement('li'); li.className = 'crew-card'; li.id = 'card-' + cssId(p.id); li.dataset.id = p.id;
-      li.innerHTML = `<div class="crew-thumb"><video autoplay playsinline></video><div class="ini" hidden><span></span></div><div class="tagrow"></div></div><div class="crew-info"><div class="crew-name"><span class="nm"></span></div><div class="crew-sub"></div><button class="crew-act" hidden></button></div>`;
+      li.innerHTML = `<div class="crew-thumb"><video autoplay playsinline></video><div class="ini" hidden><span></span></div><div class="tagrow"></div>`
+        + `<div class="crew-tools"><button type="button" class="ct-stage" title="">${ICON.stage}</button><button type="button" class="ct-mute" title="Ask to mute">${ICON.mute}</button><button type="button" class="ct-kick" title="Remove from studio">${ICON.kick}</button></div></div>`
+        + `<div class="crew-info"><div class="crew-name"><span class="nm"></span></div><div class="crew-sub"></div></div>`;
       const v = $('video', li);
       if (p.me) { v.muted = true; const ov = outVideo(); if (ov) v.srcObject = new MediaStream([ov]); v.classList.toggle('mirror', !!S.videoFx.mirror); }
       else if (p.peer.stream.getTracks().length) { v.srcObject = p.peer.stream; playEl(v); }
-      $('.crew-act', li).addEventListener('click', () => toggleStage(p.id));
+      $('.ct-stage', li).addEventListener('click', () => toggleStage(p.id));
+      $('.ct-mute', li).addEventListener('click', () => { wsSend({ type: 'mute', id: p.id }); toast(`Muted ${p.name}.`); });
+      $('.ct-kick', li).addEventListener('click', () => {
+        const btn = $('.ct-kick', li);
+        if (!btn.classList.contains('confirm')) { btn.classList.add('confirm'); btn.title = 'Click again to remove'; setTimeout(() => { btn.classList.remove('confirm'); btn.title = 'Remove from studio'; }, 3000); return; }
+        wsSend({ type: 'kick', id: p.id }); toast(`${p.name} was removed. Lock the studio to keep them out.`);
+      });
       list.insertBefore(li, add);
     }
     list.insertBefore(li, add); // keep join order
@@ -2763,18 +2801,21 @@ function renderCrew() {
     nameRow.querySelector('svg')?.remove();
     if (!p.mic) nameRow.insertAdjacentHTML('beforeend', '<svg viewBox="0 0 24 24" aria-label="Muted"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21M4 4l16 16"/></svg>');
     const ini = $('.ini', li); ini.hidden = !!p.cam;
+    const bg = assetImg(p.offbg);
+    ini.style.backgroundImage = bg ? `url("${bg.src}")` : '';
     const avImg = assetImg(p.avatar), span = $('span', ini);
     if (avImg) { span.textContent = ''; span.style.backgroundImage = `url("${avImg.src}")`; span.classList.add('has-av'); }
     else { span.textContent = initials(p.name); span.style.backgroundImage = ''; span.classList.remove('has-av'); }
     const tags = $('.tagrow', li); tags.replaceChildren();
-    if (p.id === S.host) tags.insertAdjacentHTML('beforeend', '<span class="mini">Host</span>');
-    if (S.state.stage.includes(p.id)) tags.insertAdjacentHTML('beforeend', '<span class="mini live">On stage</span>');
-    if (p.sharing) tags.insertAdjacentHTML('beforeend', '<span class="mini">Presenting</span>');
-    const act = $('.crew-act', li);
-    act.hidden = !isHost();
     const on = S.state.stage.includes(p.id);
-    act.textContent = on ? 'Remove from stage' : 'Add to stage';
-    act.classList.toggle('on', on);
+    if (p.id === S.host) tags.insertAdjacentHTML('beforeend', '<span class="mini">Host</span>');
+    if (on) tags.insertAdjacentHTML('beforeend', '<span class="mini live">Live</span>');
+    if (p.sharing) tags.insertAdjacentHTML('beforeend', '<span class="mini">Presenting</span>');
+    li.classList.toggle('on-stage', on);
+    $('.crew-tools', li).hidden = !host;
+    const st = $('.ct-stage', li); st.title = on ? 'Take off stage' : 'Put on stage'; st.setAttribute('aria-label', st.title); st.classList.toggle('on', on);
+    $('.ct-mute', li).hidden = !!p.me || !p.mic;
+    $('.ct-kick', li).hidden = !!p.me;
   }
   renderCrewSubs();
   add.hidden = people.length >= MAX;
@@ -3068,7 +3109,7 @@ function leave() {
   $$('.crew-card').forEach((n) => n.remove());
   S.feed = []; seenFeed.clear(); editor.sel = null; if (editor.on) setEditing(false);
   rumble.url = ''; clearTimeout(rumble.timer);
-  S.local.avatarId = ''; S.prePres = null; cap.lines.clear();
+  S.local.avatarId = ''; S.local.offbgId = ''; S.prePres = null; cap.lines.clear(); S.lobby = []; speechHub.ptt = false;
   history.replaceState(null, '', '/');
   setPhase('offline');
   toast('You left the studio.');
@@ -3076,6 +3117,615 @@ function leave() {
 addEventListener('beforeunload', (e) => { if (S.studio && (S.rec || S.peers.size)) { e.preventDefault(); e.returnValue = ''; } });
 
 // Fullscreen stage
+
+// ---------------------------------------------------------------- present any file: drop it on the stage or click the empty space
+async function presentImage(file) {
+  const img = await loadImg(URL.createObjectURL(file));
+  const c = presCanvas(), cg = c.getContext('2d');
+  const track = c.captureStream(10).getVideoTracks()[0];
+  track.contentHint = 'detail';
+  startPresentation({ kind: 'image', name: file.name, track, source: c, draw() { fitDraw(cg, img, img.naturalWidth, img.naturalHeight, '#05070d'); }, stop() { track.stop(); URL.revokeObjectURL(img.src); } });
+}
+function presentFile(file) {
+  if (!file) return;
+  if (!S.studio) return toast('Enter a studio first, then drop your file on the stage.');
+  const t = file.type || '', n = (file.name || '').toLowerCase();
+  if (t === 'application/pdf' || n.endsWith('.pdf')) return presentPDF(file);
+  if (t.startsWith('video/') || /\.(mp4|webm|mov|m4v)$/.test(n)) return presentVideo(file);
+  if (t.startsWith('image/') || /\.(png|jpe?g|webp|gif)$/.test(n)) return presentImage(file).catch((e) => toast('Image: ' + e.message, { err: true }));
+  toast('Drop a PDF, a video (MP4, WebM, MOV) or an image.', { err: true });
+}
+$('#imageFile').onchange = (e) => { presentFile(e.target.files[0]); e.target.value = ''; };
+$('#anyFile').onchange = (e) => { presentFile(e.target.files[0]); e.target.value = ''; };
+(() => {
+  const st = $('#stage');
+  let depth = 0;
+  st.addEventListener('dragenter', (e) => { if (![...(e.dataTransfer?.types || [])].includes('Files')) return; e.preventDefault(); depth++; st.classList.add('dropping'); });
+  st.addEventListener('dragover', (e) => { if ([...(e.dataTransfer?.types || [])].includes('Files')) e.preventDefault(); });
+  st.addEventListener('dragleave', () => { if (--depth <= 0) { depth = 0; st.classList.remove('dropping'); } });
+  st.addEventListener('drop', (e) => {
+    e.preventDefault(); depth = 0; st.classList.remove('dropping');
+    const f = e.dataTransfer.files?.[0];
+    if (!f) return;
+    if (e.shiftKey && isHost()) return libAddFiles(e.dataTransfer.files);
+    presentFile(f);
+  });
+  // Click the empty presentation space to choose a file.
+  const mediaAt = (ev) => {
+    if (editor.on || !S.studio) return null;
+    const r = st.getBoundingClientRect(), x = (ev.clientX - r.left) / r.width, y = (ev.clientY - r.top) / r.height;
+    if (S.state.layout !== 'custom') return null;
+    return (S.state.elements || []).find((e) => e.type === 'media' && x >= e.x && x <= e.x + e.w && y >= e.y && y <= e.y + e.h) || null;
+  };
+  st.addEventListener('mousemove', (ev) => { st.classList.toggle('can-drop', !!mediaAt(ev) && !presenterOf()); });
+  st.addEventListener('click', (ev) => { if (ev.target.closest('.pres-bar, .cmd-bar, .cmd-toggle')) return; if (mediaAt(ev) && !presenterOf()) $('#anyFile').click(); });
+})();
+
+// ---------------------------------------------------------------- glass / solid panels drawn on the stage
+function drawPanel(x, y, w, h, r = 16) {
+  const b = S.state.brand;
+  g.save(); rr(x, y, w, h, r); g.clip();
+  if (b.panel === 'solid') { g.fillStyle = b.panelColor || '#0f172a'; g.fillRect(x, y, w, h); }
+  else {
+    if ('filter' in g) { g.filter = 'blur(18px) saturate(140%)'; g.drawImage(canvas, x, y, w, h, x, y, w, h); g.filter = 'none'; }
+    g.fillStyle = 'rgba(12,20,44,.5)'; g.fillRect(x, y, w, h);
+    const hl = g.createLinearGradient(x, y, x, y + Math.min(h, 140)); hl.addColorStop(0, 'rgba(255,255,255,.12)'); hl.addColorStop(1, 'rgba(255,255,255,0)');
+    g.fillStyle = hl; g.fillRect(x, y, w, h);
+  }
+  g.restore();
+  g.save(); g.strokeStyle = b.panel === 'solid' ? 'rgba(255,255,255,.08)' : 'rgba(255,255,255,.2)'; g.lineWidth = 1; rr(x + .5, y + .5, w - 1, h - 1, r); g.stroke(); g.restore();
+}
+
+// ---------------------------------------------------------------- audio-only tile: custom background, smooth voice rings
+const lvlSmooth = new Map();
+const blurCache = new WeakMap();
+function blurredOf(img) {
+  let c = blurCache.get(img);
+  if (c) return c;
+  c = document.createElement('canvas'); c.width = 320; c.height = 180;
+  const cg = c.getContext('2d'); cg.filter = 'blur(12px)';
+  const k = Math.max(340 / img.naturalWidth, 200 / img.naturalHeight);
+  cg.drawImage(img, (320 - img.naturalWidth * k) / 2, (180 - img.naturalHeight * k) / 2, img.naturalWidth * k, img.naturalHeight * k);
+  blurCache.set(img, c);
+  return c;
+}
+function drawAudioTile(p, x, y, w, h, t) {
+  const brand = S.state.brand;
+  const prev = lvlSmooth.get(p.id) || 0, target = p.mic ? Math.min(1, p.level * 7) : 0;
+  const lv = prev + (target - prev) * (target > prev ? .3 : .06);
+  lvlSmooth.set(p.id, lv);
+  const bgImg = assetImg(p.offbg), av = assetImg(p.avatar);
+  if (bgImg) cover(g, bgImg, x, y, w, h);
+  else if (av) g.drawImage(blurredOf(av), x, y, w, h);
+  else {
+    const gr = g.createRadialGradient(x + w * .3, y + h * .2, 10, x + w / 2, y + h / 2, Math.max(w, h) * .8);
+    gr.addColorStop(0, hexA(brand.color, .55)); gr.addColorStop(.55, '#152042'); gr.addColorStop(1, '#0a1022');
+    g.fillStyle = gr; g.fillRect(x, y, w, h);
+  }
+  g.fillStyle = brand.panel === 'solid' ? hexA(brand.panelColor || '#0f172a', .55) : 'rgba(8,14,30,.32)'; g.fillRect(x, y, w, h);
+  const cx = x + w / 2, cy = y + h / 2, rad = Math.min(w, h) * .17;
+  // soft glow that breathes with the voice
+  const glowR = rad * (1.7 + lv * 1.1);
+  const glow = g.createRadialGradient(cx, cy, rad * .7, cx, cy, glowR);
+  glow.addColorStop(0, hexA(brand.color, .22 + lv * .4)); glow.addColorStop(1, hexA(brand.color, 0));
+  g.fillStyle = glow; g.beginPath(); g.arc(cx, cy, glowR, 0, Math.PI * 2); g.fill();
+  // three rings that travel outward; louder voice = wider, brighter rings
+  for (let i = 0; i < 3; i++) {
+    const ph = ((t / 2200) + i / 3) % 1;
+    const rr2 = rad * (1.08 + ph * (0.45 + lv * 1.25));
+    g.strokeStyle = hexA('#ffffff', (1 - ph) * (0.06 + lv * .35)); g.lineWidth = 1.5 + lv * 3;
+    g.beginPath(); g.arc(cx, cy, rr2, 0, Math.PI * 2); g.stroke();
+  }
+  const r2 = rad * (1 + lv * .07);
+  g.save(); g.beginPath(); g.arc(cx, cy, r2, 0, Math.PI * 2); g.clip();
+  if (av) cover(g, av, cx - r2, cy - r2, r2 * 2, r2 * 2);
+  else {
+    const dg = g.createLinearGradient(cx - r2, cy - r2, cx + r2, cy + r2); dg.addColorStop(0, brand.color); dg.addColorStop(1, hexA(brand.color, .65));
+    g.fillStyle = dg; g.fillRect(cx - r2, cy - r2, r2 * 2, r2 * 2);
+    g.fillStyle = '#fff'; g.font = `700 ${Math.round(r2 * .78)}px ${stageFont()}`; g.textAlign = 'center'; g.textBaseline = 'middle';
+    g.fillText(initials(p.name), cx, cy + 2);
+  }
+  g.restore();
+  g.strokeStyle = 'rgba(255,255,255,.4)'; g.lineWidth = 2; g.beginPath(); g.arc(cx, cy, r2, 0, Math.PI * 2); g.stroke();
+  // a small live voice meter under the photo
+  const bars = 5, bw = Math.max(3, rad * .07), gap = bw * .9, total = bars * bw + (bars - 1) * gap;
+  for (let i = 0; i < bars; i++) {
+    const wob = .35 + .65 * Math.abs(Math.sin(t / 180 + i * 1.3));
+    const bh = Math.max(bw, rad * .55 * (p.mic ? (.15 + lv * wob) : .1));
+    g.fillStyle = p.mic ? 'rgba(255,255,255,.85)' : 'rgba(255,255,255,.3)';
+    rr(cx - total / 2 + i * (bw + gap), cy + r2 + rad * .55 - bh / 2, bw, bh, bw / 2); g.fill();
+  }
+}
+
+// ---------------------------------------------------------------- sponsor ads and the call-in card
+function drawAds() {
+  let a = S.state.ads;
+  if (!a?.on || !a.items?.length) return;
+  const per = (a.every || 12) * 1000, now = Date.now();
+  const idx = Math.floor(now / per) % a.items.length, into = now % per;
+  const img = assetImg(a.items[idx]);
+  if (!img) return;
+  const alpha = Math.min(1, into / 450, (per - into) / 450);
+  let w, h, x, y;
+  const callin = (S.state.elements || []).find((e) => e.type === 'callin');
+  let pos = a.pos || 'br';
+  if (callin && pos === 'br' && callin.x + callin.w > .6 && callin.y + callin.h > .6) pos = 'tr';
+  if (callin && pos === 'bl' && callin.x < .4 && callin.y + callin.h > .6) pos = 'tr';
+  a = { ...a, pos };
+  if (a.pos === 'bottom') { h = H * .12; w = Math.min(W - 80, h * img.naturalWidth / img.naturalHeight); x = (W - w) / 2; y = H - h - 18; }
+  else {
+    w = Math.min(W * .22, (H * .22) * img.naturalWidth / img.naturalHeight); h = w * img.naturalHeight / img.naturalWidth;
+    x = a.pos === 'bl' ? 28 : W - w - 28; y = a.pos === 'tr' ? 70 : H - h - 28;
+  }
+  g.save(); g.globalAlpha = alpha;
+  g.shadowColor = 'rgba(0,0,0,.35)'; g.shadowBlur = 20; g.shadowOffsetY = 6;
+  rr(x, y, w, h, 10); g.clip(); g.shadowColor = 'transparent';
+  g.drawImage(img, x, y, w, h);
+  g.restore();
+}
+function drawQr(url, x, y, size) {
+  const q = url ? qrFor(url) : null;
+  if (!q) { g.fillStyle = '#e8edf6'; rr(x, y, size, size, 8); g.fill(); return; }
+  const n = q.getModuleCount(), cell = Math.max(1, Math.floor(size / n)), real = cell * n, ox = x + Math.floor((size - real) / 2), oy = y + Math.floor((size - real) / 2);
+  g.fillStyle = '#0b1020';
+  for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) if (q.isDark(i, j)) g.fillRect(ox + j * cell, oy + i * cell, cell, cell);
+}
+function drawCallinEl(e) {
+  const r = px(e), pad = 16;
+  drawPanel(r.x, r.y, r.w, r.h, 16);
+  const qs = r.h - pad * 2;
+  g.fillStyle = '#ffffff'; rr(r.x + pad, r.y + pad, qs, qs, 10); g.fill();
+  drawQr(e.url, r.x + pad + 8, r.y + pad + 8, qs - 16);
+  const tx = r.x + pad * 2 + qs, tw = r.w - (tx - r.x) - pad;
+  g.textAlign = 'left'; g.textBaseline = 'alphabetic';
+  g.fillStyle = '#f43f5e'; g.beginPath(); g.arc(tx + 6, r.y + pad + 10, 5, 0, Math.PI * 2); g.fill();
+  g.fillStyle = 'rgba(255,255,255,.8)'; g.font = '700 13px Inter, sans-serif'; g.fillText('LIVE CALL-IN', tx + 18, r.y + pad + 15);
+  g.fillStyle = '#ffffff'; g.font = `800 24px ${stageFont()}`;
+  wrapLines(e.label || 'Call in live', tw, 2).forEach((l, i) => g.fillText(l, tx, r.y + pad + 50 + i * 28));
+  g.fillStyle = 'rgba(230,238,255,.85)'; g.font = '600 15px Inter, sans-serif';
+  if (e.phone) g.fillText(wrapLines(e.phone, tw, 1)[0], tx, r.y + r.h - pad - 26);
+  g.fillText(wrapLines((e.url || '').replace(/^https?:\/\//, ''), tw, 1)[0] || '', tx, r.y + r.h - pad - 4);
+}
+
+// ---------------------------------------------------------------- deck: scenes and people swap under a fixed stage
+S.deck = 'scenes';
+function deckLayers() { return isHost() ? ['scenes', 'people', ...(S.lobby?.length ? ['lobby'] : [])] : ['people']; }
+function setDeck(name) {
+  const layers = deckLayers();
+  if (!layers.includes(name)) name = layers[0];
+  const i = layers.indexOf(name);
+  S.deck = name;
+  $$('.deck-layer').forEach((el) => {
+    const j = layers.indexOf(el.dataset.layer);
+    el.classList.toggle('on', j === i);
+    el.classList.toggle('above', j >= 0 && j < i);
+    el.classList.toggle('below', j < 0 || j > i);
+    el.setAttribute('aria-hidden', String(j !== i));
+  });
+  $$('.deck-tabs button').forEach((b) => { const on = b.dataset.deck === name; b.classList.toggle('on', on); b.setAttribute('aria-selected', on); });
+}
+$$('.deck-tabs button').forEach((b) => b.addEventListener('click', () => setDeck(b.dataset.deck)));
+(() => {
+  let lock = 0;
+  const onWheel = (e) => {
+    if (innerWidth <= 900) return;
+    if (e.target.closest('.side, .rail, dialog, .pres-bar, .cmd-bar')) return;
+    if (Math.abs(e.deltaY) < Math.abs(e.deltaX) || Math.abs(e.deltaY) < 8) return;
+    e.preventDefault();
+    if (Date.now() < lock) return;
+    const layers = deckLayers(), i = layers.indexOf(S.deck);
+    const next = layers[Math.max(0, Math.min(layers.length - 1, i + (e.deltaY > 0 ? 1 : -1)))];
+    if (next !== S.deck) { setDeck(next); lock = Date.now() + 520; }
+  };
+  $('.studio').addEventListener('wheel', onWheel, { passive: false });
+  let ty = null;
+  $('#deck').addEventListener('touchstart', (e) => { ty = e.touches[0].clientY; }, { passive: true });
+  $('#deck').addEventListener('touchend', (e) => {
+    if (ty == null) return;
+    const dy = e.changedTouches[0].clientY - ty; ty = null;
+    if (Math.abs(dy) < 40) return;
+    const layers = deckLayers(), i = layers.indexOf(S.deck);
+    setDeck(layers[Math.max(0, Math.min(layers.length - 1, i + (dy < 0 ? 1 : -1)))]);
+  }, { passive: true });
+})();
+$('#lockSwitch').onchange = (e) => { if (!isHost()) return; setStage({ locked: e.target.checked }); toast(e.target.checked ? 'Studio locked. New guests knock and wait for you.' : 'Studio unlocked.'); };
+function renderDeck() {
+  const host = isHost();
+  $('#lockSwitch').checked = !!S.state.locked; $('#lockSwitch').disabled = !host || !S.studio;
+  $('#lockWrap').hidden = !host || !S.studio;
+  const n = S.lobby?.length || 0;
+  $('#lobbyTab').hidden = !host || !n;
+  $('#lobbyCount').textContent = n;
+  if (!deckLayers().includes(S.deck)) setDeck(deckLayers()[0]); else setDeck(S.deck);
+}
+
+// ---------------------------------------------------------------- waiting room + call-in line
+S.lobby = [];
+function renderLobby() {
+  const ul = $('#lobbyList');
+  ul.replaceChildren(...(S.lobby || []).map((w) => {
+    const li = document.createElement('li'); li.className = 'lobby-card';
+    const av = document.createElement('span'); av.className = 'lobby-av'; av.textContent = initials(w.name);
+    const info = document.createElement('div'); info.className = 'lobby-info';
+    const b = document.createElement('b'); b.textContent = w.name;
+    const s2 = document.createElement('span'); s2.textContent = (w.callin ? 'Calling in' : 'Wants to join') + (w.note ? ` · ${w.note}` : '');
+    info.append(b, s2);
+    const ok = document.createElement('button'); ok.type = 'button'; ok.className = 'btn primary sm'; ok.textContent = 'Let in';
+    ok.onclick = () => wsSend({ type: 'admit', id: w.id, accept: true });
+    const no = document.createElement('button'); no.type = 'button'; no.className = 'btn ghost sm'; no.textContent = 'Decline';
+    no.onclick = () => wsSend({ type: 'admit', id: w.id, accept: false });
+    li.append(av, info, ok, no);
+    return li;
+  }));
+  renderDeck();
+}
+async function refreshLobby() { if (!S.studio || !isHost()) return; try { S.lobby = (await api('lobbyList', creds())).lobby; renderLobby(); } catch {} }
+setInterval(() => { if (S.studio && isHost() && S.lobby?.length) refreshLobby(); }, 10000);
+const callinLink = () => `${location.origin}/c/${S.studio}`;
+$('#callinCopy').onclick = () => { if (!S.studio) return toast('Enter a studio first.'); copy(callinLink(), 'Call-in link copied.'); };
+$('#callinCard').onclick = () => {
+  if (!S.studio) return toast('Enter a studio first.');
+  const els = elementsCopy().filter((e) => e.type !== 'callin');
+  els.push(withDefaults({ type: 'callin', x: .66, y: .66, w: .31, h: .28, url: callinLink(), label: $('#callinLabel').value.trim() || 'Call in live', phone: $('#callinPhone').value.trim() }));
+  setStage({ elements: els });
+  toast('Call-in card is on stage.');
+};
+function renderCallin() {
+  $('#callinUrl').textContent = S.studio ? callinLink().replace(/^https?:\/\//, '') : 'Enter a studio to get your call-in link';
+  $('#callinCopy').disabled = !S.studio; $('#callinCard').disabled = !S.studio || !isHost();
+}
+// Callers: knock and wait
+async function startKnock(code, callin) {
+  S.knockCode = code;
+  $('#enterFields').hidden = true; $('#knockWait').hidden = false;
+  $('#knockMsg').textContent = callin ? 'You’re in the call-in queue. The host will bring you in shortly.' : 'This studio is locked. The host has been told you’re here.';
+  try {
+    const r = await api('knock', { studio: code, name: S.name || 'Caller', callin: !!callin, note: $('#knockNote')?.value || '' });
+    S.knock = { code, ...r };
+    for (;;) {
+      await new Promise((res) => setTimeout(res, 2000));
+      if (!S.knock || S.knock.code !== code) return;
+      const st = await api('knockPoll', { studio: code, id: r.id, tok: r.tok });
+      if (st.status === 'admitted') { S.knock = null; $('#knockMsg').textContent = 'You’re in. Connecting…'; await join(code, { pass: st.pass, callin: !!callin }); return; }
+      if (st.status === 'declined') { S.knock = null; $('#knockMsg').textContent = 'The host couldn’t take you right now.'; return; }
+    }
+  } catch (e) { $('#knockMsg').textContent = e.message; S.knock = null; }
+}
+$('#knockCancel').onclick = () => {
+  if (S.knock) api('knockCancel', { studio: S.knock.code, id: S.knock.id, tok: S.knock.tok }).catch(() => {});
+  S.knock = null; $('#knockWait').hidden = true; $('#enterFields').hidden = false;
+};
+function kickedOut(msg) { leave(); toast(msg || 'The host removed you from this studio.', { err: true, ms: 6000 }); }
+
+// ---------------------------------------------------------------- camera-off background (per person)
+function renderOffBg() {
+  const d = store.get('offBg', '');
+  $('#offBgThumb').hidden = !d; if (d) $('#offBgThumb').src = d;
+  $('#offBgClear').hidden = !d;
+}
+$('#offBgPick').onclick = () => $('#offBgFile').click();
+$('#offBgFile').onchange = async (e) => {
+  const f = e.target.files[0]; e.target.value = '';
+  if (!f) return;
+  try { store.set('offBg', await compressImage(f)); renderOffBg(); if (S.studio) uploadOffBg(true); toast('Shown behind your photo when your camera is off.'); }
+  catch (err) { toast(err.message, { err: true }); }
+};
+$('#offBgClear').onclick = () => { store.set('offBg', ''); S.local.offbgId = ''; renderOffBg(); if (S.studio) sendMeta({ offbg: '' }); };
+async function uploadOffBg(force) {
+  const d = store.get('offBg', '');
+  if (!d || !S.studio || (S.local.offbgId && !force)) return;
+  try { S.local.offbgId = await storeAsset(d); sendMeta({ offbg: S.local.offbgId }); } catch {}
+}
+
+// ---------------------------------------------------------------- brand: panels, logo, sponsor ads
+$$('#panelSeg button').forEach((b) => b.addEventListener('click', () => { if (isHost()) brandPref({ panel: b.dataset.panel }); }));
+$('#panelColor').oninput = (e) => { if (isHost()) brandPref({ panelColor: e.target.value }); };
+$('#adsSwitch').onchange = (e) => { if (!isHost()) return; setStage({ ads: { ...S.state.ads, on: e.target.checked } }); };
+$('#adEvery').onchange = (e) => setStage({ ads: { ...S.state.ads, every: Number(e.target.value) } });
+$$('#adPosSeg button').forEach((b) => b.addEventListener('click', () => setStage({ ads: { ...S.state.ads, pos: b.dataset.ap } })));
+$('#adPick').onclick = () => { if (!isHost()) return; $('#adFile').click(); };
+$('#adFile').onchange = async (e) => {
+  const files = [...e.target.files].slice(0, 8); e.target.value = '';
+  const items = [...(S.state.ads?.items || [])];
+  for (const f of files) {
+    if (items.length >= 8) break;
+    try { const data = await compressImage(f); items.push(await storeAsset(data)); } catch (err) { toast(err.message, { err: true }); }
+  }
+  setStage({ ads: { ...S.state.ads, on: true, items } });
+  toast(`${files.length} sponsor image${files.length === 1 ? '' : 's'} added.`);
+};
+function renderAds() {
+  const a = S.state.ads || { items: [] }, host = isHost();
+  $('#adsSwitch').checked = !!a.on; $('#adsSwitch').disabled = !host;
+  $('#adEvery').value = String(a.every || 12);
+  $$('#adPosSeg button').forEach((b) => { b.classList.toggle('on', b.dataset.ap === (a.pos || 'br')); b.disabled = !host; });
+  $('#adList').replaceChildren(...(a.items || []).map((id, i) => {
+    const d = document.createElement('div'); d.className = 'ad-thumb';
+    const im = assetImg(id); if (im) { const x = document.createElement('img'); x.src = im.src; x.alt = ''; d.append(x); }
+    const del = document.createElement('button'); del.type = 'button'; del.textContent = '✕'; del.setAttribute('aria-label', 'Remove sponsor image'); del.disabled = !host;
+    del.onclick = () => { const items = [...a.items]; items.splice(i, 1); setStage({ ads: { ...a, items } }); };
+    d.append(del); return d;
+  }));
+  $('#adOpts').hidden = !(a.items || []).length;
+  $$('#panelSeg button').forEach((b) => { b.classList.toggle('on', b.dataset.panel === (S.state.brand.panel || 'glass')); b.disabled = !host; });
+  $('#panelColor').value = S.state.brand.panelColor || '#0f172a'; $('#panelColorRow').hidden = S.state.brand.panel !== 'solid';
+}
+
+// ---------------------------------------------------------------- green room quick controls
+$$('#grFx button').forEach((b) => b.addEventListener('click', () => { $(`#bgFxSeg [data-fx="${b.dataset.fx}"]`)?.click(); renderGreenRoom(); }));
+$('#grCam').onchange = (e) => { $('#camSelect').value = e.target.value; $('#camSelect').dispatchEvent(new Event('change')); };
+$('#grMic').onchange = (e) => { $('#micSelect').value = e.target.value; $('#micSelect').dispatchEvent(new Event('change')); };
+function renderGreenRoom() {
+  $$('#grFx button').forEach((b) => b.classList.toggle('on', b.dataset.fx === S.videoFx.effect));
+  for (const [from, to] of [['#camSelect', '#grCam'], ['#micSelect', '#grMic']]) {
+    const src = $(from), dst = $(to);
+    if (dst.options.length !== src.options.length) dst.replaceChildren(...[...src.options].map((o) => new Option(o.text, o.value)));
+    dst.value = src.value;
+  }
+}
+
+// ---------------------------------------------------------------- media library (this browser) + scenes with media
+S.library = [];
+function libDb() {
+  return new Promise((res, rej) => {
+    const r = indexedDB.open('gather-library', 1);
+    r.onupgradeneeded = () => r.result.createObjectStore('items', { keyPath: 'id' });
+    r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error);
+  });
+}
+async function libTx(mode, fn) { const db = await libDb(); return new Promise((res, rej) => { const tx = db.transaction('items', mode); const out = fn(tx.objectStore('items')); tx.oncomplete = () => res(out?.result ?? out); tx.onerror = () => rej(tx.error); }); }
+async function libLoad() { try { S.library = (await libTx('readonly', (s) => s.getAll())) || []; } catch { S.library = []; } renderLibrary(); }
+const libKind = (f) => f.type === 'application/pdf' || /\.pdf$/i.test(f.name) ? 'pdf' : f.type.startsWith('video/') ? 'video' : f.type.startsWith('image/') ? 'image' : '';
+async function libAddFiles(files) {
+  for (const f of [...files]) {
+    const kind = libKind(f);
+    if (!kind) { toast(`${f.name}: use a PDF, video or image.`, { err: true }); continue; }
+    if (f.size > 500 * 1048576) { toast(`${f.name} is over 500 MB.`, { err: true }); continue; }
+    await libTx('readwrite', (s) => s.put({ id: uid() + uid(), name: f.name.replace(/\.[^.]+$/, ''), kind, blob: f, type: f.type, size: f.size, added: Date.now() }));
+  }
+  await libLoad(); toast('Added to your media library.');
+}
+$('#libPick').onclick = () => $('#libFile').click();
+$('#libFile').onchange = (e) => { libAddFiles(e.target.files); e.target.value = ''; };
+$('#libUrlAdd').onclick = async () => {
+  let u = $('#libUrl').value.trim();
+  if (!u) return;
+  if (!/^https?:\/\//i.test(u)) u = 'https://' + u;
+  try { new URL(u); } catch { return toast('That doesn’t look like a web address.', { err: true }); }
+  const name = $('#libUrlName').value.trim() || new URL(u).hostname.replace(/^www\./, '');
+  await libTx('readwrite', (s) => s.put({ id: uid() + uid(), name, kind: /youtu\.?be/.test(u) ? 'youtube' : 'link', url: u, added: Date.now() }));
+  $('#libUrl').value = ''; $('#libUrlName').value = ''; libLoad();
+};
+async function presentLibrary(it) {
+  if (!it) return;
+  if (it.kind === 'link' || it.kind === 'youtube') return offerOpen(it.url, it.name);
+  presentFile(new File([it.blob], it.name + ({ pdf: '.pdf', video: '', image: '' }[it.kind] || ''), { type: it.type }));
+}
+const KIND_LABEL = { pdf: 'PDF', video: 'Video', image: 'Image', link: 'Web', youtube: 'YouTube' };
+function renderLibrary() {
+  const ul = $('#libList');
+  ul.replaceChildren(...S.library.map((it) => {
+    const li = document.createElement('li'); li.className = 'el-row lib-row';
+    const k = document.createElement('span'); k.className = 'lib-kind k-' + it.kind; k.textContent = KIND_LABEL[it.kind];
+    const nm = document.createElement('span'); nm.className = 'el-pick'; nm.textContent = it.name;
+    const go = document.createElement('button'); go.type = 'button'; go.className = 'btn glassy sm'; go.textContent = 'Present'; go.onclick = () => presentLibrary(it);
+    const del = mkBtn('✕', 'Remove from library', async () => { await libTx('readwrite', (s) => s.delete(it.id)); libLoad(); });
+    li.append(k, nm, go, del); return li;
+  }));
+  $('#libEmpty').hidden = !!S.library.length;
+  const sel = $('#sceneMedia'); const cur = sel.value;
+  sel.replaceChildren(new Option('No media', ''), ...S.library.map((it) => new Option(`${KIND_LABEL[it.kind]} · ${it.name}`, it.id)));
+  sel.value = cur;
+}
+
+// ---------------------------------------------------------------- AI producer: name it, talk to it, it runs the show
+S.aiName = store.get('aiName', 'Sam');
+S.aiWake = store.get('aiWake', false);
+S.aiStatus = 'idle';
+function setAiStatus(st) { S.aiStatus = st; $('#cmdBar').dataset.status = st; $('#cmdToggle').dataset.status = st; $('#cmdState').textContent = { idle: 'Ready', listening: 'Listening…', thinking: 'Thinking…', speaking: 'Speaking' }[st]; }
+function renderProducerUI() {
+  const host = isHost();
+  $('#cmdInput').placeholder = `Ask ${S.aiName}… “pull up the dog running video on YouTube”`;
+  $('#cmdName').textContent = S.aiName;
+  $('#cmdToggleName').textContent = S.aiName;
+  $('#cmdToggle').hidden = !host;
+  if (!host) $('#cmdBar').hidden = true;
+  if (document.activeElement !== $('#aiName')) $('#aiName').value = S.aiName;
+  $('#aiWake').checked = !!S.aiWake;
+  const v = store.get('aiVoice', 'browser');
+  $$('#aiVoiceSeg button').forEach((b) => b.classList.toggle('on', b.dataset.voice === v));
+  $('#aiVoiceNameRow').hidden = v !== 'openai';
+  $('#aiVoiceName').value = store.get('aiVoiceName', 'alloy');
+  $('#aiVoiceNote').textContent = v === 'openai' ? (store.get('aiKey:openai', '') ? 'Everyone in the stream and the recording hears it.' : 'Needs a ChatGPT (OpenAI) key, saved under ChatGPT above.') : v === 'browser' ? 'Only you hear this voice. Pick “Stream voice” for the audience.' : `${S.aiName} replies on screen without speaking.`;
+}
+$('#aiName').addEventListener('input', (e) => { S.aiName = e.target.value.trim().slice(0, 20) || 'Sam'; store.set('aiName', S.aiName); renderProducerUI(); });
+$('#aiWake').onchange = (e) => { S.aiWake = e.target.checked; store.set('aiWake', S.aiWake); syncCaptions(); toast(S.aiWake ? `Say “Hey ${S.aiName}” and then what you need.` : 'Wake word off.'); };
+$$('#aiVoiceSeg button').forEach((b) => b.addEventListener('click', () => { store.set('aiVoice', b.dataset.voice); renderProducerUI(); }));
+$('#aiVoiceName').onchange = (e) => store.set('aiVoiceName', e.target.value);
+$('#aiVoiceTest').onclick = () => speak(`Hi, I'm ${S.aiName}. Ready when you are.`);
+$('#cmdToggle').onclick = () => { const bar = $('#cmdBar'); bar.hidden = !bar.hidden; if (!bar.hidden) $('#cmdInput').focus(); };
+$('#cmdClose').onclick = () => { $('#cmdBar').hidden = true; };
+$('#cmdForm').addEventListener('submit', (e) => { e.preventDefault(); const v = $('#cmdInput').value; $('#cmdInput').value = ''; askProducer(v); });
+$('#cmdMic').onclick = () => {
+  if (!(window.SpeechRecognition || window.webkitSpeechRecognition)) return toast('Talking to your AI needs Chrome or Edge. You can type instead.', { err: true });
+  speechHub.ptt = !speechHub.ptt;
+  setAiStatus(speechHub.ptt ? 'listening' : 'idle');
+  syncCaptions();
+};
+$('#cmdShow').onclick = () => {
+  const p = S.pendingOpen;
+  if (!p) return;
+  if (p.step === 'open') {
+    window.open(p.url, 'gather-share', 'popup,width=1280,height=760');
+    p.step = 'share';
+    $('#cmdShow').textContent = 'Now share that window';
+  } else {
+    S.pendingOpen = null; $('#cmdShow').hidden = true;
+    presentScreen();
+  }
+};
+function offerOpen(url, label) {
+  S.pendingOpen = { url, label: label || url, step: 'open' };
+  $('#cmdBar').hidden = false;
+  $('#cmdShow').hidden = false;
+  $('#cmdShow').textContent = `Open “${String(label || new URL(url).hostname).slice(0, 40)}”`;
+  $('#cmdShow').title = url;
+}
+function findScene(name) {
+  const n = String(name || '').toLowerCase().trim();
+  const list = sceneList();
+  return list.find((s) => s.name.toLowerCase() === n) || list.find((s) => s.name.toLowerCase().includes(n) || n.includes(s.name.toLowerCase()));
+}
+function findLib(name) {
+  const n = String(name || '').toLowerCase().trim();
+  return S.library.find((i) => i.name.toLowerCase() === n) || S.library.find((i) => i.name.toLowerCase().includes(n) || n.includes(i.name.toLowerCase()));
+}
+function producerCtx() {
+  const sc = sceneList().find((x) => x.id === activeSceneId());
+  return {
+    name: S.aiName,
+    scenes: sceneList().map((s) => s.name),
+    library: S.library.map((i) => ({ name: i.name, kind: i.kind })),
+    now: `scene: ${sc?.name || 'custom'}; presenting: ${S.local.pres ? S.local.pres.kind + ' ' + S.local.pres.name : 'nothing'}; banner: ${S.state.banner?.text || 'none'}; people: ${participants().map((p) => p.name).join(', ')}`,
+  };
+}
+async function runActions(actions) {
+  for (const a of actions || []) {
+    try {
+      if (a.type === 'scene') { const sc = findScene(a.name); if (sc) applyScene(sc); else toast(`No scene called “${a.name}”.`); }
+      else if (a.type === 'present') { const it = findLib(a.name); if (it) await presentLibrary(it); else toast(`“${a.name}” isn’t in your media library.`); }
+      else if (a.type === 'stop') stopPresentation();
+      else if (a.type === 'banner') setStage({ banner: { id: uid(), text: String(a.text || '').slice(0, 120), sub: String(a.sub || '').slice(0, 120) } });
+      else if (a.type === 'hide_banner') setStage({ banner: null });
+      else if (a.type === 'countdown') {
+        const m = Math.max(1, Math.min(120, Number(a.minutes) || 5));
+        const els = elementsCopy().filter((e) => !(e.type === 'timer' && e.mode === 'countdown'));
+        els.push(withDefaults({ type: 'timer', mode: 'countdown', target: Date.now() + m * 60000 }));
+        setStage({ elements: els });
+      } else if (a.type === 'open' && /^https?:\/\//i.test(String(a.url || ''))) offerOpen(String(a.url), a.label);
+    } catch (e) { toast(e.message, { err: true }); }
+  }
+}
+async function askProducer(text) {
+  text = String(text || '').trim();
+  if (!text) return;
+  if (!isHost()) return toast('Only the host can direct the AI.', { err: true });
+  const prov = S.aiProv, key = store.get('aiKey:' + prov, '');
+  if (!key) { setTab('ai'); $('#aiKey').focus(); return toast(`Add your ${AI_NAME[prov]} key so ${S.aiName} can help.`, { err: true }); }
+  setAiStatus('thinking');
+  upsertAI({ id: uid(), role: 'user', text, provider: prov, done: true });
+  const history = S.ai.items.filter((i) => i.done && !i.error && (i.role === 'user' || i.role === 'assistant')).slice(-8).map((i) => ({ role: i.role, text: i.say || i.text }));
+  try {
+    const res = await fetch('/api/ai', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mode: 'agent', provider: prov, apiKey: key, model: store.get('aiModel:' + prov, ''), messages: history, ctx: producerCtx() }) });
+    const j = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(j.error || 'The AI request failed.');
+    upsertAI({ id: uid(), role: 'assistant', text: j.show || j.say || 'Done.', say: j.say, provider: prov, done: true });
+    $('#cmdReply').textContent = j.say || '';
+    await runActions(j.actions);
+    if (j.say) await speak(j.say);
+  } catch (e) {
+    upsertAI({ id: uid(), role: 'assistant', text: e.message, provider: prov, error: true, done: true });
+    toast(e.message, { err: true });
+  } finally { if (S.aiStatus !== 'listening') setAiStatus('idle'); }
+}
+// Voice out: OpenAI voice goes into the stream mix; the browser voice is heard only by the host.
+async function speak(text) {
+  const mode = store.get('aiVoice', 'browser');
+  if (mode === 'off' || !text) return;
+  setAiStatus('speaking');
+  try {
+    if (mode === 'openai') {
+      const key = store.get('aiKey:openai', '');
+      if (!key) throw new Error('Add a ChatGPT (OpenAI) key in the AI panel for the stream voice.');
+      const res = await fetch('/api/ai', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mode: 'tts', apiKey: key, text, voice: store.get('aiVoiceName', 'alloy') }) });
+      if (!res.ok) { const j = await res.json().catch(() => ({})); throw new Error(j.error || 'The voice request failed.'); }
+      const ctx = audioCtx();
+      const buf = await ctx.decodeAudioData(await res.arrayBuffer());
+      const src = ctx.createBufferSource(); src.buffer = buf;
+      const gn = ctx.createGain(); src.connect(gn); gn.connect(ctx.destination);
+      const an = ctx.createAnalyser(); an.fftSize = 512; gn.connect(an); S.aiAnalyser = an;
+      const mix = mixInMedia(gn); syncMedia();
+      await new Promise((r) => { src.onended = r; src.start(); });
+      mix.dispose(); syncMedia(); S.aiAnalyser = null;
+    } else if ('speechSynthesis' in window) {
+      await new Promise((r) => {
+        const u = new SpeechSynthesisUtterance(text);
+        const v = speechSynthesis.getVoices().find((x) => /^en/i.test(x.lang) && /natural|google|samantha|aria|jenny/i.test(x.name));
+        if (v) u.voice = v;
+        u.onend = r; u.onerror = r; speechSynthesis.speak(u);
+        setTimeout(r, 30000);
+      });
+    }
+  } catch (e) { toast(e.message, { err: true }); }
+  finally { if (S.aiStatus === 'speaking') setAiStatus('idle'); }
+}
+function aiVoiceLevel() {
+  const an = S.aiAnalyser;
+  if (!an) return S.aiStatus === 'speaking' ? .4 + .3 * Math.abs(Math.sin(performance.now() / 160)) : 0;
+  const b = new Float32Array(an.fftSize); an.getFloatTimeDomainData(b);
+  let s = 0; for (const v of b) s += v * v; return Math.min(1, Math.sqrt(s / b.length) * 6);
+}
+function drawOrb(cx, cy, r, t) {
+  const lv = aiVoiceLevel(), st = S.aiStatus;
+  const pulse = st === 'thinking' ? .08 * Math.sin(t / 140) : st === 'listening' ? .06 * Math.sin(t / 260) : lv * .25;
+  const rr2 = r * (1 + pulse);
+  const glow = g.createRadialGradient(cx, cy, rr2 * .4, cx, cy, rr2 * 2.2);
+  glow.addColorStop(0, hexA(S.state.brand.color, .45)); glow.addColorStop(1, hexA(S.state.brand.color, 0));
+  g.fillStyle = glow; g.beginPath(); g.arc(cx, cy, rr2 * 2.2, 0, Math.PI * 2); g.fill();
+  const a = t / 900;
+  const og = g.createLinearGradient(cx + Math.cos(a) * rr2, cy + Math.sin(a) * rr2, cx - Math.cos(a) * rr2, cy - Math.sin(a) * rr2);
+  og.addColorStop(0, '#7dd3fc'); og.addColorStop(.5, S.state.brand.color); og.addColorStop(1, '#a78bfa');
+  g.fillStyle = og; g.beginPath(); g.arc(cx, cy, rr2, 0, Math.PI * 2); g.fill();
+  g.strokeStyle = 'rgba(255,255,255,.55)'; g.lineWidth = 1.5; g.beginPath(); g.arc(cx, cy, rr2, 0, Math.PI * 2); g.stroke();
+}
+
+// ---------------------------------------------------------------- one speech recogniser for captions and the AI
+const speechHub = { rec: null, lang: '', ptt: false, armed: 0 };
+function speechWanted() {
+  const c = S.state.captions || {};
+  const caps = !!(S.studio && c.on && S.local.micOn && S.local.audio);
+  const ai = isHost() && (S.aiWake || speechHub.ptt);
+  return { caps, ai, any: caps || ai, lang: c.on ? (c.lang || 'en-US') : 'en-US' };
+}
+function syncCaptions() {
+  const w = speechWanted();
+  cap.want = w.caps;
+  if (!w.any) { stopSpeech(); return; }
+  if (speechHub.rec && speechHub.lang === w.lang) return;
+  stopSpeech(); startSpeech(w.lang);
+}
+function startSpeech(lang) {
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) { if (!cap.warned && cap.want) { cap.warned = true; toast('Your browser can’t transcribe speech, so your captions won’t show. Chrome and Edge can.'); } return; }
+  const r = new SR();
+  r.continuous = true; r.interimResults = true; r.lang = lang; speechHub.lang = lang;
+  r.onresult = (e) => {
+    let interim = '', fin = '';
+    for (let i = e.resultIndex; i < e.results.length; i++) { const t = e.results[i][0].transcript; if (e.results[i].isFinal) fin += t; else interim += t; }
+    const text = (fin || interim).trim();
+    if (!text) return;
+    if (cap.want) { showCaption(S.id, S.name || 'You', text, !!fin); sendCaption(text, !!fin); }
+    if (speechHub.ptt) {
+      $('#cmdInput').value = text;
+      if (fin) { speechHub.ptt = false; $('#cmdInput').value = ''; syncCaptions(); askProducer(fin.trim()); }
+      return;
+    }
+    if (S.aiWake && fin) {
+      const name = S.aiName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const m = fin.trim().match(new RegExp(`^(?:hey|ok|okay|yo)?[\\s,]*${name}[\\s,.!?]*(.*)$`, 'i'));
+      if (m) { if (m[1].trim()) askProducer(m[1].trim()); else { speechHub.armed = Date.now() + 7000; setAiStatus('listening'); } }
+      else if (speechHub.armed > Date.now()) { speechHub.armed = 0; askProducer(fin.trim()); }
+    }
+  };
+  r.onerror = (e) => { if (e.error === 'not-allowed' || e.error === 'service-not-allowed') { cap.want = false; speechHub.ptt = false; toast('Speech recognition needs microphone permission.', { err: true }); } };
+  r.onend = () => { if (speechHub.rec === r && speechWanted().any) setTimeout(() => { try { r.start(); } catch {} }, 250); };
+  speechHub.rec = r;
+  try { r.start(); } catch {}
+}
+function stopSpeech() { const r = speechHub.rec; speechHub.rec = null; try { r?.stop(); } catch {} }
+
+libLoad();
+renderOffBg();
 
 // ---------------------------------------------------------------- enter studio (green room)
 let enterMode = 'create', previewing = false;
@@ -3142,7 +3792,7 @@ $('#enterForm').addEventListener('submit', async (e) => {
   if (!code) { $('#enterErr').textContent = 'Paste the studio code your host sent you.'; $('#enterErr').hidden = false; return $('#enterCode').focus(); }
   S.name = name; store.set('name', name); $('#nameInput').value = name;
   $('#enterGo').disabled = true; $('#enterGo').textContent = 'Connecting…';
-  try { await join(code); }
+  try { await join(code, { callin: S.callin && enterMode === 'join' }); if (!S.studio) { $('#enterGo').textContent = 'Join studio'; $('#enterGo').disabled = false; } }
   catch (err) { setEnterMode(enterMode); showEnterErr(err.message); $('#enterGo').disabled = false; setPhase('offline'); }
 });
 $('#enterDlg').addEventListener('close', () => {
@@ -3207,7 +3857,8 @@ setTab('chat');
 setPhase('offline');
 renderHelp();
 acctBoot();
-const linkCode = location.pathname.startsWith('/s/') ? parseCode(location.pathname) : '';
+const linkCode = /^\/[sc]\//.test(location.pathname) ? parseCode(location.pathname.replace(/^\/c\//, '/s/')) : '';
+S.callin = location.pathname.startsWith('/c/');
 if (linkCode) openEnter('join', linkCode);
 window.__gather = S; // handy for debugging in the console
 window.__acct = acct;

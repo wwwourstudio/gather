@@ -49,7 +49,36 @@
         <div class="stage-wrap">
           <div class="stage" id="stage">
             <canvas id="stageCanvas" width="1280" height="720" aria-label="Studio stage"></canvas>
+            <canvas id="editorCanvas" width="1280" height="720" aria-hidden="true"></canvas>
             <div class="edit-layer" id="editLayer" hidden></div>
+            <div class="drop-hint" aria-hidden="true"><b>Drop to present</b><span>PDF, video or image</span></div>
+        <div class="pres-bar glass" id="presBar" hidden>
+              <span class="pres-kind" id="presKind">Slides</span>
+              <span class="pres-name" id="presName"></span>
+              <div class="pres-ctl" id="presPdf" hidden>
+                <button class="icon-btn" id="presPrev" aria-label="Previous slide (←)"><svg viewBox="0 0 24 24"><path d="m15 6-6 6 6 6"/></svg></button>
+                <span class="mono" id="presPage">1 / 1</span>
+                <button class="icon-btn" id="presNext" aria-label="Next slide (→)"><svg viewBox="0 0 24 24"><path d="m9 6 6 6-6 6"/></svg></button>
+              </div>
+              <div class="pres-ctl" id="presVid" hidden>
+                <button class="chip-btn" id="presPlay">Pause</button>
+                <input type="range" id="presSeek" min="0" max="1" step="0.001" value="0" aria-label="Seek">
+                <span class="mono" id="presTime">00:00 / 00:00</span>
+                <button class="chip-btn" id="presLoop" aria-pressed="false">Loop</button>
+              </div>
+              <button class="chip-btn danger" id="presStop">Stop</button>
+            </div>
+            <button type="button" class="cmd-toggle" id="cmdToggle" hidden data-status="idle"><i class="orb"></i><span id="cmdToggleName">Sam</span></button>
+            <div class="cmd-bar glass" id="cmdBar" hidden data-status="idle">
+              <div class="cmd-top"><i class="orb"></i><b id="cmdName">Sam</b><span id="cmdState">Ready</span><button type="button" class="cmd-x" id="cmdClose" aria-label="Close">✕</button></div>
+              <p class="cmd-reply" id="cmdReply" aria-live="polite"></p>
+              <button type="button" class="btn primary sm cmd-show" id="cmdShow" hidden>Open</button>
+              <form class="cmd-row" id="cmdForm" autocomplete="off">
+                <button type="button" class="cmd-mic" id="cmdMic" aria-label="Talk to your AI"><svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21"/></svg></button>
+                <input id="cmdInput" maxlength="600" placeholder="Ask Sam…" aria-label="Ask your AI">
+                <button class="btn primary sm" id="cmdGo">Go</button>
+              </form>
+            </div>
             <div class="stage-empty" id="stageEmpty">
               <div class="cam-badge"><svg viewBox="0 0 24 24"><path d="M3.5 7.5h11v9h-11z"/><path d="m14.5 10.5 6-3v9l-6-3"/></svg></div>
               <h1>Good conversations start here.</h1>
@@ -59,37 +88,30 @@
           </div>
         </div>
 
-        <div class="pres-bar" id="presBar" hidden>
-          <span class="pres-kind" id="presKind">Slides</span>
-          <span class="pres-name" id="presName"></span>
-          <div class="pres-ctl" id="presPdf" hidden>
-            <button class="icon-btn" id="presPrev" aria-label="Previous slide (←)"><svg viewBox="0 0 24 24"><path d="m15 6-6 6 6 6"/></svg></button>
-            <span class="mono" id="presPage">1 / 1</span>
-            <button class="icon-btn" id="presNext" aria-label="Next slide (→)"><svg viewBox="0 0 24 24"><path d="m9 6 6 6-6 6"/></svg></button>
-          </div>
-          <div class="pres-ctl" id="presVid" hidden>
-            <button class="chip-btn" id="presPlay">Pause</button>
-            <input type="range" id="presSeek" min="0" max="1" step="0.001" value="0" aria-label="Seek">
-            <span class="mono" id="presTime">00:00 / 00:00</span>
-            <button class="chip-btn" id="presLoop" aria-pressed="false">Loop</button>
-          </div>
-          <button class="chip-btn danger" id="presStop">Stop presenting</button>
-        </div>
-
-        <div class="scenes-wrap host-only">
-          <div class="scenes-head"><span class="label">Scenes</span><span class="host-note" id="hostNote" hidden>The host switches scenes</span></div>
-          <div class="scenes" id="sceneStrip" role="group" aria-label="Scenes"></div>
-        </div>
       </div>
 
-      <div class="crew glass">
-        <div class="crew-head">
-          <h2>In the studio <span id="crewCount">0 / 6</span></h2>
-          <button class="link" id="inviteCrew">+ Invite a guest</button>
+      <div class="deck glass" id="deck">
+        <div class="deck-head">
+          <div class="deck-tabs" role="tablist">
+            <button type="button" role="tab" class="host-only" data-deck="scenes">Scenes</button>
+            <button type="button" role="tab" data-deck="people">In the studio <i id="peopleTabCount"></i></button>
+            <button type="button" role="tab" data-deck="lobby" id="lobbyTab" hidden>Waiting <i class="hot" id="lobbyCount">0</i></button>
+          </div>
+          <span class="deck-hint">Scroll to switch</span>
+          <span class="host-note" id="hostNote" hidden>The host switches scenes</span>
+          <label class="lock" id="lockWrap" hidden title="New guests knock and wait for you"><input type="checkbox" class="switch sm" id="lockSwitch" role="switch"> Lock</label>
+          <span class="crew-count" id="crewCount">0 / 6</span>
+          <button class="link" id="inviteCrew">+ Invite</button>
         </div>
-        <ul class="crew-list" id="crewList">
-          <li class="crew-add"><button id="addSlot" aria-label="Invite a guest"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg><span>Invite</span></button></li>
-        </ul>
+        <div class="deck-body">
+          <div class="deck-layer" data-layer="scenes"><div class="scenes" id="sceneStrip" role="group" aria-label="Scenes"></div></div>
+          <div class="deck-layer" data-layer="people">
+            <ul class="crew-list" id="crewList">
+              <li class="crew-add"><button id="addSlot" aria-label="Invite a guest"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg><span>Invite</span></button></li>
+            </ul>
+          </div>
+          <div class="deck-layer" data-layer="lobby"><ul class="lobby-list" id="lobbyList"></ul></div>
+        </div>
       </div>
     </section>
 
@@ -134,6 +156,15 @@
           <div class="fld"><span>Upcoming</span>
             <div id="upSignin" class="soft-card"><p>Sign in to schedule streams, email invites and keep them here.</p><button type="button" class="btn glassy sm" id="upSigninBtn">Create an account or sign in</button></div>
             <div id="upWrap" hidden><ul class="up-list" id="upList"></ul><p class="hint" id="upEmpty">Nothing scheduled. Use Start a stream to plan one.</p></div>
+          </div>
+          <hr>
+          <div class="fld"><span>Call-in line <em>viewers talk to you live, over WebRTC</em></span>
+            <div class="soft-card callin">
+              <p class="mono" id="callinUrl">Enter a studio to get your call-in link</p>
+              <p class="hint" style="margin:0">Share this link or put the QR card on stage. Callers wait in line until you click <b>Let in</b>; you can mute or remove them any time.</p>
+              <div class="row2"><label class="fld"><span>Card headline</span><input id="callinLabel" maxlength="60" placeholder="Call in live"></label><label class="fld"><span>Phone or note <em>optional</em></span><input id="callinPhone" maxlength="40" placeholder="Text LIVE to 555-0100"></label></div>
+              <div class="row"><button type="button" class="btn glassy sm" id="callinCopy" disabled>Copy call-in link</button><button type="button" class="btn primary sm" id="callinCard" disabled>Show call-in card on stage</button></div>
+            </div>
           </div>
           <hr>
           <div class="fld"><span>Format</span>
@@ -194,6 +225,14 @@
             <button type="button" role="radio" data-prov="openai">ChatGPT</button>
             <button type="button" role="radio" data-prov="gemini">Gemini</button>
             <button type="button" role="radio" data-prov="grok">Grok</button>
+          </div>
+          <div class="producer-card">
+            <div class="row2"><label class="fld"><span>Your AI’s name</span><input id="aiName" maxlength="20" placeholder="Sam"></label>
+              <div class="fld"><span>Voice</span><div class="seg seg3" id="aiVoiceSeg"><button type="button" data-voice="browser">Me</button><button type="button" data-voice="openai">Stream</button><button type="button" data-voice="off">Off</button></div></div></div>
+            <div class="row2" id="aiVoiceNameRow" hidden><label class="fld"><span>Stream voice</span><select id="aiVoiceName"><option value="alloy">Alloy</option><option value="ash">Ash</option><option value="ballad">Ballad</option><option value="coral">Coral</option><option value="echo">Echo</option><option value="fable">Fable</option><option value="nova">Nova</option><option value="onyx">Onyx</option><option value="sage">Sage</option><option value="shimmer">Shimmer</option></select></label><div class="fld"><span>&nbsp;</span><button type="button" class="btn glassy" id="aiVoiceTest">Test voice</button></div></div>
+            <p class="hint" id="aiVoiceNote" style="margin:0"></p>
+            <label class="switch-row"><span><b>Wake word</b><small>Say “Hey Sam, pull up…” and it acts. Chrome or Edge.</small></span><input type="checkbox" class="switch" id="aiWake" role="switch"></label>
+            <p class="hint" style="margin:0">Or type on the stage: click the <b>orb</b> in the stage corner. It can switch scenes, present your library, show banners, start countdowns and find videos or sites for you to put on screen.</p>
           </div>
           <label class="fld"><span id="aiKeyLabel">API key</span><input id="aiKey" type="password" autocomplete="off" spellcheck="false" placeholder="Paste your key"></label>
           <p class="hint"><span id="aiKeyHelp"></span> Saved in this browser only. Each question is sent with the key through gather to the provider; gather never stores it.</p>
@@ -263,8 +302,17 @@
           </div>
           <div class="el-props form" id="elProps" hidden></div>
           <hr>
+          <div class="fld"><span>Media library <em>in this browser · your AI can present these by name</em></span>
+            <div class="row"><button type="button" class="btn glassy sm" id="libPick">+ PDF, video or image</button></div>
+            <div class="composer-row"><input id="libUrl" placeholder="YouTube or web link" spellcheck="false"><input id="libUrlName" maxlength="40" placeholder="Name"><button type="button" class="btn glassy sm" id="libUrlAdd">Add</button></div>
+            <ul class="el-list" id="libList"></ul>
+            <p class="hint" id="libEmpty">Add decks, clips and pictures once, then present them in one click, from a scene, or by asking your AI.</p>
+            <input type="file" id="libFile" accept="application/pdf,video/*,image/*" multiple hidden>
+          </div>
+          <hr>
           <div class="fld"><span>Save as a scene <em>appears in the scene strip</em></span>
             <div class="composer-row"><input id="layoutName" maxlength="40" placeholder="e.g. Interview, Q&amp;A, Product demo"><button type="button" class="btn glassy sm" id="saveLayout">Save</button></div>
+            <label class="fld"><span>Opens with <em>presented when the scene starts</em></span><select id="sceneMedia"><option value="">No media</option></select></label>
             <ul class="el-list" id="savedList"></ul>
             <p class="hint" id="savedEmpty">Saved scenes live in this browser, images included.</p>
           </div>
@@ -325,18 +373,34 @@
           <label class="fld"><span>Studio title <em>shown in the stage corner</em></span><input id="titleInput" maxlength="60" placeholder="The conversation studio"></label>
           <div class="row"><button class="btn glassy" id="titleApply">Apply title</button></div>
 
+          <h3 class="sec">Panels</h3>
+          <div class="fld"><span>AI window, chat overlay and camera-off tiles</span>
+            <div class="seg" id="panelSeg"><button type="button" data-panel="glass">Glass</button><button type="button" data-panel="solid">Solid colour</button></div>
+          </div>
+          <label class="fld" id="panelColorRow" hidden><span>Panel colour</span><input type="color" id="panelColor" value="#0f172a"></label>
+
           <h3 class="sec">Overlays</h3>
           <div class="fld"><span>Frame</span>
             <div class="seg seg4" id="frameSeg"><button type="button" data-frame="none">None</button><button type="button" data-frame="corners">Corners</button><button type="button" data-frame="border">Border</button><button type="button" data-frame="vignette">Vignette</button></div>
           </div>
           <div class="row"><button type="button" class="btn glassy sm" id="overlayPick">Add a full-screen overlay (PNG)</button><button type="button" class="btn ghost sm" id="overlayClear" hidden>Remove</button></div>
-          <div class="row"><button type="button" class="btn glassy sm" id="logoPick">Add your logo</button><button type="button" class="btn ghost sm" id="logoClear" hidden>Remove</button></div>
+          <h3 class="sec">Logo</h3>
+          <div class="row"><button type="button" class="btn glassy sm" id="logoPick">Upload your logo</button><button type="button" class="btn ghost sm" id="logoClear" hidden>Remove</button></div>
           <div class="form" id="logoRow" hidden>
             <div class="fld"><span>Logo position</span>
               <div class="seg seg4" id="logoPosSeg"><button type="button" data-lp="tl">Top left</button><button type="button" data-lp="tr">Top right</button><button type="button" data-lp="bl">Bottom left</button><button type="button" data-lp="br">Bottom right</button></div>
             </div>
             <label class="fld"><span>Logo size</span><input type="range" id="logoSize" min="0.04" max="0.35" step="0.01"></label>
           </div>
+          <h3 class="sec">Sponsors &amp; ads</h3>
+          <label class="switch-row"><span><b>Rotate sponsor banners</b><small>Up to 8 images, shown one at a time</small></span><input type="checkbox" class="switch" id="adsSwitch" role="switch"></label>
+          <div class="ad-list" id="adList"></div>
+          <div class="row"><button type="button" class="btn glassy sm" id="adPick">+ Add sponsor images</button></div>
+          <div class="form" id="adOpts" hidden>
+            <div class="fld"><span>Position</span><div class="seg seg4" id="adPosSeg"><button type="button" data-ap="br">Bottom right</button><button type="button" data-ap="bl">Bottom left</button><button type="button" data-ap="tr">Top right</button><button type="button" data-ap="bottom">Bottom banner</button></div></div>
+            <label class="fld"><span>Each ad shows for</span><select id="adEvery"><option value="8">8 seconds</option><option value="12">12 seconds</option><option value="20">20 seconds</option><option value="30">30 seconds</option><option value="60">1 minute</option></select></label>
+          </div>
+          <input type="file" id="adFile" accept="image/*" multiple hidden>
           <p class="hint" id="brandHint">Brand changes apply to everyone in the studio.</p>
           <input type="file" id="bgImgFile" accept="image/*" hidden><input type="file" id="overlayFile" accept="image/png,image/webp,image/gif" hidden><input type="file" id="logoFile" accept="image/*" hidden>
           <hr>
@@ -358,6 +422,10 @@
             </div>
           </div>
           <label class="fld"><span>Display name</span><input id="nameInput" maxlength="24" placeholder="Your name"></label>
+          <div class="fld"><span>Camera-off background <em>behind your photo when your camera is off</em></span>
+            <div class="row"><img id="offBgThumb" class="bgfx-thumb" alt="" hidden><button type="button" class="btn glassy sm" id="offBgPick">Choose a picture</button><button type="button" class="btn ghost sm" id="offBgClear" hidden>Remove</button></div>
+            <input type="file" id="offBgFile" accept="image/*" hidden>
+          </div>
 
           <h3 class="sec">Microphone</h3>
           <label class="fld"><span>Microphone</span><select id="micSelect"><option value="">Default microphone</option></select></label>
@@ -455,6 +523,7 @@
           <button role="menuitem" data-present="screen"><b>Share screen</b><span>A window, tab or full screen, with sound</span></button>
           <button role="menuitem" data-present="video"><b>Play a video</b><span>MP4, WebM or MOV from your computer</span></button>
           <button role="menuitem" data-present="pdf"><b>Present slides</b><span>A PDF deck, page by page</span></button>
+          <button role="menuitem" data-present="image"><b>Show an image</b><span>PNG, JPEG, WebP or GIF</span></button>
           <button role="menuitem" data-present="ai"><b>On-air AI</b><span>Research live with your own AI</span></button>
         </div>
       </div>
@@ -470,15 +539,17 @@
 
 <input type="file" id="videoFile" accept="video/*" hidden>
 <input type="file" id="pdfFile" accept="application/pdf" hidden>
+<input type="file" id="imageFile" accept="image/*" hidden>
+<input type="file" id="anyFile" accept="application/pdf,video/*,image/*" hidden>
 <input type="file" id="avatarFile" accept="image/*" hidden>
 
 <!-- ================= ENTER STUDIO ================= -->
 <dialog class="modal" id="enterDlg" aria-labelledby="enterH">
   <form method="dialog" class="modal-card glass wide" id="enterForm">
     <button class="x" value="cancel" aria-label="Close" formnovalidate>✕</button>
-    <h2 id="enterH">Step into the studio.</h2>
-    <p class="sub">Check how you look and sound, then start a new studio or join one with a code.</p>
+    <div class="enter-head"><h2 id="enterH">Step into the studio.</h2><p class="sub">Check how you look and sound. Nobody sees you until you go in.</p></div>
     <div class="green-room">
+      <div class="gr-col">
       <div class="preview">
         <video id="previewVideo" autoplay playsinline muted></video>
         <div class="preview-off" id="previewOff"><span id="previewInitials">?</span><small id="previewMsg">Camera is off</small></div>
@@ -488,7 +559,18 @@
           <div class="pmeter"><i id="pMeter"></i></div>
         </div>
       </div>
-      <div class="enter-fields">
+        <div class="gr-quick">
+          <div class="gr-fx" id="grFx" role="group" aria-label="Background"><button type="button" data-fx="none">Real</button><button type="button" data-fx="blur">Blur</button><button type="button" data-fx="image">Picture</button><button type="button" data-fx="green">Green screen</button></div>
+          <div class="gr-dev"><select id="grCam" aria-label="Camera"><option value="">Default camera</option></select><select id="grMic" aria-label="Microphone"><option value="">Default microphone</option></select></div>
+        </div>
+      </div>
+      <div class="knock-wait" id="knockWait" hidden>
+        <div class="knock-orb"><i></i><i></i><i></i></div>
+        <h3>Waiting for the host</h3>
+        <p id="knockMsg">The host has been told you’re here.</p>
+        <button type="button" class="btn ghost" id="knockCancel">Cancel</button>
+      </div>
+      <div class="enter-fields" id="enterFields">
         <div class="seg" role="tablist">
           <button type="button" role="tab" aria-selected="true" data-mode="create" class="on">Create studio</button>
           <button type="button" role="tab" aria-selected="false" data-mode="join">Join studio</button>

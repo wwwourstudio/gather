@@ -42,7 +42,7 @@ http.createServer((req, res) => {
     return;
   }
   let p = decodeURIComponent(u.pathname);
-  if (p === '/' || p.startsWith('/s/')) p = '/index.html';
+  if (p === '/' || p.startsWith('/s/') || p.startsWith('/c/')) p = '/index.html';
   const file = path.normalize(path.join(PUBLIC, p));
   if (!file.startsWith(PUBLIC)) { res.writeHead(403); return res.end(); }
   fs.readFile(file, (err, data) => {
