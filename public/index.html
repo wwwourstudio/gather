@@ -1,11 +1,16 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-theme="dark">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>gather — The conversation studio</title>
 <meta name="description" content="Bring your people together. A browser studio for up to six people with live stage layouts, banners, branding and local recording.">
-<meta name="theme-color" content="#ffffff">
+<meta name="theme-color" content="#0d1117">
+<script>
+  // Dark by default. Applied before first paint so the page never flashes light.
+  (function () { var t = 'dark'; try { t = JSON.parse(localStorage.getItem('gather:theme')) || 'dark'; } catch (e) {}
+    var r = document.documentElement; if (t === 'system') r.removeAttribute('data-theme'); else r.setAttribute('data-theme', t); })();
+</script>
 <link rel="icon" href="/icon.png" type="image/png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -200,6 +205,13 @@
       <section class="panel" data-panel="settings" hidden>
         <header class="panel-head"><h2>Studio settings</h2><p>Get comfortable before you connect.</p></header>
         <div class="panel-body form">
+          <div class="fld"><span>Appearance</span>
+            <div class="seg seg3" role="radiogroup" aria-label="Appearance" id="themeSeg">
+              <button type="button" role="radio" data-theme-opt="dark">Dark</button>
+              <button type="button" role="radio" data-theme-opt="light">Light</button>
+              <button type="button" role="radio" data-theme-opt="system">Match system</button>
+            </div>
+          </div>
           <label class="fld"><span>Display name</span><input id="nameInput" maxlength="24" placeholder="Your name"></label>
           <p class="hint">Changes show to others right away.</p>
           <label class="check"><input type="checkbox" id="startMic" checked> Start with microphone</label>

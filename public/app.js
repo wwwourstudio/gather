@@ -1553,6 +1553,18 @@ $('#namesChk').onchange = (e) => setStage({ brand: { names: e.target.checked } }
 $('#wmChk').onchange = (e) => setStage({ brand: { watermark: e.target.checked } });
 $('#titleApply').onclick = () => { setStage({ title: $('#titleInput').value.trim() }); toast('Title applied.'); };
 
+// Appearance: dark by default; light or follow the OS on request.
+function applyTheme(t) {
+  store.set('theme', t);
+  const root = document.documentElement;
+  if (t === 'system') root.removeAttribute('data-theme'); else root.setAttribute('data-theme', t);
+  const dark = t === 'dark' || (t === 'system' && matchMedia('(prefers-color-scheme: dark)').matches);
+  $('meta[name="theme-color"]').setAttribute('content', dark ? '#0d1117' : '#ffffff');
+  $$('#themeSeg button').forEach((b) => { const on = b.dataset.themeOpt === t; b.classList.toggle('on', on); b.setAttribute('aria-checked', on); });
+}
+$$('#themeSeg button').forEach((b) => b.addEventListener('click', () => applyTheme(b.dataset.themeOpt)));
+applyTheme(store.get('theme', 'dark'));
+
 // Settings
 $('#nameInput').value = S.name;
 let nameT;
