@@ -76,13 +76,7 @@ h1, h2, h3 { font-family: var(--f-head); letter-spacing: -.02em; margin: 0; text
 /* ---------- header ---------- */
 .top { display: flex; align-items: center; gap: 24px; padding: 14px 28px 14px max(16px, 28px); background: var(--surface); border-bottom: 1px solid var(--line); min-width: 0; }
 .logo { display: flex; align-items: center; gap: 10px; text-decoration: none; color: var(--ink); padding-right: 24px; border-right: 1px solid var(--line); }
-.logo-mark { width: 40px; height: 40px; display: block; object-fit: contain; }
-.logo-full { display: none; height: 35px; width: auto; }
-/* Dark theme: the original artwork (white wordmark) reads best, so show it whole. */
-@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .logo-full { display: block; } :root:not([data-theme="light"]) .logo-mark, :root:not([data-theme="light"]) .logo-word { display: none; } }
-:root[data-theme="dark"] .logo-full { display: block; }
-:root[data-theme="dark"] .logo-mark, :root[data-theme="dark"] .logo-word { display: none; }
-.logo-word { font: 800 25px/1 var(--f-head); letter-spacing: -.045em; }
+.logo-word { font: 800 34px/1 var(--f-head); letter-spacing: -.05em; }
 .logo-word i { color: #1f6feb; font-style: normal; margin-left: 2px; }
 .top-title { display: flex; flex-direction: column; min-width: 0; }
 .top-title strong { font-weight: 600; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -312,7 +306,7 @@ input[type="color"] { width: 100%; height: 40px; border: 1px solid var(--line-2)
   .side { order: 3; border-left: 0; height: 70vh; }
   .top { padding: 10px 16px; gap: 12px; }
   .logo { border: 0; padding: 0; }
-  .logo-word { font-size: 21px; }
+  .logo-word { font-size: 28px; }
   .status { display: none; }
   .btn.outline span, #inviteTop span { display: none; }
   #inviteTop { padding: 0 11px; }
