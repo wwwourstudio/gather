@@ -12,5 +12,5 @@
     "noUnusedParameters": true,
     "skipLibCheck": true
   },
-  "include": ["audit.ts"]
+  "include": ["*.ts"]
 }

@@ -87,3 +87,32 @@ The stack is plain ES modules in the browser plus Node serverless functions on V
   - The editor-only check compares the host's and a guest's program frames pixel by pixel.
   - Confirmed root causes carry specific fixes in `KNOWN`.
 - **Intermittent:** the pdf.js "same canvas during multiple render()" error showed up in 2 of 4 runs, when slide changes come in fast.
+
+## Design tokens and primitives (part B)
+- **`public/tokens.css`:** the single source of truth for every value, with a dark default and a light override. It covers:
+  - colour
+  - glass: `rgba(255,255,255,.06)`, `blur(20px) saturate(140%)`, 1px `rgba(255,255,255,.10)` border, inset top highlight, `0 8px 32px rgba(0,0,0,.35)` shadow, 2% SVG noise, and a solid fallback when `backdrop-filter` is unsupported
+  - space on a 4px grid
+  - radii 8/12/16
+  - control heights 28/36/44
+  - type: Plus Jakarta Sans for display, Inter for the UI
+  - icons 16/20 at stroke 1.75
+  - motion: 180ms ease-out, a `linear()` spring, and ~0ms under `prefers-reduced-motion`
+  - layers
+- **`public/ui.css` + `public/ui.js`:** the primitives.
+  - Button (primary, secondary, ghost, danger, live, link, on-media), IconButton (plus stacked, mutes, light, primary, filled), SegmentedControl, Toggle (with row and inline forms), Pill, GlassPanel (plus raised and on-media), Popover (native `[popover]`, anchored, with MenuItem), Modal, Tooltip (from `data-tip` or the aria-label of icon-only buttons), Input, Tile and Spinner.
+  - Every primitive has hover, active, focus-visible, disabled and loading (`aria-busy` via `busy()`), plus pressed or selected where it applies.
+  - Primitives placed on video surfaces (`.stage`, `.on-media`) re-scope the tokens, so they read correctly in both themes.
+- **`public/style.css`:** rewritten to only arrange primitives using tokens. Every interactive control in `index.html` and `app.js` now uses a primitive class. The audit checks this ("Control not built from a primitive").
+- **Icons:** Lucide only (46 icons). `scripts/build-icons.ts` builds them into the `public/icons.svg` sprite. All 34 hand-drawn SVGs and the `✕ ↑ ↓` glyphs were replaced.
+- **Fonts:** the UI loads only Inter and Plus Jakarta Sans. The stage's brand fonts (Onest, JetBrains Mono, Playfair, Bebas, DM Serif) load separately without blocking, and only the program canvas uses them.
+- **Motion:**
+  - Dragged layout boxes lift while dragging and settle back with a spring when released.
+  - Deck layers and the Toggle knob move on the spring curve.
+  - JS smooth scrolling also respects reduced motion.
+- **Fixed by the primitives:** the phone Present menu (audit P0) is now a top-layer Popover, so the dock can no longer clip it. Chat time-outs use one shared Popover instead of `<details>`.
+- **Verification:**
+  - `/ui-kit.html` shows every primitive in every state.
+  - `node scripts/ui-kit.ts` screenshots each state in both themes (`audit/screens/ui-kit/`, 214 images) and checks the token contract in the browser: heights, radii, icon size and stroke, fonts, tabular numbers, glass values, motion and reduced motion, Popover, Tooltip, loading state, no hand-drawn SVGs, and only two UI fonts.
+  - `node scripts/ui-shots.ts before|after` captures 14 states × 3 widths (`audit/screens/before`, `audit/screens/after`).
+  - All seven Playwright suites pass.

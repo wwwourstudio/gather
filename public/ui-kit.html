@@ -1,0 +1,206 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>gather UI kit</title>
+<meta name="robots" content="noindex">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap">
+<link rel="stylesheet" href="/tokens.css">
+<link rel="stylesheet" href="/ui.css">
+<style>
+  /* page layout only; every control below is a primitive from ui.css */
+  body { padding: var(--sp-8); background: radial-gradient(120% 90% at 50% 0%, var(--bg-2), var(--bg) 70%); min-height: 100%; }
+  main { max-width: 1120px; margin: 0 auto; display: grid; gap: var(--sp-6); }
+  header { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-4); }
+  h1 { font-size: var(--fs-32); font-weight: 800; letter-spacing: -0.04em; }
+  section { padding: var(--sp-6); display: grid; gap: var(--sp-4); }
+  section > h2 { font-size: var(--fs-16); }
+  .grid { display: flex; flex-wrap: wrap; gap: var(--sp-3) var(--sp-4); align-items: center; }
+  .grid > .caps:not(.pill) { flex-basis: 100%; margin-top: var(--sp-2); }
+  .grid > .tile { width: 160px; }
+  .grid > .input { width: 220px; }
+  .media { position: relative; border-radius: var(--r-md); padding: var(--sp-6); background: linear-gradient(135deg, #1b8a3a, #2563eb 55%, #9333ea); display: flex; gap: var(--sp-3); flex-wrap: wrap; align-items: center; min-height: 140px; }
+  .tokens { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: var(--sp-2); }
+  .tok { display: grid; gap: var(--sp-1); font-size: var(--fs-12); color: var(--ink-2); }
+  .tok i { display: block; height: var(--h-md); border-radius: var(--r-sm); border: 1px solid var(--line); }
+  .demo-pop { width: 260px; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <div><h1>gather UI kit</h1><p class="caps" style="margin: var(--sp-1) 0 0">Tokens · primitives · every state</p></div>
+    <div class="seg" role="radiogroup" aria-label="Theme" id="themeSeg">
+      <button type="button" role="radio" aria-checked="true" data-t="dark">Dark</button>
+      <button type="button" role="radio" aria-checked="false" data-t="light">Light</button>
+    </div>
+  </header>
+
+  <section class="glass" id="k-button">
+    <h2>Button</h2>
+    <div class="grid">
+      <span class="caps">Variants</span>
+      <button class="btn primary" data-kit="btn-primary">Go live</button>
+      <button class="btn" data-kit="btn-secondary">Invite</button>
+      <button class="btn ghost" data-kit="btn-ghost">Cancel</button>
+      <button class="btn danger" data-kit="btn-danger">Leave studio</button>
+      <button class="btn live" data-kit="btn-live">Stop</button>
+      <button class="btn link" data-kit="btn-link">Copy link</button>
+      <span class="caps">Sizes</span>
+      <button class="btn sm">Small 28</button>
+      <button class="btn">Medium 36</button>
+      <button class="btn lg">Large 44</button>
+      <button class="btn round"><svg class="i" aria-hidden="true"><use href="/icons.svg#i-user"/></svg>Round</button>
+      <span class="caps">States</span>
+      <button class="btn primary" disabled data-kit="btn-disabled">Disabled</button>
+      <button class="btn primary" aria-busy="true" data-kit="btn-loading">Loading</button>
+      <button class="btn" aria-pressed="true" data-kit="btn-pressed">Pressed</button>
+      <button class="btn" data-busy-demo>Click to load</button>
+    </div>
+  </section>
+
+  <section class="glass" id="k-iconbutton">
+    <h2>IconButton</h2>
+    <div class="grid">
+      <span class="caps">Variants</span>
+      <button class="icon-btn" aria-label="Settings" data-kit="ib-default"><svg class="i" aria-hidden="true"><use href="/icons.svg#i-sliders-horizontal"/></svg></button>
+      <button class="icon-btn filled" aria-label="Talk to your AI" data-kit="ib-filled"><svg class="i" aria-hidden="true"><use href="/icons.svg#i-mic"/></svg></button>
+      <button class="icon-btn primary" aria-label="Send message" data-kit="ib-primary"><svg class="i" aria-hidden="true"><use href="/icons.svg#i-send"/></svg></button>
+      <button class="icon-btn mutes" aria-pressed="true" aria-label="Unmute" data-kit="ib-muted"><span class="swap"><svg class="i when-off" aria-hidden="true"><use href="/icons.svg#i-mic"/></svg><svg class="i when-on" aria-hidden="true"><use href="/icons.svg#i-mic-off"/></svg></span></button>
+      <button class="icon-btn" aria-pressed="true" aria-label="Pinned" data-kit="ib-pressed"><svg class="i" aria-hidden="true"><use href="/icons.svg#i-monitor"/></svg></button>
+      <span class="caps">Sizes</span>
+      <button class="icon-btn sm filled" aria-label="Delete"><svg class="i sm" aria-hidden="true"><use href="/icons.svg#i-trash-2"/></svg></button>
+      <button class="icon-btn filled" aria-label="Copy"><svg class="i" aria-hidden="true"><use href="/icons.svg#i-copy"/></svg></button>
+      <button class="icon-btn lg filled round" aria-label="Camera"><svg class="i" aria-hidden="true"><use href="/icons.svg#i-video"/></svg></button>
+      <span class="caps">States</span>
+      <button class="icon-btn filled" disabled aria-label="Disabled" data-kit="ib-disabled"><svg class="i" aria-hidden="true"><use href="/icons.svg#i-lock"/></svg></button>
+      <button class="icon-btn filled" aria-busy="true" aria-label="Loading" data-kit="ib-loading"><svg class="i" aria-hidden="true"><use href="/icons.svg#i-upload"/></svg></button>
+      <span class="caps">Stacked</span>
+      <button class="icon-btn stacked" data-kit="ib-stacked"><svg class="i" aria-hidden="true"><use href="/icons.svg#i-monitor-up"/></svg><span class="caption">Present</span></button>
+      <button class="icon-btn stacked mutes" aria-pressed="true"><span class="swap"><svg class="i when-off" aria-hidden="true"><use href="/icons.svg#i-video"/></svg><svg class="i when-on" aria-hidden="true"><use href="/icons.svg#i-video-off"/></svg></span><span class="caption">Start camera</span></button>
+    </div>
+  </section>
+
+  <section class="glass" id="k-seg">
+    <h2>SegmentedControl</h2>
+    <div class="grid">
+      <span class="caps">Medium</span>
+      <div class="seg" role="radiogroup" aria-label="Format" data-kit="seg-md"><button type="button" class="on">Landscape 16:9</button><button type="button">Vertical 9:16</button></div>
+      <span class="caps">Small + count</span>
+      <div class="seg sm" role="tablist" aria-label="Deck" data-kit="seg-sm"><button type="button" class="on">Scenes</button><button type="button">In the studio <i class="count">3</i></button><button type="button">Waiting <i class="count hot">2</i></button></div>
+      <span class="caps">Disabled item</span>
+      <div class="seg" role="radiogroup" aria-label="Voice"><button type="button" class="on">Me</button><button type="button">Stream</button><button type="button" disabled>Off</button></div>
+    </div>
+  </section>
+
+  <section class="glass" id="k-toggle">
+    <h2>Toggle</h2>
+    <div class="grid">
+      <span class="caps">States</span>
+      <input type="checkbox" class="toggle" role="switch" aria-label="Off" data-kit="toggle-off">
+      <input type="checkbox" class="toggle" role="switch" aria-label="On" checked data-kit="toggle-on">
+      <input type="checkbox" class="toggle" role="switch" aria-label="Disabled" disabled data-kit="toggle-disabled">
+      <input type="checkbox" class="toggle" role="switch" aria-label="Saving" checked aria-busy="true" data-kit="toggle-loading">
+      <input type="checkbox" class="toggle sm" role="switch" aria-label="Small" checked>
+      <span class="caps">Row</span>
+      <label class="toggle-row" style="grid-column: span 3" data-kit="toggle-row"><span><b>Live captions</b><small>Each person’s browser transcribes their own mic.</small></span><input type="checkbox" class="toggle" role="switch"></label>
+      <span class="caps">Inline</span>
+      <label class="toggle-inline" style="grid-column: span 3"><input type="checkbox" class="toggle sm" checked><span>Start with camera on</span></label>
+    </div>
+  </section>
+
+  <section class="glass" id="k-pill">
+    <h2>Pill</h2>
+    <div class="grid">
+      <span class="caps">Variants</span>
+      <span class="pill" data-kit="pill">Draft</span>
+      <span class="pill live caps"><i class="dot"></i>Live</span>
+      <span class="pill accent">Host</span>
+      <span class="pill ok">Connected</span>
+      <span class="pill warn">Waiting</span>
+      <span class="pill danger">Blocked</span>
+      <span class="pill outline num">00:42:17</span>
+      <span class="pill lg"><i class="dot"></i>Studio connected</span>
+      <span class="caps">Button pill</span>
+      <button class="pill accent" data-kit="pill-button">Show on stage</button>
+      <button class="pill" disabled>Disabled</button>
+    </div>
+  </section>
+
+  <section class="glass" id="k-glass">
+    <h2>GlassPanel</h2>
+    <div class="media">
+      <div class="glass" style="padding: var(--sp-4); width: 220px" data-kit="glass">Glass: rgba(255,255,255,.06), blur 20, saturate 140, 1px border, top highlight, 2% noise</div>
+      <div class="glass raised" style="padding: var(--sp-4); width: 220px" data-kit="glass-raised">Raised: popovers, modals, toasts</div>
+      <div class="glass on-media" style="padding: var(--sp-3); display: flex; gap: var(--sp-2); align-items: center" data-kit="glass-on-media">
+        <span class="pill live caps">Slides</span><span class="num">3 / 12</span>
+        <button class="icon-btn sm" aria-label="Previous slide"><svg class="i sm" aria-hidden="true"><use href="/icons.svg#i-chevron-left"/></svg></button>
+        <button class="icon-btn sm" aria-label="Next slide"><svg class="i sm" aria-hidden="true"><use href="/icons.svg#i-chevron-right"/></svg></button>
+        <button class="btn sm live">Stop</button>
+      </div>
+    </div>
+  </section>
+
+  <section class="glass" id="k-overlays">
+    <h2>Tile · Popover · Modal · Tooltip · Input</h2>
+    <div class="grid">
+      <span class="caps">Tile</span>
+      <button class="tile" data-kit="tile"><span style="display:block;aspect-ratio:16/9;border-radius:6px;background:linear-gradient(135deg,#18305e,#2b2d6b)"></span>Solo</button>
+      <button class="tile on" data-kit="tile-on"><span style="display:block;aspect-ratio:16/9;border-radius:6px;background:linear-gradient(135deg,#18305e,#2b2d6b)"></span>Side by side</button>
+      <button class="tile dashed" style="min-height:96px"><svg class="i" aria-hidden="true"><use href="/icons.svg#i-plus"/></svg>Invite</button>
+      <span class="caps">Popover</span>
+      <button class="btn" id="popBtn" aria-haspopup="menu" aria-expanded="false" data-kit="popover-trigger"><svg class="i" aria-hidden="true"><use href="/icons.svg#i-monitor-up"/></svg>Present</button>
+      <span class="caps">Modal</span>
+      <button class="btn" id="modalBtn" data-kit="modal-trigger">Open modal</button>
+      <span class="caps">Tooltip</span>
+      <button class="icon-btn filled" aria-label="Copy room code" data-key="⌘C" data-kit="tooltip-trigger"><svg class="i" aria-hidden="true"><use href="/icons.svg#i-copy"/></svg></button>
+      <span class="caps">Input</span>
+      <input class="input" placeholder="Your name" data-kit="input">
+      <select class="input"><option>Default camera</option><option>FaceTime HD</option></select>
+      <input class="input" placeholder="Disabled" disabled>
+    </div>
+    <div class="popover glass raised demo-pop" id="demoPop" popover role="menu" aria-label="Present"><div class="menu">
+      <button class="menu-item" role="menuitem"><svg class="i" aria-hidden="true"><use href="/icons.svg#i-monitor-up"/></svg><b>Share screen</b><span>A window, tab or full screen</span></button>
+      <button class="menu-item" role="menuitem"><svg class="i" aria-hidden="true"><use href="/icons.svg#i-file-text"/></svg><b>Present slides</b><span>A PDF deck, page by page</span></button>
+      <button class="menu-item" role="menuitem" disabled><svg class="i" aria-hidden="true"><use href="/icons.svg#i-video"/></svg><b>Play a video</b><span>Disabled item</span></button>
+    </div></div>
+    <dialog class="modal" id="demoModal" aria-labelledby="demoModalH">
+      <form method="dialog" class="modal-card glass raised">
+        <button class="icon-btn sm modal-close" value="cancel" aria-label="Close"><svg class="i sm" aria-hidden="true"><use href="/icons.svg#i-x"/></svg></button>
+        <h2 id="demoModalH">Invite your guests</h2>
+        <p class="sub">Anyone with the code can join. Up to six people.</p>
+        <input class="input" value="gather-3f9a2c1d7e04" aria-label="Room code" readonly>
+        <div style="display:flex;gap:var(--sp-2);justify-content:flex-end"><button class="btn ghost" value="cancel">Close</button><button class="btn primary" value="ok">Copy link</button></div>
+      </form>
+    </dialog>
+  </section>
+
+  <section class="glass" id="k-tokens">
+    <h2>Tokens</h2>
+    <div class="tokens" id="tokenList"></div>
+  </section>
+</main>
+<script type="module">
+  import { busy, togglePopover } from '/ui.js';
+  const $ = (s) => document.querySelector(s);
+  for (const b of document.querySelectorAll('#themeSeg button')) b.onclick = () => {
+    document.documentElement.dataset.theme = b.dataset.t;
+    for (const x of document.querySelectorAll('#themeSeg button')) x.setAttribute('aria-checked', String(x === b));
+  };
+  $('[data-busy-demo]').onclick = (e) => { const b = e.currentTarget; busy(b); setTimeout(() => busy(b, false), 1500); };
+  $('#popBtn').onclick = (e) => togglePopover($('#demoPop'), e.currentTarget, 'bottom');
+  $('#modalBtn').onclick = () => $('#demoModal').showModal();
+  for (const seg of document.querySelectorAll('.seg')) seg.addEventListener('click', (e) => {
+    const b = e.target.closest('button'); if (!b || b.disabled || seg.id === 'themeSeg') return;
+    for (const x of seg.children) x.classList.toggle('on', x === b);
+  });
+  const names = ['--bg', '--surface', '--ink', '--ink-2', '--ink-3', '--accent', '--live', '--danger', '--ok', '--warn', '--fill', '--fill-hover', '--glass-bg', '--glass-border', '--focus', '--on-media'];
+  $('#tokenList').innerHTML = names.map((n) => `<div class="tok"><i style="background:var(${n})"></i><span>${n}</span></div>`).join('')
+    + ['--sp-1', '--sp-2', '--sp-3', '--sp-4', '--sp-6', '--sp-8'].map((n) => `<div class="tok"><i style="width:var(${n});background:var(--accent);border:0"></i><span>${n}</span></div>`).join('')
+    + ['--r-sm', '--r-md', '--r-lg'].map((n) => `<div class="tok"><i style="border-radius:var(${n});background:var(--fill-hover)"></i><span>${n}</span></div>`).join('');
+</script>
+</body>
+</html>

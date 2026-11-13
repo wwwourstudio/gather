@@ -31,7 +31,7 @@ const path = require('node:path') as typeof import('node:path');
 
 type Severity = 'P0' | 'P1' | 'P2';
 interface Finding { area: string; issue: string; severity: Severity; fix: string; widths: number[]; evidence: string[] }
-interface LayoutHit { kind: 'overlap' | 'overflow' | 'offscreen' | 'clipped' | 'tap' | 'hiddenfocus'; where: string; detail: string }
+interface LayoutHit { kind: 'overlap' | 'overflow' | 'offscreen' | 'clipped' | 'tap' | 'hiddenfocus' | 'adhoc'; where: string; detail: string }
 interface StageElement { type: string; id: string }
 interface GatherState {
   studio: string | null; id: string | null; deck: string; lobby: unknown[]; aiStatus: string;
@@ -184,6 +184,12 @@ function layoutScan(): LayoutHit[] {
     const focusable = layer.querySelector('button:not([disabled]), a[href], input:not([disabled]), select, [tabindex]:not([tabindex="-1"])');
     if (focusable && (layer as HTMLElement).checkVisibility()) hits.push({ kind: 'hiddenfocus', where: name(layer), detail: `${layer.querySelectorAll('button, a[href], input, select').length} focusable controls` });
   }
+  // 7 controls that aren't built from a design-system primitive (tokens.css + ui.css)
+  const PRIMITIVE = '.btn, .icon-btn, .tile, .menu-item, .pill, .toggle, .input, .seg > *, .swatches > *, .bgs > *, .avatar-pick, .more > summary';
+  for (const el of Array.from(document.querySelectorAll('button, select, input:not([type=hidden]):not([type=file]), textarea, summary'))) {
+    if (!shown(el) || el.matches(PRIMITIVE) || el.closest('.fld, .composer-row, .plat-body, .dest-grid') || ['range', 'color'].includes((el as HTMLInputElement).type)) continue;
+    hits.push({ kind: 'adhoc', where: where(el), detail: (el.textContent || el.getAttribute('aria-label') || '').trim().slice(0, 30) });
+  }
   // 4 text cut off with no ellipsis
   for (const el of Array.from(document.querySelectorAll('button, label, span, b, h2, h3, p, .sc-name, .crew-name'))) {
     if (!shown(el) || !(el instanceof HTMLElement)) continue;
@@ -203,6 +209,7 @@ async function checkLayout(s: Session, state: string): Promise<void> {
     if (h.kind === 'offscreen') add('Layout', `Control off-screen: ${where}`, 'P1', 'Wrap the row or move the control into an overflow menu at this width.', s.width, ev);
     if (h.kind === 'clipped') add('Layout', `Text cut off: ${where}`, 'P2', 'Allow wrapping, shorten the label, or add text-overflow: ellipsis with a title.', s.width, ev);
     if (h.kind === 'tap') add('Layout: phone', `Tap target under 24px: ${where}`, 'P2', 'Raise the hit area to 32px+ (padding or an ::after hit box) without changing the visual size.', s.width, h.detail);
+    if (h.kind === 'adhoc') add('Design system', `Control not built from a primitive: ${where}`, 'P2', 'Use Button / IconButton / SegmentedControl / Toggle / Pill / Tile / Input from ui.css instead of one-off styles.', s.width, ev);
     if (h.kind === 'hiddenfocus') add('Accessibility', `Controls in an aria-hidden layer are still focusable: ${where}`, 'P2', 'Use inert on hidden layers.', s.width, `${state}: ${h.detail}`);
   }
 }
@@ -234,7 +241,7 @@ async function closeTransient(s: Session, area: string, depth: number): Promise<
     }
     await p.keyboard.press('Escape').catch(() => undefined);
     await p.waitForTimeout(150);
-    if (await p.locator('dialog[open]').count().catch(() => 0)) await p.locator('dialog[open] .x').last().click({ timeout: 800 }).catch(() => undefined);
+    if (await p.locator('dialog[open]').count().catch(() => 0)) await p.locator('dialog[open] .modal-close').last().click({ timeout: 800 }).catch(() => undefined);
   }
 }
 const SWEEP = 'button, [role=switch], input[type=checkbox], select, summary, a[href^="#"]';
@@ -354,6 +361,15 @@ async function lastToast(p: Page): Promise<string> { return (await p.locator('.t
 
 async function featureChecks(s: Session, browser: Browser, code: string): Promise<void> {
   const p = s.page, W = s.width;
+  /** Click, and if something sits on top of the target, report what it is. */
+  const clickOrExplain = async (loc: Locator, area: string): Promise<void> => {
+    try { await loc.click({ timeout: 5000 }); }
+    catch (err) {
+      const cover = await loc.evaluate((n: Element) => { n.scrollIntoView({ block: 'center' }); const r = n.getBoundingClientRect(); const t = document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2); return t && t !== n && !n.contains(t) ? `${t.tagName.toLowerCase()}.${String(t.className).split(' ')[0]}` : 'nothing (moving)'; }).catch(() => 'detached');
+      add(area, `Control blocked during the check: covered by ${cover}`, 'P1', 'Fix stacking so the control is reachable.', W);
+      throw err;
+    }
+  };
   const step = async (name: string, fn: () => Promise<void>): Promise<void> => {
     try { await fn(); } catch (e) { add(`Feature: ${name}`, `Check crashed: ${(e as Error).message.split('\n')[0].slice(0, 120)}`, 'P1', 'Investigate; the flow did not reach its end state.', W); }
     await p.keyboard.press('Escape').catch(() => undefined);
@@ -469,7 +485,7 @@ async function featureChecks(s: Session, browser: Browser, code: string): Promis
   await step('QR hide', async () => {
     await p.click('.rail-btn[data-tab="brand"]');
     await p.fill('[aria-label="PayPal link"]', 'gathershow');
-    await p.locator('.tip-row', { hasText: 'PayPal' }).locator('button').click();
+    await clickOrExplain(p.locator('.tip-row', { hasText: 'PayPal' }).locator('button'), 'Feature: QR hide');
     await p.waitForFunction(() => (window as unknown as GatherWindow).__gather.state.elements.some((e) => e.type === 'tip'), null, { timeout: 5000 });
     await shot(s, 'feature-qr-card');
     const btn = (await p.locator('.tip-row', { hasText: 'PayPal' }).locator('button').textContent()) ?? '';
@@ -479,7 +495,7 @@ async function featureChecks(s: Session, browser: Browser, code: string): Promis
     await p.click('.rail-btn[data-tab="layouts"]');
     const row = p.locator('#elList li', { hasText: /support|paypal|tip|QR/i });
     if (await row.count()) {
-      await row.first().locator('button[aria-label*="Remove"], button:has-text("✕")').first().click();
+      await row.first().locator('button[aria-label="Delete"], button[aria-label*="Remove"]').first().click();
       const gone = await p.waitForFunction(() => !(window as unknown as GatherWindow).__gather.state.elements.some((e) => e.type === 'tip'), null, { timeout: 4000 }).then(() => true, () => false);
       if (gone) passes.push('QR hide: removable from Layouts → element list (two panels away from where it was added)');
     } else add('Feature: QR hide', 'QR card not listed in Layouts, so it can’t be removed at all', 'P0', 'List every element in #elList.', W);

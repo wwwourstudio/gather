@@ -1,8 +1,11 @@
 import { createAudioChain, createVideoFx, needsProcessing } from './fx.js';
+import { icon, busy, togglePopover } from './ui.js';
 // gather — client. Full-mesh WebRTC studio with a canvas-composited stage.
 // The stage canvas is the single source of truth for what you see AND what gets recorded.
 
 const $ = (s, r = document) => r.querySelector(s);
+const reduceMotion = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
+const smooth = () => (reduceMotion() ? 'auto' : 'smooth');
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
 // Pictures (avatar, camera and camera-off backgrounds, brand images) are too big for localStorage's
 // ~5 MB quota, so they live in IndexedDB behind the same synchronous store API.
@@ -89,9 +92,10 @@ const myId = () => S.id || 'me';
 // ---------------------------------------------------------------- utils
 function toast(msg, opts = {}) {
   const t = document.createElement('div');
-  t.className = 'toast' + (opts.err ? ' err' : '');
+  t.className = 'toast glass on-media' + (opts.err ? ' err' : '');
+  t.setAttribute('role', opts.err ? 'alert' : 'status');
   t.textContent = msg;
-  if (opts.action) { const b = document.createElement('button'); b.type = 'button'; b.textContent = opts.action[0]; b.onclick = () => { opts.action[1](); t.remove(); }; t.append(b); }
+  if (opts.action) { const b = document.createElement('button'); b.type = 'button'; b.className = 'btn sm link'; b.textContent = opts.action[0]; b.onclick = () => { opts.action[1](); t.remove(); }; t.append(b); }
   $('#toasts').append(t);
   setTimeout(() => t.remove(), opts.ms || 3200);
 }
@@ -402,14 +406,11 @@ async function presentPDF(file) {
 // Present menu + presenter controls
 $('#shareBtn').onclick = (ev) => {
   if (S.local.pres) return stopPresentation();
-  const m = $('#presentMenu');
-  m.hidden = !m.hidden;
-  ev.stopPropagation();
+  togglePopover($('#presentMenu'), ev.currentTarget, 'top');
 };
-document.addEventListener('click', (ev) => { if (!ev.target.closest('#presentMenu')) $('#presentMenu').hidden = true; });
 $('#presentMenu').addEventListener('click', (ev) => {
   const b = ev.target.closest('[data-present]'); if (!b) return;
-  $('#presentMenu').hidden = true;
+  $('#presentMenu').hidePopover();
   const kind = b.dataset.present;
   if (kind === 'screen') presentScreen();
   if (kind === 'video') $('#videoFile').click();
@@ -1099,7 +1100,7 @@ function addExternal(m) {
   li.className = 'msg ext' + (m.paid ? ' paid' : '');
   setMsgData(li, m);
   const who = document.createElement('div'); who.className = 'who';
-  const badge = document.createElement('span'); badge.className = 'src src-' + m.src; badge.textContent = SRC_NAME[m.src] || m.src;
+  const badge = document.createElement('span'); badge.className = 'pill caps src-' + m.src; badge.textContent = SRC_NAME[m.src] || m.src;
   const b = document.createElement('b'); b.textContent = m.name; if (m.color) b.style.color = m.color;
   who.append(badge, b);
   if (m.paid) { const amt = document.createElement('span'); amt.className = 'paid-amt'; amt.textContent = m.paid; who.append(amt); }
@@ -1136,18 +1137,32 @@ function moderate(kind, m, secs) {
   const platformSide = { twitch: 'Twitch', youtube: 'YouTube', x: 'X' }[src];
   toast(label + (kind !== 'unhide' && platformSide ? ` in gather. Connect ${platformSide} sign-in to also apply it on ${platformSide}.` : '.'));
 }
+let timeoutFor = null, timeoutPop = null;
+function timeoutMenu() {
+  if (timeoutPop) return timeoutPop;
+  timeoutPop = document.createElement('div');
+  timeoutPop.className = 'popover glass raised'; timeoutPop.popover = 'auto'; timeoutPop.setAttribute('role', 'menu'); timeoutPop.setAttribute('aria-label', 'Time out for');
+  const menu = document.createElement('div'); menu.className = 'menu';
+  for (const [sec, l] of [[300, '5 minutes'], [3600, '1 hour'], [86400, '24 hours']]) {
+    const b = document.createElement('button'); b.type = 'button'; b.className = 'menu-item compact'; b.setAttribute('role', 'menuitem'); b.textContent = l;
+    b.onclick = () => { timeoutPop.hidePopover(); if (timeoutFor) moderate('timeout', timeoutFor, sec); };
+    menu.append(b);
+  }
+  timeoutPop.append(menu);
+  document.body.append(timeoutPop);
+  return timeoutPop;
+}
 function msgActions(m) {
   const bar = document.createElement('div'); bar.className = 'mact';
   const mk = (txt, cls, fn) => { const b = document.createElement('button'); b.type = 'button'; b.className = cls; b.textContent = txt; b.onclick = fn; return b; };
-  bar.append(mk('Show on stage', 'feat', () => {
+  bar.append(mk('Show on stage', 'pill accent feat', () => {
     const on = S.state.featured?.id === m.id;
     setStage({ featured: on ? null : { id: m.id, src: m.src, name: m.name, text: m.text, color: m.color || '' } });
   }));
-  bar.append(mk('Hide', 'mod-hide', () => moderate('hide', m)));
-  const tm = document.createElement('details'); tm.className = 'tmenu';
-  const sum = document.createElement('summary'); sum.textContent = 'Time out';
-  tm.append(sum, ...[[300, '5 min'], [3600, '1 hour'], [86400, '24 hours']].map(([sec, l]) => mk(l, 'tbtn', () => { tm.open = false; moderate('timeout', m, sec); })));
-  bar.append(tm, mk('Block', 'mod-block', () => moderate('block', m)), mk('Restore', 'mod-restore', () => moderate('unhide', m)));
+  bar.append(mk('Hide', 'pill mod-hide', () => moderate('hide', m)));
+  const tm = mk('Time out', 'pill', (ev) => { timeoutFor = m; togglePopover(timeoutMenu(), ev.currentTarget, 'bottom'); });
+  tm.setAttribute('aria-haspopup', 'menu');
+  bar.append(tm, mk('Block', 'pill danger mod-block', () => moderate('block', m)), mk('Restore', 'pill mod-restore', () => moderate('unhide', m)));
   return bar;
 }
 function applyModeration(li) {
@@ -1631,7 +1646,7 @@ function renderEditor() {
       d.className = 'ebox' + (e.id === editor.sel ? ' sel' : '');
       d.dataset.id = e.id;
       Object.assign(d.style, { left: e.x * 100 + '%', top: e.y * 100 + '%', width: e.w * 100 + '%', height: e.h * 100 + '%' });
-      const lab = document.createElement('span'); lab.className = 'elab'; lab.textContent = elName(e);
+      const lab = document.createElement('span'); lab.className = 'pill on-media elab'; lab.textContent = elName(e);
       const hd = document.createElement('i'); hd.className = 'ehandle'; hd.dataset.h = '1';
       d.append(lab, hd);
       return d;
@@ -1643,16 +1658,16 @@ function renderEditor() {
   list.replaceChildren(...els.map((e, i) => {
     const li = document.createElement('li');
     li.className = 'el-row' + (e.id === editor.sel ? ' sel' : '') + (e.type === 'slot' && S.state.layout !== 'custom' ? ' dim' : '');
-    const b = document.createElement('button'); b.type = 'button'; b.className = 'el-pick'; b.textContent = elName(e);
+    const b = document.createElement('button'); b.type = 'button'; b.className = 'menu-item compact el-pick'; b.textContent = elName(e);
     b.onclick = () => { editor.sel = e.id; setEditing(true); };
-    const up = mkBtn('↑', 'Bring forward', () => moveEl(i, 1)), dn = mkBtn('↓', 'Send backward', () => moveEl(i, -1)), del = mkBtn('✕', 'Delete', () => deleteEl(e.id));
+    const up = mkBtn('arrow-up', 'Bring forward', () => moveEl(i, 1)), dn = mkBtn('arrow-down', 'Send backward', () => moveEl(i, -1)), del = mkBtn('trash-2', 'Delete', () => deleteEl(e.id));
     li.append(b, up, dn, del);
     return li;
   }));
   $('#elEmpty').hidden = !!els.length;
   renderProps();
 }
-function mkBtn(txt, title, fn) { const b = document.createElement('button'); b.type = 'button'; b.className = 'el-mini'; b.textContent = txt; b.title = title; b.setAttribute('aria-label', title); b.onclick = fn; b.disabled = !isHost(); return b; }
+function mkBtn(name, title, fn) { const b = document.createElement('button'); b.type = 'button'; b.className = 'icon-btn sm'; b.innerHTML = icon(name, { size: 'sm' }); b.setAttribute('aria-label', title); b.onclick = fn; b.disabled = !isHost(); return b; }
 function moveEl(i, dir) {
   const els = elementsCopy(), j = i + dir;
   if (j < 0 || j >= els.length) return;
@@ -1676,15 +1691,15 @@ function renderProps() {
     field('Text', `<textarea data-k="text" rows="2" maxlength="200">${val('text').replace(/</g, '&lt;')}</textarea>`);
     field('Size', `<input type="range" min="14" max="140" data-k="size" data-num value="${e.size}">`);
     f.push(`<div class="row2"><label class="fld"><span>Colour</span><input type="color" data-k="color" value="${e.color}"></label><label class="fld"><span>Align</span><select data-k="align">${['left', 'center', 'right'].map((a) => `<option ${e.align === a ? 'selected' : ''}>${a}</option>`).join('')}</select></label></div>`);
-    f.push(`<label class="check"><input type="checkbox" data-k="bold" ${e.bold ? 'checked' : ''}> Bold</label>`);
-    f.push(`<label class="check"><input type="checkbox" data-bg ${e.bg ? 'checked' : ''}> Background box</label>`);
+    f.push(`<label class="toggle-inline"><input type="checkbox" class="toggle sm" data-k="bold" ${e.bold ? 'checked' : ''}><span>Bold</span></label>`);
+    f.push(`<label class="toggle-inline"><input type="checkbox" class="toggle sm" data-bg ${e.bg ? 'checked' : ''}><span>Background box</span></label>`);
     if (e.bg) field('Box colour', `<input type="color" data-k="bg" value="${e.bg}">`);
   }
   if (e.type === 'chat') {
     field('Messages shown', `<input type="range" min="2" max="15" data-k="max" data-num value="${e.max}">`);
     field('Text size', `<input type="range" min="12" max="36" data-k="size" data-num value="${e.size}">`);
-    f.push(`<label class="check"><input type="checkbox" data-k="bg" ${e.bg ? 'checked' : ''}> Dark backing</label>`);
-    f.push(`<label class="check"><input type="checkbox" data-k="fade" ${e.fade ? 'checked' : ''}> Fade out old messages</label>`);
+    f.push(`<label class="toggle-inline"><input type="checkbox" class="toggle sm" data-k="bg" ${e.bg ? 'checked' : ''}><span>Dark backing</span></label>`);
+    f.push(`<label class="toggle-inline"><input type="checkbox" class="toggle sm" data-k="fade" ${e.fade ? 'checked' : ''}><span>Fade out old messages</span></label>`);
     f.push(`<p class="hint">Shows studio chat${S.state.feeds?.twitch ? ` and Twitch #${S.state.feeds.twitch}` : '. Connect Twitch in the Chat panel to show viewer chat'}.</p>`);
   }
   if (e.type === 'image') {
@@ -1698,7 +1713,7 @@ function renderProps() {
     if (e.mode === 'countdown') f.push(`<div class="row">${[1, 3, 5, 10, 15].map((m) => `<button type="button" class="btn outline sm" data-count="${m}">${m} min</button>`).join('')}</div>`);
     field('Size', `<input type="range" min="16" max="140" data-k="size" data-num value="${e.size}">`);
     f.push(`<div class="row2"><label class="fld"><span>Colour</span><input type="color" data-k="color" value="${e.color}"></label></div>`);
-    f.push(`<label class="check"><input type="checkbox" data-bg ${e.bg ? 'checked' : ''}> Background box</label>`);
+    f.push(`<label class="toggle-inline"><input type="checkbox" class="toggle sm" data-bg ${e.bg ? 'checked' : ''}><span>Background box</span></label>`);
     if (e.bg) field('Box colour', `<input type="color" data-k="bg" value="${e.bg}">`);
   }
   if (e.type === 'ai') f.push(`<label class="fld"><span>Text size</span><input type="range" min="14" max="34" data-k="size" data-num value="${e.size}"></label><p class="hint">Shows the latest question and answer from the AI panel. Long answers keep the newest lines in view.</p>`);
@@ -1744,6 +1759,7 @@ $('#editLayer').addEventListener('pointerdown', (ev) => {
   if (!e) return;
   editor.sel = e.id;
   const rect = $('#stage').getBoundingClientRect();
+  box.classList.add('dragging');
   editor.drag = { e, mode: ev.target.dataset.h ? 'size' : 'move', sx: ev.clientX, sy: ev.clientY, o: { x: e.x, y: e.y, w: e.w, h: e.h }, rw: rect.width, rh: rect.height };
   box.setPointerCapture(ev.pointerId);
   renderEditor();
@@ -1766,8 +1782,10 @@ $('#editLayer').addEventListener('pointermove', (ev) => {
   const box = $(`.ebox[data-id="${d.e.id}"]`);
   if (box) Object.assign(box.style, { left: d.e.x * 100 + '%', top: d.e.y * 100 + '%', width: d.e.w * 100 + '%', height: d.e.h * 100 + '%' });
 });
-$('#editLayer').addEventListener('pointerup', () => { if (editor.drag) { editor.drag = null; commitElements(); } });
-$('#editLayer').addEventListener('pointercancel', () => { editor.drag = null; });
+// Released boxes settle back with a spring (transition on .ebox, see style.css).
+const endDrag = () => { $$('.ebox.dragging').forEach((b) => b.classList.remove('dragging')); };
+$('#editLayer').addEventListener('pointerup', () => { endDrag(); if (editor.drag) { editor.drag = null; commitElements(); } });
+$('#editLayer').addEventListener('pointercancel', () => { endDrag(); editor.drag = null; });
 
 // Panel wiring
 $('#editToggle').onclick = () => setEditing(!editor.on);
@@ -1775,7 +1793,7 @@ $$('[data-add]').forEach((b) => b.addEventListener('click', () => { if (!isHost(
 function renderTemplates() {
   const wrap = $('#tplList');
   wrap.replaceChildren(...TEMPLATES.map((tpl) => {
-    const b = document.createElement('button'); b.type = 'button'; b.className = 'tpl'; b.disabled = !isHost();
+    const b = document.createElement('button'); b.type = 'button'; b.className = 'tile tpl'; b.disabled = !isHost();
     const pv = document.createElement('span'); pv.className = 'tpl-pv';
     for (const e of tpl.els) { const i = document.createElement('i'); i.className = 'tpl-' + e.type; Object.assign(i.style, { left: e.x * 100 + '%', top: e.y * 100 + '%', width: e.w * 100 + '%', height: e.h * 100 + '%' }); pv.append(i); }
     const nm = document.createElement('span'); nm.textContent = tpl.name;
@@ -1790,9 +1808,9 @@ function renderSaved() {
   const ul = $('#savedList'), list = savedLayouts();
   ul.replaceChildren(...list.map((l, i) => {
     const li = document.createElement('li'); li.className = 'el-row';
-    const b = document.createElement('button'); b.type = 'button'; b.className = 'el-pick'; b.textContent = l.name; b.disabled = !isHost();
+    const b = document.createElement('button'); b.type = 'button'; b.className = 'menu-item compact el-pick'; b.textContent = l.name; b.disabled = !isHost();
     b.onclick = () => loadLayout(l);
-    li.append(b, mkBtn('✕', 'Delete saved layout', () => { const all = savedLayouts(); all.splice(i, 1); store.set('layouts', all); renderSaved(); }));
+    li.append(b, mkBtn('trash-2', 'Delete saved scene', () => { const all = savedLayouts(); all.splice(i, 1); store.set('layouts', all); renderSaved(); }));
     return li;
   }));
   $('#savedEmpty').hidden = !!list.length;
@@ -1924,8 +1942,8 @@ function renderAIPanel() {
   $('#aiKeyHelp').innerHTML = { claude: 'Get one at <b>console.anthropic.com</b>. Includes live web search.', openai: 'Get one at <b>platform.openai.com</b>.', gemini: 'Get one at <b>aistudio.google.com</b>. Includes Google Search.', grok: 'Get one at <b>console.x.ai</b>.' }[S.aiProv];
   const onStage = (S.state.elements || []).some((e) => e.type === 'ai');
   $('#aiStage').checked = onStage; $('#aiStage').disabled = !host;
-  $('#aiInput').disabled = !host || S.ai.busy; $('#aiAsk').disabled = !host || S.ai.busy;
-  $('#aiAsk').textContent = S.ai.busy ? 'Answering…' : 'Ask';
+  $('#aiInput').disabled = !host || S.ai.busy; $('#aiAsk').disabled = !host;
+  if (S.ai.busy) $('#aiAsk').setAttribute('aria-busy', 'true'); else $('#aiAsk').removeAttribute('aria-busy');
   $('#aiHostNote').hidden = host;
 }
 $$('#aiProv button').forEach((b) => b.addEventListener('click', () => { S.aiProv = b.dataset.prov; store.set('aiProv', S.aiProv); renderAIPanel(); }));
@@ -1985,9 +2003,9 @@ function renderTips() {
   box.replaceChildren(...TIP_FIELDS.map(([id, name, ph]) => {
     const row = document.createElement('div'); row.className = 'tip-row';
     const tag = document.createElement('span'); tag.className = 'tip-tag'; tag.textContent = name; tag.style.setProperty('--c', TIP_INFO[id].color);
-    const inp = document.createElement('input'); inp.placeholder = ph; inp.value = saved[id] || ''; inp.spellcheck = false; inp.setAttribute('aria-label', name + ' link');
+    const inp = document.createElement('input'); inp.className = 'input sm'; inp.placeholder = ph; inp.value = saved[id] || ''; inp.spellcheck = false; inp.setAttribute('aria-label', name + ' link');
     inp.onchange = () => { const all = store.get('tips', {}); all[id] = inp.value.trim(); store.set('tips', all); };
-    const add = document.createElement('button'); add.type = 'button'; add.className = 'btn outline sm'; add.textContent = 'On stage';
+    const add = document.createElement('button'); add.type = 'button'; add.className = 'btn sm'; add.textContent = 'On stage';
     add.disabled = !isHost();
     add.onclick = () => {
       const url = tipUrl(id, inp.value);
@@ -2145,7 +2163,7 @@ $$('#acTabs button').forEach((b) => b.addEventListener('click', () => { acView =
 $('#acForm').addEventListener('submit', async (e) => {
   e.preventDefault();
   acErr('#acErr', '');
-  $('#acGo').disabled = true;
+  busy($('#acGo'));
   try {
     const body = { email: $('#acEmail').value, password: $('#acPass').value };
     const local = collectSettings();
@@ -2160,7 +2178,7 @@ $('#acForm').addEventListener('submit', async (e) => {
     acView = 'in'; renderAcctDlg();
     toast(`Signed in as ${r.user.name}.`);
   } catch (err) { acErr('#acErr', err.message); }
-  finally { $('#acGo').disabled = false; }
+  finally { busy($('#acGo'), false); }
 });
 $('#acForgot').onclick = () => { acView = 'forgot'; $('#acFEmail').value = $('#acEmail').value; renderAcctDlg(); };
 $('#acFBack').onclick = () => { acView = 'in'; renderAcctDlg(); };
@@ -2334,7 +2352,7 @@ function renderUpcoming() {
     const li = document.createElement('li'); li.className = 'up-item';
     const top = document.createElement('div'); top.className = 'up-top';
     const t = document.createElement('b'); t.textContent = st.title;
-    const badge = document.createElement('span'); badge.className = 'up-badge ' + st.status; badge.textContent = st.status === 'live' ? 'Live' : fmtLocal(st.when);
+    const badge = document.createElement('span'); badge.className = 'pill caps up-badge' + (st.status === 'live' ? ' live' : ''); badge.textContent = st.status === 'live' ? 'Live' : fmtLocal(st.when);
     top.append(t, badge);
     const meta = document.createElement('p'); meta.className = 'up-meta';
     meta.textContent = `${st.invites.length ? st.invites.length + ' invited' : 'No invites'}${st.mail?.scheduled ? ` · ${st.mail.scheduled} reminders scheduled` : ''}`;
@@ -2342,9 +2360,9 @@ function renderUpcoming() {
     const btn = (label, cls, fn) => { const b = document.createElement('button'); b.type = 'button'; b.className = 'btn sm ' + cls; b.textContent = label; b.onclick = fn; return b; };
     row.append(
       btn('Start', 'primary', () => startScheduled(st)),
-      btn('Copy link', 'glassy', () => copy(`${location.origin}/s/${st.studio}`, 'Invite link copied.')),
-      btn('Calendar', 'glassy', () => downloadIcs(st)),
-      btn('Cancel', 'ghost danger-text', (ev) => {
+      btn('Copy link', '', () => copy(`${location.origin}/s/${st.studio}`, 'Invite link copied.')),
+      btn('Calendar', '', () => downloadIcs(st)),
+      btn('Cancel', 'danger', (ev) => {
         const b = ev.currentTarget;
         if (b.dataset.confirm) { cancelStream(st); return; }
         b.dataset.confirm = '1'; b.textContent = 'Confirm cancel'; setTimeout(() => { delete b.dataset.confirm; b.textContent = 'Cancel'; }, 4000);
@@ -2447,7 +2465,7 @@ $('#wGen').onclick = async () => {
   const prompt = $('#wPrompt').value.trim();
   if (!prompt) return toast('Describe the background you want.', { err: true });
   const prov = S.aiProv, key = store.get('aiKey:' + prov, '');
-  $('#wGen').disabled = true; $('#wGen').textContent = 'Creating…'; $('#wGenNote').textContent = '';
+  busy($('#wGen')); $('#wGenNote').textContent = '';
   try {
     const res = await fetch('/api/ai', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mode: 'image', provider: prov, apiKey: key, prompt }) });
     const j = await res.json().catch(() => ({}));
@@ -2455,7 +2473,7 @@ $('#wGen').onclick = async () => {
     wiz.aiBg = await loadImg(j.data); wiz.tab = 'design'; renderWizard(); drawThumb();
     toast('AI background added. Adjust the headline and style.');
   } catch (err) { $('#wGenNote').textContent = err.message; }
-  finally { $('#wGen').disabled = false; $('#wGen').textContent = 'Create background'; }
+  finally { busy($('#wGen'), false); }
 };
 function cover(gx, img, x, y, w, h) {
   const k = Math.max(w / img.naturalWidth, h / img.naturalHeight), dw = img.naturalWidth * k, dh = img.naturalHeight * k;
@@ -2507,7 +2525,7 @@ $('#wGo').onclick = async () => {
   const title = $('#wTitle').value.trim();
   const thumb = (wiz.tab === 'upload' && !wiz.upload) ? '' : tc.toDataURL('image/jpeg', .86);
   const body = { title, description: $('#wDesc').value.trim(), invites: $('#wInvites').value, destinations: $$('#wDest input:checked').map((i) => i.value), thumb, tz: Intl.DateTimeFormat().resolvedOptions().timeZone, duration: Number($('#wDur').value) };
-  $('#wGo').disabled = true;
+  busy($('#wGo'));
   try {
     if (wiz.mode === 'later') {
       const r = await acctApi('streamCreate', { ...body, when: wWhen(), notify: true });
@@ -2526,7 +2544,7 @@ $('#wGo').onclick = async () => {
       openEnter('create');
     }
   } catch (err) { wErr(err.message); }
-  finally { $('#wGo').disabled = false; }
+  finally { busy($('#wGo'), false); }
 };
 $('#wDoneCopy').onclick = () => wiz.done && copy(`${location.origin}/s/${wiz.done.studio}`, 'Invite link copied.');
 $('#wDoneCal').onclick = () => wiz.done && downloadIcs(wiz.done);
@@ -2625,15 +2643,15 @@ function helpGo(row) {
   const el = $(sel);
   if (!el) return;
   setTimeout(() => {
-    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    const box = el.closest('.fld, .switch-row, .check, .tool, .btn, .seg') || el;
+    el.scrollIntoView({ behavior: smooth(), block: 'center' });
+    const box = el.closest('.fld, .toggle-row, .toggle-inline, .icon-btn, .btn, .seg') || el;
     box.classList.remove('flash'); void box.offsetWidth; box.classList.add('flash');
     if (el.focus) el.focus({ preventScroll: true });
   }, 120);
 }
 function helpRow(row) {
   const li = document.createElement('li');
-  const b = document.createElement('button'); b.type = 'button'; b.className = 'help-item';
+  const b = document.createElement('button'); b.type = 'button'; b.className = 'menu-item help-item';
   const t = document.createElement('b'); t.textContent = row[0];
   const w = document.createElement('span'); w.textContent = row[4];
   b.append(t, w); b.onclick = () => helpGo(row);
@@ -2763,11 +2781,7 @@ function renderStageUI() {
   renderScenes();
   $('#hostNote').hidden = isHost();
 }
-const ICON = {
-  stage: '<svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="12" rx="2"/><path d="M8 21h8M12 17v4"/></svg>',
-  mute: '<svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21M4 4l16 16"/></svg>',
-  kick: '<svg viewBox="0 0 24 24"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4M10 17l-5-5 5-5M5 12h11"/></svg>',
-};
+const ICON = { stage: icon('monitor', { size: 'sm' }), mute: icon('mic-off', { size: 'sm' }), kick: icon('log-out', { size: 'sm' }) };
 function renderCrew() {
   const list = $('#crewList'), add = $('.crew-add');
   const people = S.studio ? participants() : [];
@@ -2781,7 +2795,7 @@ function renderCrew() {
     if (!li) {
       li = document.createElement('li'); li.className = 'crew-card'; li.id = 'card-' + cssId(p.id); li.dataset.id = p.id;
       li.innerHTML = `<div class="crew-thumb"><video autoplay playsinline></video><div class="ini" hidden><span></span></div><div class="tagrow"></div>`
-        + `<div class="crew-tools"><button type="button" class="ct-stage" title="">${ICON.stage}</button><button type="button" class="ct-mute" title="Ask to mute">${ICON.mute}</button><button type="button" class="ct-kick" title="Remove from studio">${ICON.kick}</button></div></div>`
+        + `<div class="crew-tools"><button type="button" class="icon-btn sm on-media ct-stage" aria-pressed="false">${ICON.stage}</button><button type="button" class="icon-btn sm on-media ct-mute" aria-label="Ask to mute">${ICON.mute}</button><button type="button" class="icon-btn sm on-media danger ct-kick" aria-label="Remove from studio">${ICON.kick}</button></div></div>`
         + `<div class="crew-info"><div class="crew-name"><span class="nm"></span></div><div class="crew-sub"></div></div>`;
       const v = $('video', li);
       if (p.me) { v.muted = true; const ov = outVideo(); if (ov) v.srcObject = new MediaStream([ov]); v.classList.toggle('mirror', !!S.videoFx.mirror); }
@@ -2790,7 +2804,7 @@ function renderCrew() {
       $('.ct-mute', li).addEventListener('click', () => { wsSend({ type: 'mute', id: p.id }); toast(`Muted ${p.name}.`); });
       $('.ct-kick', li).addEventListener('click', () => {
         const btn = $('.ct-kick', li);
-        if (!btn.classList.contains('confirm')) { btn.classList.add('confirm'); btn.title = 'Click again to remove'; setTimeout(() => { btn.classList.remove('confirm'); btn.title = 'Remove from studio'; }, 3000); return; }
+        if (!btn.classList.contains('confirm')) { btn.classList.add('confirm'); btn.setAttribute('aria-label', 'Click again to remove'); setTimeout(() => { btn.classList.remove('confirm'); btn.setAttribute('aria-label', 'Remove from studio'); }, 3000); return; }
         wsSend({ type: 'kick', id: p.id }); toast(`${p.name} was removed. Lock the studio to keep them out.`);
       });
       list.insertBefore(li, add);
@@ -2798,8 +2812,8 @@ function renderCrew() {
     list.insertBefore(li, add); // keep join order
     $('.nm', li).textContent = p.me ? `${p.name} (you)` : p.name;
     const nameRow = $('.crew-name', li);
-    nameRow.querySelector('svg')?.remove();
-    if (!p.mic) nameRow.insertAdjacentHTML('beforeend', '<svg viewBox="0 0 24 24" aria-label="Muted"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21M4 4l16 16"/></svg>');
+    nameRow.querySelector('.muted-ic')?.remove();
+    if (!p.mic) nameRow.insertAdjacentHTML('beforeend', `<span class="muted-ic" role="img" aria-label="Muted">${icon('mic-off', { size: 'sm' })}</span>`);
     const ini = $('.ini', li); ini.hidden = !!p.cam;
     const bg = assetImg(p.offbg);
     ini.style.backgroundImage = bg ? `url("${bg.src}")` : '';
@@ -2808,12 +2822,12 @@ function renderCrew() {
     else { span.textContent = initials(p.name); span.style.backgroundImage = ''; span.classList.remove('has-av'); }
     const tags = $('.tagrow', li); tags.replaceChildren();
     const on = S.state.stage.includes(p.id);
-    if (p.id === S.host) tags.insertAdjacentHTML('beforeend', '<span class="mini">Host</span>');
-    if (on) tags.insertAdjacentHTML('beforeend', '<span class="mini live">Live</span>');
-    if (p.sharing) tags.insertAdjacentHTML('beforeend', '<span class="mini">Presenting</span>');
+    if (p.id === S.host) tags.insertAdjacentHTML('beforeend', '<span class="pill caps on-media">Host</span>');
+    if (on) tags.insertAdjacentHTML('beforeend', '<span class="pill caps live">Live</span>');
+    if (p.sharing) tags.insertAdjacentHTML('beforeend', '<span class="pill caps on-media">Presenting</span>');
     li.classList.toggle('on-stage', on);
     $('.crew-tools', li).hidden = !host;
-    const st = $('.ct-stage', li); st.title = on ? 'Take off stage' : 'Put on stage'; st.setAttribute('aria-label', st.title); st.classList.toggle('on', on);
+    const st = $('.ct-stage', li); st.setAttribute('aria-label', on ? 'Take off stage' : 'Put on stage'); st.setAttribute('aria-pressed', String(on));
     $('.ct-mute', li).hidden = !!p.me || !p.mic;
     $('.ct-kick', li).hidden = !!p.me;
   }
@@ -2886,9 +2900,9 @@ function renderPresets() {
     const li = document.createElement('li'); li.className = 'preset' + (live === text ? ' live' : '');
     const p = document.createElement('p'); p.textContent = text;
     const row = document.createElement('div'); row.className = 'row';
-    const use = document.createElement('button'); use.className = 'btn outline use'; use.textContent = live === text ? 'On stage' : 'Use banner'; use.disabled = !isHost();
+    const use = document.createElement('button'); use.className = 'btn sm use'; use.textContent = live === text ? 'On stage' : 'Use banner'; use.disabled = !isHost();
     use.onclick = () => { $('#bannerText').value = text; $('#bannerSub').value = ''; showBanner(); };
-    const del = document.createElement('button'); del.className = 'del'; del.textContent = 'Delete';
+    const del = document.createElement('button'); del.type = 'button'; del.className = 'icon-btn sm del'; del.innerHTML = icon('trash-2', { size: 'sm' }); del.setAttribute('aria-label', 'Delete preset');
     del.onclick = () => { const list = store.get('presets', DEFAULT_PRESETS); list.splice(i, 1); store.set('presets', list); renderPresets(); };
     row.append(use, del); li.append(p, row); return li;
   }));
@@ -2904,7 +2918,7 @@ function setTab(tab) {
   if (tab !== 'layouts' && editor.on) setEditing(false);
 }
 $$('.rail-btn').forEach((b) => b.addEventListener('click', () => setTab(b.dataset.tab)));
-$('#settingsDock').onclick = () => { setTab('settings'); if (innerWidth <= 900) $('#side').scrollIntoView({ behavior: 'smooth' }); };
+$('#settingsDock').onclick = () => { setTab('settings'); if (innerWidth <= 900) $('#side').scrollIntoView({ behavior: smooth() }); };
 
 function sceneList() {
   return [...BUILTINS.map((b) => ({ ...b, kind: 'builtin' })), ...(isVertical() ? V_TEMPLATES : TEMPLATES).map((t) => ({ ...t, kind: 'template' })), ...savedLayouts().map((l) => ({ id: 'saved:' + l.name, name: l.name, kind: 'saved', saved: l }))];
@@ -2940,7 +2954,7 @@ function renderScenes() {
   const active = activeSceneId(), host = isHost();
   const chips = sceneList().map((sc, i) => {
     const b = document.createElement('button'); b.type = 'button';
-    b.className = 'scene' + (sc.id === active ? ' on' : '') + (sc.kind === 'saved' ? ' saved' : '');
+    b.className = 'tile scene' + (sc.id === active ? ' on' : '') + (sc.kind === 'saved' ? ' saved' : '');
     b.disabled = !host; b.title = `${sc.name}${i < 9 ? ` (${i + 1})` : ''}`;
     b.setAttribute('aria-pressed', String(sc.id === active));
     const nm = document.createElement('span'); nm.className = 'sc-name'; nm.textContent = sc.name;
@@ -2949,8 +2963,8 @@ function renderScenes() {
     b.onclick = () => applyScene(sc);
     return b;
   });
-  const save = document.createElement('button'); save.type = 'button'; save.className = 'scene add'; save.disabled = !host;
-  save.innerHTML = '<span class="sc-pv add-pv">+</span><span class="sc-name">Save scene</span>';
+  const save = document.createElement('button'); save.type = 'button'; save.className = 'tile scene add'; save.disabled = !host;
+  save.innerHTML = `<span class="sc-pv add-pv">${icon('plus')}</span><span class="sc-name">Save scene</span>`;
   save.onclick = () => { setTab('layouts'); $('#layoutName').focus(); };
   strip.replaceChildren(...chips, save);
 }
@@ -3442,7 +3456,7 @@ function renderAds() {
   $('#adList').replaceChildren(...(a.items || []).map((id, i) => {
     const d = document.createElement('div'); d.className = 'ad-thumb';
     const im = assetImg(id); if (im) { const x = document.createElement('img'); x.src = im.src; x.alt = ''; d.append(x); }
-    const del = document.createElement('button'); del.type = 'button'; del.textContent = '✕'; del.setAttribute('aria-label', 'Remove sponsor image'); del.disabled = !host;
+    const del = document.createElement('button'); del.type = 'button'; del.className = 'icon-btn sm on-media'; del.innerHTML = icon('x', { size: 'sm' }); del.setAttribute('aria-label', 'Remove sponsor image'); del.disabled = !host;
     del.onclick = () => { const items = [...a.items]; items.splice(i, 1); setStage({ ads: { ...a, items } }); };
     d.append(del); return d;
   }));
@@ -3506,10 +3520,10 @@ function renderLibrary() {
   const ul = $('#libList');
   ul.replaceChildren(...S.library.map((it) => {
     const li = document.createElement('li'); li.className = 'el-row lib-row';
-    const k = document.createElement('span'); k.className = 'lib-kind k-' + it.kind; k.textContent = KIND_LABEL[it.kind];
-    const nm = document.createElement('span'); nm.className = 'el-pick'; nm.textContent = it.name;
-    const go = document.createElement('button'); go.type = 'button'; go.className = 'btn glassy sm'; go.textContent = 'Present'; go.onclick = () => presentLibrary(it);
-    const del = mkBtn('✕', 'Remove from library', async () => { await libTx('readwrite', (s) => s.delete(it.id)); libLoad(); });
+    const k = document.createElement('span'); k.className = 'pill caps lib-kind k-' + it.kind; k.textContent = KIND_LABEL[it.kind];
+    const nm = document.createElement('span'); nm.className = 'menu-item compact el-pick'; nm.textContent = it.name;
+    const go = document.createElement('button'); go.type = 'button'; go.className = 'btn sm'; go.textContent = 'Present'; go.onclick = () => presentLibrary(it);
+    const del = mkBtn('trash-2', 'Remove from library', async () => { await libTx('readwrite', (s) => s.delete(it.id)); libLoad(); });
     li.append(k, nm, go, del); return li;
   }));
   $('#libEmpty').hidden = !!S.library.length;
@@ -3569,7 +3583,7 @@ function offerOpen(url, label) {
   $('#cmdBar').hidden = false;
   $('#cmdShow').hidden = false;
   $('#cmdShow').textContent = `Open “${String(label || new URL(url).hostname).slice(0, 40)}”`;
-  $('#cmdShow').title = url;
+  $('#cmdShow').dataset.tip = url;
 }
 function findScene(name) {
   const n = String(name || '').toLowerCase().trim();
@@ -3612,7 +3626,7 @@ async function askProducer(text) {
   if (!isHost()) return toast('Only the host can direct the AI.', { err: true });
   const prov = S.aiProv, key = store.get('aiKey:' + prov, '');
   if (!key) { setTab('ai'); $('#aiKey').focus(); return toast(`Add your ${AI_NAME[prov]} key so ${S.aiName} can help.`, { err: true }); }
-  setAiStatus('thinking');
+  setAiStatus('thinking'); busy($('#cmdGo'));
   upsertAI({ id: uid(), role: 'user', text, provider: prov, done: true });
   const history = S.ai.items.filter((i) => i.done && !i.error && (i.role === 'user' || i.role === 'assistant')).slice(-8).map((i) => ({ role: i.role, text: i.say || i.text }));
   try {
@@ -3626,7 +3640,7 @@ async function askProducer(text) {
   } catch (e) {
     upsertAI({ id: uid(), role: 'assistant', text: e.message, provider: prov, error: true, done: true });
     toast(e.message, { err: true });
-  } finally { if (S.aiStatus !== 'listening') setAiStatus('idle'); }
+  } finally { busy($('#cmdGo'), false); if (S.aiStatus !== 'listening') setAiStatus('idle'); }
 }
 // Voice out: OpenAI voice goes into the stream mix; the browser voice is heard only by the host.
 async function speak(text) {
@@ -3791,9 +3805,10 @@ $('#enterForm').addEventListener('submit', async (e) => {
   let code = enterMode === 'join' ? parseCode($('#enterCode').value) : (S.pendingStream?.code || newCode());
   if (!code) { $('#enterErr').textContent = 'Paste the studio code your host sent you.'; $('#enterErr').hidden = false; return $('#enterCode').focus(); }
   S.name = name; store.set('name', name); $('#nameInput').value = name;
-  $('#enterGo').disabled = true; $('#enterGo').textContent = 'Connecting…';
-  try { await join(code, { callin: S.callin && enterMode === 'join' }); if (!S.studio) { $('#enterGo').textContent = 'Join studio'; $('#enterGo').disabled = false; } }
-  catch (err) { setEnterMode(enterMode); showEnterErr(err.message); $('#enterGo').disabled = false; setPhase('offline'); }
+  busy($('#enterGo'));
+  try { await join(code, { callin: S.callin && enterMode === 'join' }); }
+  catch (err) { setEnterMode(enterMode); showEnterErr(err.message); setPhase('offline'); }
+  finally { busy($('#enterGo'), false); }
 });
 $('#enterDlg').addEventListener('close', () => {
   if (!S.studio) { previewing = false; stopCam(); stopMic(); renderStageUI(); renderDock(); }

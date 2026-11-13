@@ -7,27 +7,10 @@
       "severity": "P0",
       "fix": "renderProps → elName(): ELABEL has no entry for the new “callin” element, so selecting a call-in card in Layouts throws and the properties panel stops rendering. Add ELABEL.callin = \"Call-in card\" and fall back to e.type.",
       "widths": [
-        1440,
-        1024,
-        390
+        1440
       ],
       "evidence": [
-        "at renderProps (http://localhost:8080/app.js:1673:26)"
-      ]
-    },
-    {
-      "area": "Present menu",
-      "issue": "Present menu items can’t be reached (Share screen, Play a video, Present slides, Show an image, On-air AI)",
-      "severity": "P0",
-      "fix": "At ≤900px .dock-tools has overflow-x:auto, which clips the absolutely positioned Present menu, and the rail sits on top. Move #presentMenu out of .dock-tools (portal to body / position: fixed above the dock) with z-index over .rail.",
-      "widths": [
-        390
-      ],
-      "evidence": [
-        "covered by button.el-pick in #elList",
-        "covered by button.btn in #libPick",
-        "covered by input in #layoutName",
-        "covered by label.fld in #side"
+        "at renderProps (http://localhost:8080/app.js:1688:26)"
       ]
     },
     {
@@ -43,37 +26,25 @@
       ]
     },
     {
-      "area": "Layout",
-      "issue": "Overlapping elements li#card-*.crew-card: div.crew-thumb × div.crew-info",
+      "area": "Feature: QR hide",
+      "issue": "Check crashed: locator.click: Timeout 30000ms exceeded.",
       "severity": "P1",
-      "fix": "Deck people cards: the card is taller than the 112px deck row allows, so the grid squeezes and the name rides up under the thumbnail. Give .deck-body ~124px, or drop .crew-sub on deck cards, or shrink the thumbnail to aspect 16/8.",
+      "fix": "Investigate; the flow did not reach its end state.",
       "widths": [
-        1440,
-        1024,
-        390
+        1440
       ],
-      "evidence": [
-        "Deck-+ Invite → inviteDlg: 118×7px",
-        "Deck: people: 118×7px",
-        "Deck: people-Invite a guest → inviteDlg: 118×7px",
-        "Dock-Invite → inviteDlg: 118×7px"
-      ]
+      "evidence": []
     },
     {
-      "area": "Layout",
-      "issue": "Overlapping elements div#helpPopWrap: h3.sec × ul#helpPopular.help-list",
+      "area": "Host: runtime",
+      "issue": "Uncaught error: Cannot use the same canvas during multiple render() operations. Use different canvas or ensure previous operations were cancelled or complet",
       "severity": "P1",
-      "fix": "Help: .sec heading has negative/zero bottom margin against the list; add margin-bottom: 8px to #helpPopWrap h3.sec.",
+      "fix": "pdf.js: pres.go() starts a new render while the previous page is still drawing (fast Next/arrow presses). Keep the RenderTask, cancel() it (or await it) before rendering the next page.",
       "widths": [
-        1440,
-        1024,
-        390
+        1440
       ],
       "evidence": [
-        "Panel: help: 318×4px",
-        "Guest panel: help: 318×4px",
-        "Panel: help: 278×4px",
-        "Panel: help: 328×4px"
+        "at InternalRenderTask.initializeGraphics (http://localhost:8080/vendor/pdf.min.js:22:51390)"
       ]
     },
     {
@@ -82,9 +53,7 @@
       "severity": "P2",
       "fix": "Deck layers that slide away keep their buttons in the tab order. Set the inert attribute on .deck-layer:not(.on) in setDeck().",
       "widths": [
-        1440,
-        1024,
-        390
+        1440
       ],
       "evidence": [
         "Home (signed out): 1 focusable controls",
@@ -99,12 +68,10 @@
       "severity": "P2",
       "fix": "Deck layers that slide away keep their buttons in the tab order. Set the inert attribute on .deck-layer:not(.on) in setDeck().",
       "widths": [
-        1440,
-        1024,
-        390
+        1440
       ],
       "evidence": [
-        "Deck-+ Invite → inviteDlg: 12 focusable controls",
+        "Deck-Invite → inviteDlg: 12 focusable controls",
         "Deck: people: 12 focusable controls",
         "Deck: people-Invite a guest → inviteDlg: 12 focusable controls",
         "Dock-Invite → inviteDlg: 12 focusable controls"
@@ -141,181 +108,12 @@
         1440
       ],
       "evidence": []
-    },
-    {
-      "area": "Layout: phone",
-      "issue": "Tap target under 24px: div.deck-head > button#inviteCrew.link",
-      "severity": "P2",
-      "fix": "Raise the hit area to 32px+ (padding or an ::after hit box) without changing the visual size.",
-      "widths": [
-        390
-      ],
-      "evidence": [
-        "44×19px"
-      ]
-    },
-    {
-      "area": "Layout: phone",
-      "issue": "Tap target under 24px: form#acForm.form > button#acForgot.link",
-      "severity": "P2",
-      "fix": "Raise the hit area to 32px+ (padding or an ::after hit box) without changing the visual size.",
-      "widths": [
-        390
-      ],
-      "evidence": [
-        "320×19px"
-      ]
-    },
-    {
-      "area": "Layout: phone",
-      "issue": "Tap target under 24px: label#lockWrap.lock > input#lockSwitch.switch.sm",
-      "severity": "P2",
-      "fix": "Raise the hit area to 32px+ (padding or an ::after hit box) without changing the visual size.",
-      "widths": [
-        390
-      ],
-      "evidence": [
-        "66×19px"
-      ]
-    },
-    {
-      "area": "Layout: phone",
-      "issue": "Tap target under 24px: div.plat-body > input#twitchInput",
-      "severity": "P2",
-      "fix": "Raise the hit area to 32px+ (padding or an ::after hit box) without changing the visual size.",
-      "widths": [
-        390
-      ],
-      "evidence": [
-        "164×21px"
-      ]
-    },
-    {
-      "area": "Layout: phone",
-      "issue": "Tap target under 24px: div.plat-body > input#rumbleInput",
-      "severity": "P2",
-      "fix": "Raise the hit area to 32px+ (padding or an ::after hit box) without changing the visual size.",
-      "widths": [
-        390
-      ],
-      "evidence": [
-        "164×21px"
-      ]
-    },
-    {
-      "area": "Layout: phone",
-      "issue": "Tap target under 24px: label > button#aiClear.link",
-      "severity": "P2",
-      "fix": "Raise the hit area to 32px+ (padding or an ::after hit box) without changing the visual size.",
-      "widths": [
-        390
-      ],
-      "evidence": [
-        "336×15px"
-      ]
-    },
-    {
-      "area": "Layout: phone",
-      "issue": "Tap target under 24px: div.row > button.del",
-      "severity": "P2",
-      "fix": "Raise the hit area to 32px+ (padding or an ::after hit box) without changing the visual size.",
-      "widths": [
-        390
-      ],
-      "evidence": [
-        "37×18px"
-      ]
-    },
-    {
-      "area": "Layout: phone",
-      "issue": "Tap target under 24px: div.panel-body.form > button#bannerSave.link",
-      "severity": "P2",
-      "fix": "Raise the hit area to 32px+ (padding or an ::after hit box) without changing the visual size.",
-      "widths": [
-        390
-      ],
-      "evidence": [
-        "328×19px"
-      ]
-    },
-    {
-      "area": "Layout: phone",
-      "issue": "Tap target under 24px: li.el-row > button.el-pick",
-      "severity": "P2",
-      "fix": "Raise the hit area to 32px+ (padding or an ::after hit box) without changing the visual size.",
-      "widths": [
-        390
-      ],
-      "evidence": [
-        "235×12px"
-      ]
-    },
-    {
-      "area": "Layout: phone",
-      "issue": "Tap target under 24px: label.check > input#namesChk",
-      "severity": "P2",
-      "fix": "Raise the hit area to 32px+ (padding or an ::after hit box) without changing the visual size.",
-      "widths": [
-        390
-      ],
-      "evidence": [
-        "328×22px"
-      ]
-    },
-    {
-      "area": "Layout: phone",
-      "issue": "Tap target under 24px: label.check > input#nsChk",
-      "severity": "P2",
-      "fix": "Raise the hit area to 32px+ (padding or an ::after hit box) without changing the visual size.",
-      "widths": [
-        390
-      ],
-      "evidence": [
-        "328×22px"
-      ]
-    },
-    {
-      "area": "Layout: phone",
-      "issue": "Tap target under 24px: label.check > input#agcChk",
-      "severity": "P2",
-      "fix": "Raise the hit area to 32px+ (padding or an ::after hit box) without changing the visual size.",
-      "widths": [
-        390
-      ],
-      "evidence": [
-        "328×22px"
-      ]
-    },
-    {
-      "area": "Layout: phone",
-      "issue": "Tap target under 24px: label.check > input#startMic",
-      "severity": "P2",
-      "fix": "Raise the hit area to 32px+ (padding or an ::after hit box) without changing the visual size.",
-      "widths": [
-        390
-      ],
-      "evidence": [
-        "328×22px"
-      ]
-    },
-    {
-      "area": "Layout: phone",
-      "issue": "Tap target under 24px: label.check > input#startCam",
-      "severity": "P2",
-      "fix": "Raise the hit area to 32px+ (padding or an ::after hit box) without changing the visual size.",
-      "widths": [
-        390
-      ],
-      "evidence": [
-        "328×22px"
-      ]
     }
   ],
   "missing": {
     "AI image maker outside the wizard": "Image generation exists only inside “Start a stream → thumbnail”. It can’t make a stage background, overlay or sponsor image from the Brand panel, and the AI producer can’t generate an image on request.",
     "Media library sync": "The media library lives in one browser (IndexedDB). It does not follow the account to another computer and guests can’t see it; uploads to storage (e.g. Vercel Blob) would fix that.",
     "Slide overview": "No slide thumbnails or “go to slide N” for PDFs. Long decks need a grid to jump around, and presenter notes aren’t shown.",
-    "Timed QR / support card": "QR and call-in cards stay up until removed by hand. Show-for-N-seconds, or auto-show every N minutes like the sponsor rotation, would match how shows run donation calls.",
     "Banner editing on stage": "Banners can only be edited in the side panel: no click-to-edit on the stage, no per-banner colour/style override, no queue to step through a run of banners or tickers during a show.",
     "Restreaming to platforms": "Going live on YouTube, Twitch, X, Kick, Rumble, TikTok or Facebook needs an RTMP relay (browsers can’t send RTMP). Today gather records locally and reads Twitch/Rumble chat; it does not push video to any platform.",
     "Cloud recording / save to Drive": "Recordings download from the host’s browser only. No upload to Google Drive or Dropbox, no separate per-person ISO tracks, no cloud copy if the tab closes.",
@@ -326,7 +124,6 @@
   },
   "passes": [
     "Dock: “Leave studio” not clicked (destructive or leaves the page)",
-    "Panel: banners: “Delete” not clicked (destructive or leaves the page)",
     "Panel: layouts: “Delete” not clicked (destructive or leaves the page)",
     "AI chat: asking without a key explains what to do",
     "AI chat: invalid key → readable error (“Claude rejected the API key. Check it in the AI panel.”)",
@@ -336,16 +133,9 @@
     "Video upload: drag and drop onto the stage presents it",
     "Video upload: media library exists (browser-local)",
     "PDF: full-screen slides, next/previous buttons and arrow keys work",
-    "QR hide: removable from Layouts → element list (two panels away from where it was added)",
     "Banners: show, edit and show again, save preset, use preset all work",
-    "Editor-only: program frame identical for host and guest (0 px differ); the hint is on the editor canvas only (3985 px)",
+    "Editor-only: program frame identical for host and guest (0 px differ); the hint is on the editor canvas only (3922 px)",
     "Guest view: no recording, stream, layout, brand, banner, AI producer, lock or people controls",
-    "Guest dock: “Leave studio” not clicked (destructive or leaves the page)",
-    "Dock: “Leave studio” not clicked (destructive or leaves the page)",
-    "Panel: banners: “Delete” not clicked (destructive or leaves the page)",
-    "Panel: layouts: “Delete” not clicked (destructive or leaves the page)",
-    "Dock: “Leave studio” not clicked (destructive or leaves the page)",
-    "Panel: banners: “Delete” not clicked (destructive or leaves the page)",
-    "Panel: layouts: “Delete” not clicked (destructive or leaves the page)"
+    "Guest dock: “Leave studio” not clicked (destructive or leaves the page)"
   ]
 }
