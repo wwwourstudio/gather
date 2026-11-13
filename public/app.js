@@ -39,7 +39,7 @@ const S = {
   audioBlocked: false,
 };
 function localState() {
-  return { layout: 'split', stage: ['me'], banner: null, ticker: '', brand: { color: store.get('accent', '#1f6feb'), bg: store.get('bg', 'dusk'), watermark: true, names: true, logo: '' }, title: store.get('title', '') };
+  return { layout: 'split', stage: ['me'], banner: null, ticker: '', brand: { color: store.get('accent', '#1f6feb'), bg: store.get('bg', 'dusk'), watermark: true, names: true, logo: '' }, title: store.get('title', ''), elements: [], featured: null, feeds: { twitch: '' } };
 }
 const isHost = () => !S.studio || S.host === S.id;
 const myId = () => S.id || 'me';
@@ -229,7 +229,8 @@ async function flush() {
   const ops = outbox.splice(0, 100);
   try {
     const r = await api('send', { ...creds(), ops });
-    for (const m of r.results || []) onServer(m);
+    // The host's own state is authoritative locally; applying the echo could undo edits made since.
+    for (const m of r.results || []) if (m.type !== 'state') onServer(m);
   } catch (e) {
     flushing = false;
     if (e.status === 410) return lostStudio();
@@ -314,7 +315,8 @@ async function onServer(m) {
       pollLoop(++pollGen);
       if (S.host === S.id && wasHosting) {
         // Bring the look you set up before creating the studio.
-        setStage({ brand: pre.brand, title: pre.title, layout: pre.layout, banner: pre.banner, ticker: pre.ticker, stage: [S.id] });
+        setStage({ brand: pre.brand, title: pre.title, layout: pre.layout, banner: pre.banner, ticker: pre.ticker, stage: [S.id], feeds: pre.feeds, elements: (pre.elements || []).filter((e) => !(e.type === 'image' && e.asset?.startsWith('local-'))) });
+        uploadLocalAssets(pre.elements).then((elements) => { if (S.host === S.id) setStage({ elements }); });
       }
       sendMeta({ mic: S.local.micOn, cam: S.local.camOn, sharing: !!S.local.screen });
       renderAll();
@@ -530,7 +532,8 @@ function drawTile(p, rect, t) {
   const el = cardVideo(p.id);
   const brand = S.state.brand;
   g.save();
-  rr(x, y, w, h, 10); g.clip();
+  const R = rect.r ?? 10;
+  rr(x, y, w, h, R); g.clip();
   const hasVid = p.cam && el && el.readyState >= 2 && el.videoWidth > 0;
   if (hasVid) {
     const vw = el.videoWidth, vh = el.videoHeight;
@@ -558,7 +561,7 @@ function drawTile(p, rect, t) {
   // Active speaker ring.
   const now = performance.now();
   if (p.mic && p.level > 0.02) speaking.set(p.id, now);
-  if (now - (speaking.get(p.id) || -1e9) < 450) { g.strokeStyle = brand.color; g.lineWidth = 4; rr(x + 2, y + 2, w - 4, h - 4, 9); g.stroke(); }
+  if (now - (speaking.get(p.id) || -1e9) < 450) { g.strokeStyle = brand.color; g.lineWidth = 4; rr(x + 2, y + 2, w - 4, h - 4, Math.max(0, R - 1)); g.stroke(); }
 
   // Name tag.
   const fs = Math.max(13, Math.min(18, h * 0.045));
@@ -667,10 +670,26 @@ function draw() {
     g.fillStyle = 'rgba(255,255,255,.7)'; g.font = '600 22px Inter, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
     g.fillText(isHost() ? 'Add someone to the stage from “In the studio”.' : 'The host will bring people on stage.', W / 2, H / 2);
   }
-  const rects = layoutRects(onStage.length, S.state.layout, area);
-  onStage.forEach((p, i) => rects[i] && drawTile(p, rects[i], t));
+  const slots = (S.state.elements || []).filter((e) => e.type === 'slot');
+  if (S.state.layout === 'custom' && slots.length) {
+    // Custom layout: each camera slot shows whoever holds that stage position.
+    for (const e of slots) {
+      const p = onStage[e.index], r = { ...px(e), r: e.radius };
+      if (p) drawTile(p, r, t);
+      else if (isHost()) {
+        g.save(); g.strokeStyle = 'rgba(255,255,255,.28)'; g.setLineDash([8, 8]); g.lineWidth = 2; rr(r.x, r.y, r.w, r.h, r.r ?? 10); g.stroke();
+        g.fillStyle = 'rgba(255,255,255,.45)'; g.font = '500 15px Inter, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
+        g.fillText(`Stage position ${e.index + 1}`, r.x + r.w / 2, r.y + r.h / 2); g.restore();
+      }
+    }
+  } else {
+    const rects = layoutRects(onStage.length, S.state.layout === 'custom' ? 'split' : S.state.layout, area);
+    onStage.forEach((p, i) => rects[i] && drawTile(p, rects[i], t));
+  }
+  drawOverlays(t);
   if (S.state.ticker) drawTicker(t); // keep ticker above tiles
   drawBanner(t, H - (tickH || 0) - 10);
+  drawFeatured(t, H - (tickH || 0) - 10);
   drawChrome();
 }
 function hexA(hex, a) { const n = parseInt(hex.slice(1), 16); return `rgba(${n >> 16},${(n >> 8) & 255},${n & 255},${a})`; }
@@ -691,6 +710,585 @@ function meters() {
 function speakingCards() {
   const now = performance.now();
   for (const li of $$('.crew-card')) li.classList.toggle('speaking', now - (speaking.get(li.dataset.id) || -1e9) < 450);
+}
+
+// ---------------------------------------------------------------- chat feed (studio + Twitch) for overlays
+const FEED_MAX = 200;
+const SRC_COLOR = { studio: null, twitch: '#9146ff', youtube: '#ff0033' };
+S.feed = [];
+function pushFeed(m) { S.feed.push(m); if (S.feed.length > FEED_MAX) S.feed.splice(0, S.feed.length - FEED_MAX); }
+
+// Twitch chat is readable anonymously over its public IRC WebSocket: no key, no server, no cost.
+const twitch = { ws: null, channel: '', want: '', retry: 0, status: 'off' };
+function syncTwitch() {
+  const want = S.state.feeds?.twitch || '';
+  if (want === twitch.want) return;
+  twitch.want = want;
+  twitch.retry = 0;
+  try { twitch.ws?.close(); } catch {}
+  twitch.ws = null;
+  if (want) connectTwitch(); else setTwitchStatus('off');
+}
+function connectTwitch() {
+  const ch = twitch.want;
+  if (!ch) return;
+  setTwitchStatus('connecting');
+  const ws = new WebSocket('wss://irc-ws.chat.twitch.tv:443');
+  twitch.ws = ws;
+  ws.onopen = () => {
+    ws.send('CAP REQ :twitch.tv/tags');
+    ws.send('PASS SCHMOOPIIE');
+    ws.send('NICK justinfan' + Math.floor(10000 + Math.random() * 80000));
+    ws.send('JOIN #' + ch);
+  };
+  ws.onmessage = (e) => {
+    for (const line of String(e.data).split('\r\n')) {
+      if (!line) continue;
+      if (line.startsWith('PING')) { ws.send('PONG :tmi.twitch.tv'); continue; }
+      if (/ ROOMSTATE #/.test(line) || / 366 /.test(line)) { twitch.retry = 0; setTwitchStatus('live'); continue; }
+      const m = line.match(/^@(\S+) :([^!]+)!\S+ PRIVMSG #\S+ :(.*)$/);
+      if (!m) continue;
+      const tags = Object.fromEntries(m[1].split(';').map((kv) => { const i = kv.indexOf('='); return [kv.slice(0, i), kv.slice(i + 1)]; }));
+      let text = m[3];
+      if (text.startsWith('\u0001ACTION ')) text = text.slice(8, -1);
+      addExternal({ id: tags.id || Math.random().toString(36).slice(2), src: 'twitch', name: (tags['display-name'] || m[2]).replace(/\\s/g, ' '), color: /^#[0-9a-f]{6}$/i.test(tags.color) ? tags.color : '', text: text.slice(0, 500), ts: Number(tags['tmi-sent-ts']) || Date.now() });
+    }
+  };
+  ws.onclose = () => {
+    if (twitch.ws !== ws || !twitch.want) return;
+    setTwitchStatus('reconnecting');
+    setTimeout(() => { if (twitch.ws === ws && twitch.want) connectTwitch(); }, Math.min(15000, 1000 * 2 ** twitch.retry++));
+  };
+}
+function setTwitchStatus(st) {
+  twitch.status = st;
+  const el = $('#twitchStatus');
+  if (!el) return;
+  el.dataset.state = st;
+  el.textContent = { off: 'Not connected', connecting: 'Connecting…', live: `Reading #${twitch.want}`, reconnecting: 'Reconnecting…' }[st];
+}
+function addExternal(m) {
+  pushFeed(m);
+  const li = document.createElement('li');
+  li.className = 'msg ext';
+  li.dataset.fid = m.id;
+  const who = document.createElement('div'); who.className = 'who';
+  const badge = document.createElement('span'); badge.className = 'src src-' + m.src; badge.textContent = m.src === 'twitch' ? 'Twitch' : 'YouTube';
+  const b = document.createElement('b'); b.textContent = m.name; if (m.color) b.style.color = m.color;
+  who.append(badge, b);
+  const txt = document.createElement('div'); txt.className = 'txt'; txt.textContent = m.text;
+  li.append(who, txt, featureBtn(m));
+  appendLog(li);
+  const log = $('#msgs'); while (log.children.length > 300) log.firstChild.remove();
+}
+function featureBtn(m) {
+  const btn = document.createElement('button');
+  btn.className = 'feat'; btn.type = 'button'; btn.textContent = 'Show on stage';
+  btn.hidden = !isHost();
+  btn.onclick = () => {
+    const on = S.state.featured?.id === m.id;
+    setStage({ featured: on ? null : { id: m.id, src: m.src, name: m.name, text: m.text, color: m.color || '' } });
+  };
+  return btn;
+}
+
+// ---------------------------------------------------------------- stage elements: custom layouts + overlays
+// Every element is a rectangle in stage units (0..1), drawn on the canvas, so it shows for every
+// participant and lands in recordings and streams exactly as placed.
+const uid = () => Math.random().toString(36).slice(2, 8);
+const ELEMENT_DEFAULTS = {
+  slot: () => ({ type: 'slot', x: .3, y: .25, w: .4, h: .5, index: 0, radius: 10 }),
+  chat: () => ({ type: 'chat', x: .7, y: .1, w: .27, h: .78, max: 8, size: 18, bg: true, fade: false }),
+  text: () => ({ type: 'text', x: .05, y: .82, w: .5, h: .1, text: 'Your headline here', size: 40, color: '#ffffff', bold: true, align: 'left', bg: '' }),
+  image: () => ({ type: 'image', x: .82, y: .06, w: .14, h: .14, asset: '', fit: 'contain', opacity: 1, radius: 0 }),
+  timer: () => ({ type: 'timer', x: .42, y: .025, w: .16, h: .08, mode: 'clock', target: 0, size: 40, color: '#ffffff', bg: '' }),
+};
+const TEMPLATES = [
+  { id: 'duo-chat', name: 'Two + chat', els: [
+    { type: 'slot', index: 0, x: .025, y: .08, w: .335, h: .74 }, { type: 'slot', index: 1, x: .375, y: .08, w: .335, h: .74 },
+    { type: 'chat', x: .73, y: .08, w: .245, h: .74, max: 8, size: 17, bg: true }] },
+  { id: 'screen-pip', name: 'Screen + camera', els: [
+    { type: 'slot', index: 0, x: .025, y: .07, w: .95, h: .86, radius: 10 }, { type: 'slot', index: 1, x: .755, y: .62, w: .2, h: .28, radius: 14 }] },
+  { id: 'solo-chat', name: 'Solo + chat', els: [
+    { type: 'slot', index: 0, x: .025, y: .08, w: .66, h: .84 }, { type: 'chat', x: .705, y: .08, w: .27, h: .84, max: 10, size: 18, bg: true }] },
+  { id: 'panel-3', name: 'Panel of three', els: [
+    { type: 'slot', index: 0, x: .025, y: .1, w: .3, h: .6 }, { type: 'slot', index: 1, x: .35, y: .1, w: .3, h: .6 }, { type: 'slot', index: 2, x: .675, y: .1, w: .3, h: .6 },
+    { type: 'chat', x: .025, y: .73, w: .95, h: .22, max: 3, size: 17, bg: true }] },
+];
+function withDefaults(e) { return { ...ELEMENT_DEFAULTS[e.type](), ...e, id: e.id || uid() }; }
+function applyTemplate(tpl) {
+  // Keep the host's own text, images and timers; replace cameras and chat with the template's.
+  const keep = (S.state.elements || []).filter((e) => !['slot', 'chat'].includes(e.type));
+  setStage({ layout: 'custom', elements: [...tpl.els.map(withDefaults), ...keep] });
+}
+
+// Images: uploaded once per studio, cached as decoded <img> for drawing.
+S.assets = new Map(); // id -> { img, data, loading }
+function assetImg(id) {
+  if (!id) return null;
+  let a = S.assets.get(id);
+  if (!a) {
+    a = { img: null, data: null, loading: true };
+    S.assets.set(id, a);
+    if (S.studio && !id.startsWith('local-')) api('assetGet', { ...creds(), asset: id }).then((r) => setAssetData(id, r.data)).catch(() => { a.loading = false; });
+  }
+  return a.img;
+}
+function setAssetData(id, data) {
+  const a = S.assets.get(id) || {};
+  const img = new Image();
+  img.onload = () => { a.img = img; a.loading = false; renderEditor(); };
+  img.src = data;
+  a.data = data;
+  S.assets.set(id, a);
+}
+async function storeAsset(data) {
+  if (S.studio) { const { id } = await api('assetPut', { ...creds(), data }); setAssetData(id, data); return id; }
+  const id = 'local-' + uid(); setAssetData(id, data); return id;
+}
+// Downscale big uploads so they fit the studio store and draw fast.
+function compressImage(file) {
+  return new Promise((res, rej) => {
+    if (!/^image\/(png|jpeg|webp|gif)$/.test(file.type)) return rej(new Error('Use a PNG, JPEG, WebP or GIF image.'));
+    const img = new Image();
+    img.onload = () => {
+      let { width: w, height: h } = img;
+      const max = 1280, k = Math.min(1, max / Math.max(w, h));
+      w = Math.round(w * k); h = Math.round(h * k);
+      const c = document.createElement('canvas'); c.width = w; c.height = h;
+      c.getContext('2d').drawImage(img, 0, 0, w, h);
+      let q = .9, out = c.toDataURL('image/webp', q);
+      while (out.length > 850_000 && q > .4) { q -= .15; out = c.toDataURL('image/webp', q); }
+      URL.revokeObjectURL(img.src);
+      out.length > 900_000 ? rej(new Error('That image is too large. Try a smaller one.')) : res(out);
+    };
+    img.onerror = () => rej(new Error('Could not read that image.'));
+    img.src = URL.createObjectURL(file);
+  });
+}
+// When the host creates a studio, images added beforehand are uploaded and re-pointed.
+async function uploadLocalAssets(elements) {
+  const out = [];
+  for (const e of elements || []) {
+    if (e.type === 'image' && e.asset?.startsWith('local-')) {
+      const data = S.assets.get(e.asset)?.data;
+      out.push(data ? { ...e, asset: await storeAsset(data).catch(() => '') } : e);
+    } else out.push(e);
+  }
+  return out;
+}
+
+function wrapLines(text, maxW, maxLines = 99) {
+  const words = String(text).split(/\s+/).filter(Boolean), lines = [];
+  let cur = '';
+  for (let w of words) {
+    while (g.measureText(w).width > maxW && w.length > 1) { // hard-break very long words
+      let i = w.length; while (i > 1 && g.measureText(w.slice(0, i)).width > maxW) i--;
+      if (cur) { lines.push(cur); cur = ''; }
+      lines.push(w.slice(0, i)); w = w.slice(i);
+    }
+    const test = cur ? cur + ' ' + w : w;
+    if (g.measureText(test).width > maxW && cur) { lines.push(cur); cur = w; } else cur = test;
+  }
+  if (cur) lines.push(cur);
+  if (lines.length > maxLines) { lines.length = maxLines; lines[maxLines - 1] = lines[maxLines - 1].replace(/.{0,2}$/, '…'); }
+  return lines;
+}
+const px = (e) => ({ x: e.x * W, y: e.y * H, w: e.w * W, h: e.h * H });
+
+function drawChatEl(e, t) {
+  const r = px(e), pad = 14, fs = e.size, lh = fs * 1.35;
+  const now = Date.now();
+  const msgs = S.feed.filter((m) => !e.fade || now - m.ts < 90_000).slice(-e.max);
+  g.save();
+  rr(r.x, r.y, r.w, r.h, 12); g.clip();
+  if (e.bg) { g.fillStyle = 'rgba(10,14,22,.55)'; g.fillRect(r.x, r.y, r.w, r.h); }
+  let y = r.y + r.h - pad;
+  g.textBaseline = 'alphabetic'; g.textAlign = 'left';
+  for (let i = msgs.length - 1; i >= 0 && y > r.y + pad; i--) {
+    const m = msgs[i];
+    g.font = `700 ${fs}px Inter, sans-serif`;
+    const nameW = g.measureText(m.name + '  ').width;
+    g.font = `500 ${fs}px Inter, sans-serif`;
+    const lines = wrapLines(m.text, r.w - pad * 2 - 6, 4);
+    // First line shares its row with the name.
+    const first = wrapLines(m.text, Math.max(40, r.w - pad * 2 - nameW - 14))[0] || '';
+    const rest = wrapLines(m.text.slice(m.text.indexOf(first) + first.length).trim(), r.w - pad * 2 - 14, 3);
+    const rows = [first, ...rest.filter(Boolean)];
+    const blockH = rows.length * lh + 8;
+    const top = y - blockH;
+    if (top < r.y + pad - lh) break;
+    const age = (now - m.ts) / 1000, alpha = e.fade ? Math.max(0, Math.min(1, (90 - age) / 10)) : 1;
+    const enter = Math.min(1, (now - m.ts) / 250);
+    g.globalAlpha = alpha * enter;
+    const dot = SRC_COLOR[m.src] || S.state.brand.color;
+    g.fillStyle = dot; g.beginPath(); g.arc(r.x + pad + 4, top + lh * .62, 4, 0, Math.PI * 2); g.fill();
+    g.font = `700 ${fs}px Inter, sans-serif`; g.fillStyle = m.color || '#9ec5ff';
+    g.fillText(m.name, r.x + pad + 14, top + lh * .85);
+    g.font = `500 ${fs}px Inter, sans-serif`; g.fillStyle = '#ffffff';
+    rows.forEach((line, j) => g.fillText(line, j === 0 ? r.x + pad + 14 + nameW : r.x + pad + 14, top + lh * (.85 + j)));
+    y = top - 6;
+    g.globalAlpha = 1;
+    void lines;
+  }
+  if (!msgs.length) {
+    g.fillStyle = 'rgba(255,255,255,.55)'; g.font = `500 ${Math.max(13, fs * .8)}px Inter, sans-serif`; g.textAlign = 'center'; g.textBaseline = 'middle';
+    g.fillText(S.state.feeds?.twitch ? 'Waiting for chat…' : 'Chat will appear here', r.x + r.w / 2, r.y + r.h / 2);
+  }
+  g.restore();
+}
+function drawTextEl(e) {
+  const r = px(e);
+  g.save();
+  g.font = `${e.bold ? 800 : 500} ${e.size}px "Plus Jakarta Sans", Inter, sans-serif`;
+  const lines = wrapLines(e.text, r.w - (e.bg ? 32 : 0));
+  const lh = e.size * 1.15, total = lines.length * lh;
+  if (e.bg) { g.fillStyle = e.bg; rr(r.x, r.y, r.w, Math.max(r.h, total + 20), 10); g.fill(); }
+  g.fillStyle = e.color; g.textBaseline = 'middle'; g.textAlign = e.align;
+  const ax = e.align === 'center' ? r.x + r.w / 2 : e.align === 'right' ? r.x + r.w - (e.bg ? 16 : 0) : r.x + (e.bg ? 16 : 0);
+  const top = r.y + Math.max(0, (Math.max(r.h, total + (e.bg ? 20 : 0)) - total) / 2);
+  if (!e.bg) { g.shadowColor = 'rgba(0,0,0,.45)'; g.shadowBlur = 12; g.shadowOffsetY = 2; }
+  lines.forEach((l, i) => g.fillText(l, ax, top + lh * (i + .5)));
+  g.restore();
+}
+function drawImageEl(e) {
+  const r = px(e), img = assetImg(e.asset);
+  g.save();
+  if (!img) {
+    if (isHost()) { g.strokeStyle = 'rgba(255,255,255,.35)'; g.setLineDash([6, 6]); g.lineWidth = 2; rr(r.x, r.y, r.w, r.h, 8); g.stroke();
+      g.fillStyle = 'rgba(255,255,255,.6)'; g.font = '500 14px Inter, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
+      g.fillText(e.asset ? 'Loading image…' : 'Choose an image', r.x + r.w / 2, r.y + r.h / 2); }
+    g.restore(); return;
+  }
+  g.globalAlpha = e.opacity;
+  if (e.radius) { rr(r.x, r.y, r.w, r.h, e.radius); g.clip(); }
+  const iw = img.naturalWidth, ih = img.naturalHeight;
+  const s = e.fit === 'cover' ? Math.max(r.w / iw, r.h / ih) : Math.min(r.w / iw, r.h / ih);
+  const dw = iw * s, dh = ih * s;
+  g.drawImage(img, r.x + (r.w - dw) / 2, r.y + (r.h - dh) / 2, dw, dh);
+  g.restore();
+}
+function drawTimerEl(e) {
+  const r = px(e);
+  let label;
+  if (e.mode === 'countdown') { const left = Math.max(0, e.target - Date.now()); label = e.target ? fmtTime(left + 999) : '00:00'; }
+  else label = new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+  g.save();
+  if (e.bg) { g.fillStyle = e.bg; rr(r.x, r.y, r.w, r.h, 10); g.fill(); }
+  g.font = `800 ${e.size}px "JetBrains Mono", ui-monospace, monospace`; g.fillStyle = e.color; g.textAlign = 'center'; g.textBaseline = 'middle';
+  if (!e.bg) { g.shadowColor = 'rgba(0,0,0,.45)'; g.shadowBlur = 10; }
+  g.fillText(label, r.x + r.w / 2, r.y + r.h / 2 + 2);
+  g.restore();
+}
+function drawOverlays(t) {
+  for (const e of S.state.elements || []) {
+    if (e.type === 'chat') drawChatEl(e, t);
+    else if (e.type === 'text') drawTextEl(e);
+    else if (e.type === 'image') drawImageEl(e);
+    else if (e.type === 'timer') drawTimerEl(e);
+  }
+}
+const featAnim = { key: '', t0: 0 };
+function drawFeatured(t, bottom) {
+  const f = S.state.featured;
+  if (!f) return;
+  if (featAnim.key !== f.id) { featAnim.key = f.id; featAnim.t0 = t; }
+  const k = Math.min(1, (t - featAnim.t0) / 380), e = 1 - Math.pow(1 - k, 3);
+  const brand = S.state.brand, cw = 560, pad = 22;
+  g.save();
+  g.font = '500 24px Inter, sans-serif';
+  const lines = wrapLines(f.text, cw - pad * 2 - 64, 3);
+  const ch = 64 + lines.length * 32 + 10;
+  // Sit opposite the chat overlay, and above the banner when both share the left side.
+  const chatEl = (S.state.elements || []).find((el) => el.type === 'chat');
+  const left = chatEl && chatEl.x + chatEl.w / 2 > 0.5;
+  if (left && S.state.banner) bottom -= S.state.banner.sub ? 140 : 100;
+  const x = left ? 44 - (1 - e) * 60 : W - cw - 44 + (1 - e) * 60, y = bottom - ch - 20;
+  g.globalAlpha = e;
+  g.shadowColor = 'rgba(0,0,0,.35)'; g.shadowBlur = 28; g.shadowOffsetY = 10;
+  g.fillStyle = '#ffffff'; rr(x, y, cw, ch, 14); g.fill();
+  g.shadowColor = 'transparent';
+  g.fillStyle = SRC_COLOR[f.src] || brand.color; rr(x, y, 8, ch, [14, 0, 0, 14]); g.fill();
+  void lines;
+  g.beginPath(); g.arc(x + pad + 22, y + pad + 20, 20, 0, Math.PI * 2); g.fill();
+  g.fillStyle = '#fff'; g.font = '700 18px Inter, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
+  g.fillText(initials(f.name), x + pad + 22, y + pad + 21);
+  g.textAlign = 'left'; g.fillStyle = '#111827'; g.font = '700 20px Inter, sans-serif';
+  g.fillText(f.name, x + pad + 54, y + pad + 12);
+  g.fillStyle = '#6b7280'; g.font = '500 14px Inter, sans-serif';
+  g.fillText(f.src === 'twitch' ? 'on Twitch' : f.src === 'youtube' ? 'on YouTube' : 'in the studio', x + pad + 54, y + pad + 33);
+  g.fillStyle = '#111827'; g.font = '500 24px Inter, sans-serif'; g.textBaseline = 'alphabetic';
+  lines.forEach((l, i) => g.fillText(l, x + pad + 6, y + 64 + 26 + i * 32));
+  g.restore();
+}
+
+// ---------------------------------------------------------------- layout editor (host)
+const editor = { on: false, sel: null, drag: null, commitT: null };
+function elementsCopy() { return (S.state.elements || []).map((e) => ({ ...e })); }
+function selEl() { return (S.state.elements || []).find((e) => e.id === editor.sel) || null; }
+function commitElements(delay = 0) {
+  clearTimeout(editor.commitT);
+  editor.commitT = setTimeout(() => setStage({ elements: S.state.elements }), delay);
+}
+function addElement(type) {
+  const e = withDefaults({ type });
+  if (type === 'slot') {
+    const used = new Set((S.state.elements || []).filter((x) => x.type === 'slot').map((x) => x.index));
+    e.index = [0, 1, 2, 3, 4, 5].find((i) => !used.has(i)) ?? 0;
+  }
+  const patch = { elements: [...elementsCopy(), e] };
+  if (type === 'slot' && S.state.layout !== 'custom') patch.layout = 'custom';
+  setStage(patch);
+  editor.sel = e.id;
+  setEditing(true);
+  return e;
+}
+function setEditing(on) {
+  editor.on = on && isHost();
+  $('#editLayer').hidden = !editor.on;
+  $('#editToggle').setAttribute('aria-pressed', String(editor.on));
+  $('#editToggle').textContent = editor.on ? 'Done editing' : 'Edit on stage';
+  renderEditor();
+}
+const ELABEL = { slot: 'Camera', chat: 'Chat box', text: 'Text', image: 'Image', timer: 'Timer' };
+function elName(e) {
+  if (e.type === 'slot') return `Camera ${e.index + 1}`;
+  if (e.type === 'text') return e.text ? `“${e.text.slice(0, 22)}”` : 'Text';
+  if (e.type === 'timer') return e.mode === 'countdown' ? 'Countdown' : 'Clock';
+  return ELABEL[e.type];
+}
+function renderEditor() {
+  const els = S.state.elements || [];
+  if (editor.sel && !els.some((e) => e.id === editor.sel)) editor.sel = null;
+  // Boxes on the stage
+  const layer = $('#editLayer');
+  if (editor.on) {
+    const custom = S.state.layout === 'custom';
+    layer.replaceChildren(...els.filter((e) => custom || e.type !== 'slot').map((e) => {
+      const d = document.createElement('div');
+      d.className = 'ebox' + (e.id === editor.sel ? ' sel' : '');
+      d.dataset.id = e.id;
+      Object.assign(d.style, { left: e.x * 100 + '%', top: e.y * 100 + '%', width: e.w * 100 + '%', height: e.h * 100 + '%' });
+      const lab = document.createElement('span'); lab.className = 'elab'; lab.textContent = elName(e);
+      const hd = document.createElement('i'); hd.className = 'ehandle'; hd.dataset.h = '1';
+      d.append(lab, hd);
+      return d;
+    }));
+  }
+  // Element list
+  const list = $('#elList');
+  if (!list) return;
+  list.replaceChildren(...els.map((e, i) => {
+    const li = document.createElement('li');
+    li.className = 'el-row' + (e.id === editor.sel ? ' sel' : '') + (e.type === 'slot' && S.state.layout !== 'custom' ? ' dim' : '');
+    const b = document.createElement('button'); b.type = 'button'; b.className = 'el-pick'; b.textContent = elName(e);
+    b.onclick = () => { editor.sel = e.id; setEditing(true); };
+    const up = mkBtn('↑', 'Bring forward', () => moveEl(i, 1)), dn = mkBtn('↓', 'Send backward', () => moveEl(i, -1)), del = mkBtn('✕', 'Delete', () => deleteEl(e.id));
+    li.append(b, up, dn, del);
+    return li;
+  }));
+  $('#elEmpty').hidden = !!els.length;
+  renderProps();
+}
+function mkBtn(txt, title, fn) { const b = document.createElement('button'); b.type = 'button'; b.className = 'el-mini'; b.textContent = txt; b.title = title; b.setAttribute('aria-label', title); b.onclick = fn; b.disabled = !isHost(); return b; }
+function moveEl(i, dir) {
+  const els = elementsCopy(), j = i + dir;
+  if (j < 0 || j >= els.length) return;
+  [els[i], els[j]] = [els[j], els[i]];
+  setStage({ elements: els });
+}
+function deleteEl(id) { setStage({ elements: elementsCopy().filter((e) => e.id !== id) }); }
+
+// Property form for the selected element
+function renderProps() {
+  const box = $('#elProps');
+  const e = selEl();
+  box.hidden = !e;
+  if (!e) return;
+  const f = [];
+  const field = (label, html) => f.push(`<label class="fld"><span>${label}</span>${html}</label>`);
+  const val = (k) => String(e[k] ?? '').replace(/"/g, '&quot;');
+  f.push(`<h3>${elName(e).replace(/</g, '&lt;')}</h3>`);
+  if (e.type === 'slot') field('Shows', `<select data-k="index" data-num>${[0, 1, 2, 3, 4, 5].map((i) => `<option value="${i}" ${e.index === i ? 'selected' : ''}>Stage position ${i + 1}</option>`).join('')}</select>`);
+  if (e.type === 'text') {
+    field('Text', `<textarea data-k="text" rows="2" maxlength="200">${val('text').replace(/</g, '&lt;')}</textarea>`);
+    field('Size', `<input type="range" min="14" max="140" data-k="size" data-num value="${e.size}">`);
+    f.push(`<div class="row2"><label class="fld"><span>Colour</span><input type="color" data-k="color" value="${e.color}"></label><label class="fld"><span>Align</span><select data-k="align">${['left', 'center', 'right'].map((a) => `<option ${e.align === a ? 'selected' : ''}>${a}</option>`).join('')}</select></label></div>`);
+    f.push(`<label class="check"><input type="checkbox" data-k="bold" ${e.bold ? 'checked' : ''}> Bold</label>`);
+    f.push(`<label class="check"><input type="checkbox" data-bg ${e.bg ? 'checked' : ''}> Background box</label>`);
+    if (e.bg) field('Box colour', `<input type="color" data-k="bg" value="${e.bg}">`);
+  }
+  if (e.type === 'chat') {
+    field('Messages shown', `<input type="range" min="2" max="15" data-k="max" data-num value="${e.max}">`);
+    field('Text size', `<input type="range" min="12" max="36" data-k="size" data-num value="${e.size}">`);
+    f.push(`<label class="check"><input type="checkbox" data-k="bg" ${e.bg ? 'checked' : ''}> Dark backing</label>`);
+    f.push(`<label class="check"><input type="checkbox" data-k="fade" ${e.fade ? 'checked' : ''}> Fade out old messages</label>`);
+    f.push(`<p class="hint">Shows studio chat${S.state.feeds?.twitch ? ` and Twitch #${S.state.feeds.twitch}` : '. Connect Twitch in the Chat panel to show viewer chat'}.</p>`);
+  }
+  if (e.type === 'image') {
+    f.push(`<label class="btn outline upload-btn"><input type="file" accept="image/png,image/jpeg,image/webp,image/gif" data-upload hidden>${e.asset ? 'Replace image' : 'Choose image'}</label>`);
+    field('Fit', `<select data-k="fit"><option value="contain" ${e.fit === 'contain' ? 'selected' : ''}>Fit inside</option><option value="cover" ${e.fit === 'cover' ? 'selected' : ''}>Fill box</option></select>`);
+    field('Opacity', `<input type="range" min="0.1" max="1" step="0.05" data-k="opacity" data-num value="${e.opacity}">`);
+    field('Corner rounding', `<input type="range" min="0" max="120" data-k="radius" data-num value="${e.radius}">`);
+  }
+  if (e.type === 'timer') {
+    field('Shows', `<select data-k="mode"><option value="clock" ${e.mode === 'clock' ? 'selected' : ''}>Current time</option><option value="countdown" ${e.mode === 'countdown' ? 'selected' : ''}>Countdown</option></select>`);
+    if (e.mode === 'countdown') f.push(`<div class="row">${[1, 3, 5, 10, 15].map((m) => `<button type="button" class="btn outline sm" data-count="${m}">${m} min</button>`).join('')}</div>`);
+    field('Size', `<input type="range" min="16" max="140" data-k="size" data-num value="${e.size}">`);
+    f.push(`<div class="row2"><label class="fld"><span>Colour</span><input type="color" data-k="color" value="${e.color}"></label></div>`);
+    f.push(`<label class="check"><input type="checkbox" data-bg ${e.bg ? 'checked' : ''}> Background box</label>`);
+    if (e.bg) field('Box colour', `<input type="color" data-k="bg" value="${e.bg}">`);
+  }
+  f.push(`<button type="button" class="btn ghost danger-text" data-del>Delete ${ELABEL[e.type].toLowerCase()}</button>`);
+  box.innerHTML = f.join('');
+  box.querySelectorAll('input, select, textarea').forEach((inp) => { inp.disabled = !isHost() && !inp.dataset.upload; });
+}
+$('#elProps').addEventListener('input', (ev) => {
+  const e = selEl(), t = ev.target;
+  if (!e || !isHost()) return;
+  if (t.dataset.k) {
+    e[t.dataset.k] = t.type === 'checkbox' ? t.checked : t.dataset.num !== undefined ? Number(t.value) : t.value;
+    if (t.dataset.k === 'mode') { renderProps(); }
+    commitElements(t.type === 'range' || t.tagName === 'TEXTAREA' ? 250 : 0);
+  }
+  if (t.dataset.bg !== undefined) { e.bg = t.checked ? (e.type === 'text' ? '#1f6feb' : '#111827') : ''; renderProps(); commitElements(); }
+});
+$('#elProps').addEventListener('change', async (ev) => {
+  const t = ev.target, e = selEl();
+  if (!e || t.dataset.upload === undefined || !t.files?.[0]) return;
+  const id = e.id;
+  try {
+    const data = await compressImage(t.files[0]);
+    const asset = await storeAsset(data);
+    const cur = (S.state.elements || []).find((x) => x.id === id);
+    if (cur) { cur.asset = asset; commitElements(); renderProps(); toast('Image added.'); }
+  }
+  catch (err) { toast(err.message, { err: true }); }
+});
+$('#elProps').addEventListener('click', (ev) => {
+  const e = selEl(); if (!e) return;
+  if (ev.target.dataset.del !== undefined) deleteEl(e.id);
+  if (ev.target.dataset.count) { e.target = Date.now() + Number(ev.target.dataset.count) * 60_000; commitElements(); toast(`Countdown set to ${ev.target.dataset.count} min.`); }
+});
+
+// Drag and resize on the stage
+$('#editLayer').addEventListener('pointerdown', (ev) => {
+  const box = ev.target.closest('.ebox');
+  if (!box || !isHost()) { editor.sel = null; renderEditor(); return; }
+  const e = (S.state.elements || []).find((x) => x.id === box.dataset.id);
+  if (!e) return;
+  editor.sel = e.id;
+  const rect = $('#stage').getBoundingClientRect();
+  editor.drag = { e, mode: ev.target.dataset.h ? 'size' : 'move', sx: ev.clientX, sy: ev.clientY, o: { x: e.x, y: e.y, w: e.w, h: e.h }, rw: rect.width, rh: rect.height };
+  box.setPointerCapture(ev.pointerId);
+  renderEditor();
+  ev.preventDefault();
+});
+const snap = (v) => { for (const s of [0, .5, 1]) if (Math.abs(v - s) < .012) return s; return Math.round(v * 200) / 200; };
+$('#editLayer').addEventListener('pointermove', (ev) => {
+  const d = editor.drag; if (!d) return;
+  const dx = (ev.clientX - d.sx) / d.rw, dy = (ev.clientY - d.sy) / d.rh;
+  if (d.mode === 'move') {
+    const nx = snap(d.o.x + dx), ny = snap(d.o.y + dy);
+    // also snap the right/bottom edges and the centre
+    d.e.x = Math.abs(nx + d.o.w - snap(nx + d.o.w)) < 1e-9 ? nx : snap(nx + d.o.w) - d.o.w;
+    d.e.y = Math.abs(ny + d.o.h - snap(ny + d.o.h)) < 1e-9 ? ny : snap(ny + d.o.h) - d.o.h;
+    d.e.x = Math.min(1 - .02, Math.max(-d.o.w + .02, d.e.x)); d.e.y = Math.min(1 - .02, Math.max(-d.o.h + .02, d.e.y));
+  } else {
+    d.e.w = Math.max(.03, Math.min(1.2, snap(d.o.x + d.o.w + dx) - d.o.x));
+    d.e.h = Math.max(.03, Math.min(1.2, snap(d.o.y + d.o.h + dy) - d.o.y));
+  }
+  const box = $(`.ebox[data-id="${d.e.id}"]`);
+  if (box) Object.assign(box.style, { left: d.e.x * 100 + '%', top: d.e.y * 100 + '%', width: d.e.w * 100 + '%', height: d.e.h * 100 + '%' });
+});
+$('#editLayer').addEventListener('pointerup', () => { if (editor.drag) { editor.drag = null; commitElements(); } });
+$('#editLayer').addEventListener('pointercancel', () => { editor.drag = null; });
+
+// Panel wiring
+$('#editToggle').onclick = () => setEditing(!editor.on);
+$$('[data-add]').forEach((b) => b.addEventListener('click', () => { if (!isHost()) return toast('Only the host can change the stage.', { err: true }); addElement(b.dataset.add); }));
+function renderTemplates() {
+  const wrap = $('#tplList');
+  wrap.replaceChildren(...TEMPLATES.map((tpl) => {
+    const b = document.createElement('button'); b.type = 'button'; b.className = 'tpl'; b.disabled = !isHost();
+    const pv = document.createElement('span'); pv.className = 'tpl-pv';
+    for (const e of tpl.els) { const i = document.createElement('i'); i.className = 'tpl-' + e.type; Object.assign(i.style, { left: e.x * 100 + '%', top: e.y * 100 + '%', width: e.w * 100 + '%', height: e.h * 100 + '%' }); pv.append(i); }
+    const nm = document.createElement('span'); nm.textContent = tpl.name;
+    b.append(pv, nm);
+    b.onclick = () => applyTemplate(tpl);
+    return b;
+  }));
+}
+// Saved layouts live in this browser (images included, so they work in any new studio).
+function savedLayouts() { return store.get('layouts', []); }
+function renderSaved() {
+  const ul = $('#savedList'), list = savedLayouts();
+  ul.replaceChildren(...list.map((l, i) => {
+    const li = document.createElement('li'); li.className = 'el-row';
+    const b = document.createElement('button'); b.type = 'button'; b.className = 'el-pick'; b.textContent = l.name; b.disabled = !isHost();
+    b.onclick = () => loadLayout(l);
+    li.append(b, mkBtn('✕', 'Delete saved layout', () => { const all = savedLayouts(); all.splice(i, 1); store.set('layouts', all); renderSaved(); }));
+    return li;
+  }));
+  $('#savedEmpty').hidden = !!list.length;
+}
+$('#saveLayout').onclick = () => {
+  const name = $('#layoutName').value.trim() || `Layout ${savedLayouts().length + 1}`;
+  const els = elementsCopy().map((e) => (e.type === 'image' && S.assets.get(e.asset)?.data ? { ...e, _data: S.assets.get(e.asset).data } : e));
+  const all = savedLayouts().filter((l) => l.name !== name);
+  all.unshift({ name, layout: S.state.layout, elements: els });
+  try { store.set('layouts', all.slice(0, 20)); localStorage.getItem('gather:layouts') || 0; } catch {}
+  if (!savedLayouts().some((l) => l.name === name)) return toast('Could not save. The images may be too large for this browser.', { err: true });
+  $('#layoutName').value = '';
+  renderSaved(); toast(`Saved “${name}”.`);
+};
+async function loadLayout(l) {
+  const els = [];
+  for (const e of l.elements) {
+    if (e.type === 'image' && e._data) { const { _data, ...rest } = e; els.push({ ...rest, asset: await storeAsset(_data).catch(() => '') }); }
+    else els.push(e);
+  }
+  setStage({ layout: l.layout || 'custom', elements: els });
+  toast(`Loaded “${l.name}”.`);
+}
+// Twitch + chat overlay controls (Chat panel)
+$('#twitchForm').addEventListener('submit', (ev) => {
+  ev.preventDefault();
+  if (!isHost()) return toast('Only the host can connect platform chat.', { err: true });
+  const v = $('#twitchInput').value.trim().replace(/^https?:\/\/(www\.)?twitch\.tv\//i, '').replace(/^#/, '').toLowerCase().replace(/[^a-z0-9_]/g, '');
+  if (twitch.want && (!v || v === twitch.want)) { setStage({ feeds: { twitch: '' } }); toast('Twitch chat disconnected.'); return; }
+  if (!v) return toast('Enter a Twitch channel name.');
+  setStage({ feeds: { twitch: v } });
+});
+$('#chatOverlayBtn').onclick = () => {
+  if (!isHost()) return toast('Only the host can change the stage.', { err: true });
+  const existing = (S.state.elements || []).find((e) => e.type === 'chat');
+  if (existing) { setStage({ elements: elementsCopy().filter((e) => e.id !== existing.id) }); toast('Chat overlay removed.'); }
+  else { addElement('chat'); setEditing(false); toast('Chat overlay added. Drag it in Layouts → Edit on stage.'); }
+};
+$('#featHide').onclick = () => setStage({ featured: null });
+function renderFeedUI() {
+  const host = isHost();
+  $('#twitchInput').disabled = !host;
+  $('#twitchGo').disabled = !host;
+  $('#twitchGo').textContent = S.state.feeds?.twitch ? 'Disconnect' : 'Connect';
+  if (document.activeElement !== $('#twitchInput')) $('#twitchInput').value = S.state.feeds?.twitch || '';
+  const hasChat = (S.state.elements || []).some((e) => e.type === 'chat');
+  $('#chatOverlayBtn').textContent = hasChat ? 'Remove chat from stage' : 'Show chat on stage';
+  $('#chatOverlayBtn').disabled = !host;
+  $('#featBar').hidden = !S.state.featured;
+  if (S.state.featured) $('#featText').textContent = `${S.state.featured.name}: ${S.state.featured.text}`;
+  $('#featHide').disabled = !host;
+  $$('#msgs .feat').forEach((b) => { b.hidden = !host; b.textContent = S.state.featured?.id === b.closest('li')?.dataset.fid ? 'On stage' : 'Show on stage'; });
+  setTwitchStatus(twitch.status);
+}
+function renderLayoutsPanel() {
+  renderTemplates(); renderSaved(); renderEditor();
+  $$('[data-add]').forEach((b) => (b.disabled = !isHost()));
+  $('#editToggle').disabled = !isHost();
+  $('#saveLayout').disabled = !isHost();
+  $('#layoutsHint').textContent = isHost() ? 'Drag and resize on the stage. Changes show for everyone and in recordings.' : 'Only the host can change layouts. You see them on your stage.';
+  if (!isHost() && editor.on) setEditing(false);
 }
 
 // ---------------------------------------------------------------- recording
@@ -756,7 +1354,10 @@ function addMsg(msg) {
     if (/^https?:\/\//.test(part)) { const a = document.createElement('a'); a.href = part; a.textContent = part; a.target = '_blank'; a.rel = 'noopener noreferrer'; txt.append(a); }
     else if (part) txt.append(document.createTextNode(part));
   }
-  li.append(who, txt);
+  const fm = { id: msg.id, src: 'studio', name: msg.name, color: '', text: msg.text, ts: msg.ts };
+  pushFeed(fm);
+  li.dataset.fid = msg.id;
+  li.append(who, txt, featureBtn(fm));
   appendLog(li);
   if (!mine && S.tab !== 'chat') { S.unread++; $('#chatBadge').hidden = false; }
 }
@@ -785,7 +1386,7 @@ function setPhase(p) {
   $('#statusText').textContent = { offline: 'Studio offline', connecting: 'Connecting…', online: 'Studio connected', reconnecting: 'Reconnecting…' }[p];
   renderAll();
 }
-function renderAll() { renderHeader(); renderStageUI(); renderCrew(); renderDock(); renderPanels(); }
+function renderAll() { renderHeader(); renderStageUI(); renderCrew(); renderDock(); renderPanels(); renderFeedUI(); renderLayoutsPanel(); syncTwitch(); }
 function renderHeader() {
   $('#studioTitle').textContent = S.state.title || DEFAULT_TITLE;
   $('#enterTopText').textContent = S.studio ? 'Room details' : 'Enter studio';
@@ -918,11 +1519,16 @@ function setTab(tab) {
   $$('.panel').forEach((p) => (p.hidden = p.dataset.panel !== tab));
   if (tab === 'chat') { S.unread = 0; $('#chatBadge').hidden = true; }
   if (tab === 'settings') listDevices();
+  if (tab !== 'layouts' && editor.on) setEditing(false);
 }
 $$('.rail-btn').forEach((b) => b.addEventListener('click', () => setTab(b.dataset.tab)));
 $('#settingsDock').onclick = () => { setTab('settings'); if (innerWidth <= 900) $('#side').scrollIntoView({ behavior: 'smooth' }); };
 
-$$('.lay').forEach((b) => b.addEventListener('click', () => setStage({ layout: b.dataset.layout })));
+$$('.lay').forEach((b) => b.addEventListener('click', () => chooseLayout(b.dataset.layout)));
+function chooseLayout(l) {
+  if (l === 'custom' && !(S.state.elements || []).some((e) => e.type === 'slot')) return applyTemplate(TEMPLATES[0]);
+  setStage({ layout: l });
+}
 
 function showBanner() {
   const text = $('#bannerText').value.trim();
@@ -999,6 +1605,7 @@ function leave() {
   S.local.camOn = S.prefs.startCam; S.local.micOn = S.prefs.startMic;
   $$('#msgs > *').forEach((n) => n.remove());
   $$('.crew-card').forEach((n) => n.remove());
+  S.feed = []; editor.sel = null; if (editor.on) setEditing(false);
   history.replaceState(null, '', '/');
   setPhase('offline');
   toast('You left the studio.');
@@ -1108,6 +1715,10 @@ addEventListener('keydown', (e) => {
     1: () => isHost() && setStage({ layout: 'solo' }),
     2: () => isHost() && setStage({ layout: 'split' }),
     3: () => isHost() && setStage({ layout: 'spotlight' }),
+    4: () => isHost() && chooseLayout('custom'),
+    delete: () => { if (editor.on && editor.sel) deleteEl(editor.sel); },
+    backspace: () => { if (editor.on && editor.sel) deleteEl(editor.sel); },
+    escape: () => editor.on && setEditing(false),
     '/': () => { setTab('chat'); $('#chatInput').focus(); },
   }[k];
   if (act) { e.preventDefault(); act(); }

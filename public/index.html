@@ -43,6 +43,7 @@
       <div class="stage-wrap">
         <div class="stage" id="stage">
           <canvas id="stageCanvas" width="1280" height="720" aria-label="Studio stage"></canvas>
+          <div class="edit-layer" id="editLayer" hidden></div>
           <div class="stage-empty" id="stageEmpty">
             <div class="cam-badge"><svg viewBox="0 0 24 24"><path d="M3.5 7.5h11v9h-11z"/><path d="m14.5 10.5 6-3v9l-6-3"/></svg></div>
             <h1>Good conversations start here.</h1>
@@ -58,6 +59,7 @@
         <button class="lay" data-layout="solo" role="radio" aria-checked="false" title="Solo (1)"><svg viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="14" rx="1.5"/></svg></button>
         <button class="lay on" data-layout="split" role="radio" aria-checked="true" title="Side by side (2)"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="8" height="14" rx="1.5"/><rect x="13" y="5" width="8" height="14" rx="1.5"/></svg></button>
         <button class="lay" data-layout="spotlight" role="radio" aria-checked="false" title="Spotlight (3)"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="10" rx="1.5"/><rect x="3" y="16" width="5" height="4" rx="1"/><rect x="9.5" y="16" width="5" height="4" rx="1"/><rect x="16" y="16" width="5" height="4" rx="1"/></svg></button>
+        <button class="lay" data-layout="custom" role="radio" aria-checked="false" title="Custom layout (4)"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="11" height="10" rx="1.5"/><rect x="16" y="4" width="5" height="16" rx="1.5"/><rect x="3" y="16" width="11" height="4" rx="1"/></svg></button>
         <span class="host-note" id="hostNote" hidden>The host controls the stage</span>
       </div>
 
@@ -81,6 +83,20 @@
           <div class="notice">
             <strong>Your crew, connected.</strong>
             <p>Messages are shared with connected studio participants, not a public audience.</p>
+          </div>
+          <div class="feeds">
+            <form class="feed-row" id="twitchForm" autocomplete="off">
+              <span class="src src-twitch">Twitch</span>
+              <input id="twitchInput" maxlength="60" placeholder="channel name" aria-label="Twitch channel to read chat from" spellcheck="false">
+              <button class="btn outline sm" id="twitchGo">Connect</button>
+            </form>
+            <p class="feed-status"><i id="twitchStatus" data-state="off">Not connected</i> · YouTube chat arrives with Google sign-in</p>
+            <button type="button" class="btn outline block sm" id="chatOverlayBtn">Show chat on stage</button>
+          </div>
+          <div class="feat-bar" id="featBar" hidden>
+            <span class="feat-label">On stage</span>
+            <span class="feat-text" id="featText"></span>
+            <button type="button" class="link" id="featHide">Hide</button>
           </div>
           <div class="chat-empty" id="chatEmpty">
             <svg viewBox="0 0 24 24"><path d="M4 4h16v12H9l-5 4z"/><path d="M8 8.5h8M8 12h5"/></svg>
@@ -115,6 +131,36 @@
           <div class="row">
             <button class="btn outline" id="tickerShow">Run ticker</button>
             <button class="btn ghost" id="tickerHide">Stop</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- Layouts -->
+      <section class="panel" data-panel="layouts" hidden>
+        <header class="panel-head"><h2>Layouts</h2><p>Arrange cameras, chat, text and images anywhere.</p></header>
+        <div class="panel-body form">
+          <div class="row"><button type="button" class="btn primary" id="editToggle" aria-pressed="false">Edit on stage</button></div>
+          <p class="hint" id="layoutsHint">Drag and resize on the stage. Changes show for everyone and in recordings.</p>
+          <div class="fld"><span>Start from a template</span><div class="tpls" id="tplList"></div></div>
+          <div class="fld"><span>Add to stage</span>
+            <div class="adds">
+              <button type="button" class="btn outline sm" data-add="slot">+ Camera</button>
+              <button type="button" class="btn outline sm" data-add="chat">+ Chat box</button>
+              <button type="button" class="btn outline sm" data-add="text">+ Text</button>
+              <button type="button" class="btn outline sm" data-add="image">+ Image or logo</button>
+              <button type="button" class="btn outline sm" data-add="timer">+ Clock / countdown</button>
+            </div>
+          </div>
+          <div class="fld"><span>On stage <em>top of the list is drawn first</em></span>
+            <ul class="el-list" id="elList"></ul>
+            <p class="hint" id="elEmpty">Nothing added yet. Pick a template or add an element.</p>
+          </div>
+          <div class="el-props form" id="elProps" hidden></div>
+          <hr>
+          <div class="fld"><span>Saved layouts <em>kept in this browser</em></span>
+            <div class="composer-row"><input id="layoutName" maxlength="40" placeholder="Name this layout"><button type="button" class="btn outline sm" id="saveLayout">Save</button></div>
+            <ul class="el-list" id="savedList"></ul>
+            <p class="hint" id="savedEmpty">Saved layouts appear here, images included.</p>
           </div>
         </div>
       </section>
@@ -184,7 +230,8 @@
             <div><dt><kbd>V</kbd></dt><dd>Camera on or off</dd></div>
             <div><dt><kbd>S</kbd></dt><dd>Share your screen</dd></div>
             <div><dt><kbd>R</kbd></dt><dd>Start or stop recording</dd></div>
-            <div><dt><kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd></dt><dd>Solo, side by side, spotlight</dd></div>
+            <div><dt><kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd> <kbd>4</kbd></dt><dd>Solo, side by side, spotlight, custom</dd></div>
+            <div><dt><kbd>Del</kbd></dt><dd>Remove the selected element while editing</dd></div>
             <div><dt><kbd>F</kbd></dt><dd>Full screen stage</dd></div>
             <div><dt><kbd>/</kbd></dt><dd>Jump to chat</dd></div>
           </dl>
@@ -201,6 +248,7 @@
     <nav class="rail" aria-label="Studio panels">
       <button class="rail-btn on" data-tab="chat"><svg viewBox="0 0 24 24"><path d="M4 4h16v12H9l-5 4z"/><path d="M8 8.5h8M8 12h5"/></svg><span>Chat</span><b class="dot-badge" id="chatBadge" hidden></b></button>
       <button class="rail-btn" data-tab="banners"><svg viewBox="0 0 24 24"><path d="M5 21V4M5 4h13l-3 4.5L18 13H5"/></svg><span>Banners</span></button>
+      <button class="rail-btn" data-tab="layouts"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="11" height="10" rx="1.5"/><rect x="16" y="4" width="5" height="16" rx="1.5"/><rect x="3" y="16" width="11" height="4" rx="1"/></svg><span>Layouts</span></button>
       <button class="rail-btn" data-tab="brand"><svg viewBox="0 0 24 24"><path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1 6.2L12 17.3l-5.5 2.9 1-6.2L3 9.6l6.2-.9z"/></svg><span>Brand</span></button>
       <button class="rail-btn" data-tab="settings"><svg viewBox="0 0 24 24"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/><path d="M4 12h2M10 12h10"/><circle cx="8" cy="12" r="2"/></svg><span>Settings</span></button>
       <button class="rail-btn help" data-tab="help"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.5v.7M12 17h.01"/></svg><span>Help</span></button>

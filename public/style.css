@@ -326,3 +326,53 @@ input[type="color"] { width: 100%; height: 40px; border: 1px solid var(--line-2)
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
 }
+
+/* ---------- layouts editor + chat overlays ---------- */
+.btn.sm { height: 32px; padding: 0 12px; font-size: 13px; }
+.danger-text { color: var(--danger); justify-self: start; }
+.edit-layer { position: absolute; inset: 0; z-index: 2; cursor: default; }
+.ebox { position: absolute; border: 1.5px dashed rgb(255 255 255 / .55); border-radius: 6px; cursor: move; touch-action: none; }
+.ebox:hover { border-color: #fff; background: rgb(255 255 255 / .05); }
+.ebox.sel { border: 2px solid var(--accent); background: color-mix(in srgb, var(--accent) 10%, transparent); }
+.elab { position: absolute; left: 4px; top: 4px; font: 600 11px var(--f-body); color: #fff; background: rgb(0 0 0 / .6); padding: 2px 6px; border-radius: 4px; pointer-events: none; white-space: nowrap; max-width: calc(100% - 8px); overflow: hidden; text-overflow: ellipsis; }
+.ehandle { position: absolute; right: -7px; bottom: -7px; width: 14px; height: 14px; border-radius: 4px; background: #fff; border: 2px solid var(--accent); cursor: nwse-resize; }
+.tpls { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.tpl { display: grid; gap: 6px; padding: 8px; border: 1px solid var(--line-2); border-radius: 10px; background: var(--surface); font-size: 12px; font-weight: 600; text-align: left; color: var(--ink-2); }
+.tpl:hover:not(:disabled) { border-color: var(--accent); color: var(--ink); }
+.tpl-pv { position: relative; aspect-ratio: 16 / 9; border-radius: 6px; background: linear-gradient(135deg, #1d3f47, #2a3566); overflow: hidden; }
+.tpl-pv i { position: absolute; border-radius: 2px; }
+.tpl-slot { background: rgb(255 255 255 / .75); }
+.tpl-chat { background: rgb(145 70 255 / .75); }
+.adds { display: flex; flex-wrap: wrap; gap: 6px; }
+.el-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.el-row { display: flex; align-items: center; gap: 2px; border: 1px solid var(--line); border-radius: 8px; padding: 2px; background: var(--surface); }
+.el-row.sel { border-color: var(--accent); background: var(--accent-soft); }
+.el-row.dim .el-pick { color: var(--ink-3); }
+.el-pick { flex: 1; min-width: 0; text-align: left; padding: 6px 8px; font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; border-radius: 6px; }
+.el-mini { width: 28px; height: 28px; border-radius: 6px; color: var(--ink-2); font-size: 13px; }
+.el-mini:hover:not(:disabled) { background: var(--surface-2); color: var(--ink); }
+.el-props { border: 1px solid var(--line); border-radius: var(--r); padding: 14px; background: var(--surface-2); gap: 12px; }
+.el-props h3 { margin: 0; }
+.row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.upload-btn { cursor: pointer; justify-self: start; }
+input[type="range"] { width: 100%; accent-color: var(--accent); }
+.feeds { display: grid; gap: 8px; }
+.feed-row { display: flex; align-items: center; gap: 6px; border: 1px solid var(--line-2); border-radius: 10px; padding: 4px 4px 4px 8px; background: var(--surface); }
+.feed-row input { flex: 1; width: 0; min-width: 0; border: 0; outline: 0; background: none; height: 32px; }
+.feeds > *, .chat-body > * { min-width: 0; }
+.chat-body { overflow-x: hidden; }
+.feed-status { margin: 0; font-size: 12px; color: var(--ink-3); }
+.feed-status i { font-style: normal; font-weight: 600; }
+.feed-status i[data-state="live"] { color: var(--ok); }
+.src { font-size: 10px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; padding: 2px 6px; border-radius: 4px; color: #fff; background: var(--ink-3); flex: none; }
+.src-twitch { background: #9146ff; }
+.src-youtube { background: #ff0033; }
+.msg { position: relative; }
+.msg.ext .who { align-items: center; }
+.msg .feat { justify-self: start; font-size: 11px; font-weight: 600; color: var(--accent); padding: 2px 0; opacity: 0; transition: opacity .15s; }
+.msg:hover .feat, .msg .feat:focus-visible { opacity: 1; }
+.msg.me .feat { justify-self: end; }
+.feat-bar { display: flex; align-items: center; gap: 8px; border: 1px solid var(--accent); background: var(--accent-soft); border-radius: 10px; padding: 8px 10px; font-size: 12.5px; }
+.feat-label { font-weight: 700; color: var(--accent); flex: none; }
+.feat-text { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+@media (hover: none) { .msg .feat { opacity: 1; } }
