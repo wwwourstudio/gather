@@ -1,0 +1,44 @@
+{
+  "key": "#145124",
+  "results": {
+    "green": {
+      "matte error, whole frame": [
+        0.08208039118677893,
+        0.012911509576533843
+      ],
+      "matte error, edges and hair": [
+        0.24368545576995634,
+        0.1292679565359549
+      ],
+      "colour error on the subject (0–255)": [
+        3.7987743232394506,
+        3.510734762987878
+      ],
+      "green cast left near the subject’s edge (0–255)": [
+        14.823756879158603,
+        7.0466596947371505
+      ]
+    },
+    "mask": {
+      "mask error, whole frame": [
+        0.0058346983068310165,
+        0.0028221039483744587
+      ],
+      "mask error, edges and hair": [
+        0.12522724638042537,
+        0.060569422422494204
+      ],
+      "edge flicker between frames": [
+        0.09085205663243695,
+        0.011456520119137835
+      ]
+    },
+    "blur": {
+      "person colour bleeding into the background (0–255)": [
+        16.73362554866752,
+        2.4840565357200983
+      ]
+    }
+  },
+  "geometricMean": 2.98059434884848
+}

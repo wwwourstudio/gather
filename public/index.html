@@ -471,10 +471,16 @@
             <button type="button" class="btn ghost sm" id="bgFxClear" hidden>Remove</button>
             <input type="file" id="bgFxFile" accept="image/*" hidden>
           </div>
-          <div class="row2" id="bgFxKeyRow" hidden>
-            <label class="fld"><span>Screen colour</span><input type="color" id="keyColor"></label>
-            <label class="fld"><span>Edge tolerance</span><input type="range" id="keyTol" min="0.03" max="0.3" step="0.005"></label>
+          <div class="form" id="bgFxKeyRow" hidden>
+            <div class="row2">
+              <label class="fld"><span>Screen colour</span><input type="color" id="keyColor"></label>
+              <div class="fld"><span>&nbsp;</span><button type="button" class="btn" id="keyAuto"><svg class="i sm" aria-hidden="true"><use href="/icons.svg#i-sparkles"/></svg>Pick automatically</button></div>
+            </div>
+            <label class="fld"><span>Key tolerance <em>raise if patches of screen show through</em></span><input type="range" id="keyTol" min="0.03" max="0.3" step="0.005"></label>
+            <label class="fld"><span>Spill removal <em>takes the green glow off skin and hair</em></span><input type="range" id="keySpill" min="0" max="1" step="0.05"></label>
           </div>
+          <label class="fld" id="bgFxEdgeRow" hidden><span>Edge softness</span><input type="range" id="fxEdge" min="0.03" max="0.3" step="0.01"></label>
+          <label class="fld" id="bgFxBlurRow" hidden><span>Blur amount</span><input type="range" id="fxBlur" min="0.4" max="2.5" step="0.1"></label>
 
           <h3 class="caps">Network</h3>
           <label class="fld"><span>TURN server URL <em>optional</em></span><input id="turnUrl" placeholder="turn:your-server.com:3478" spellcheck="false"></label>

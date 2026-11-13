@@ -143,7 +143,7 @@ function meter(track) {
 // ---------------------------------------------------------------- local media
 const media = navigator.mediaDevices;
 S.audioFx = { echo: true, ns: true, agc: true, ai: false, gain: 1, ...store.get('audioFx', {}) };
-S.videoFx = { effect: 'none', bright: 0, contrast: 1, sat: 1, key: '#00ff00', tol: 0.1, fps: 30, mirror: true, ...store.get('videoFx', {}) };
+S.videoFx = { effect: 'none', bright: 0, contrast: 1, sat: 1, key: '#00ff00', tol: 0.1, spill: 0.85, edge: 0.1, blur: 1, fps: 30, mirror: true, ...store.get('videoFx', {}) };
 function camConstraints() {
   const h = Number(S.prefs.quality) || 720;
   return { width: { ideal: Math.round(h * 16 / 9) }, height: { ideal: h }, frameRate: { ideal: Number(S.videoFx.fps) || 30 }, ...(S.prefs.camId ? { deviceId: { exact: S.prefs.camId } } : {}) };
@@ -2321,7 +2321,7 @@ function applySettings(settings) {
   for (const k of SYNC_KEYS) if (settings && k in settings) rawSet(k, settings[k]);
   applyingSync = false;
   S.audioFx = { echo: true, ns: true, agc: true, ai: false, gain: 1, ...store.get('audioFx', {}) };
-  S.videoFx = { effect: 'none', bright: 0, contrast: 1, sat: 1, key: '#00ff00', tol: 0.1, fps: 30, mirror: true, ...store.get('videoFx', {}) };
+  S.videoFx = { effect: 'none', bright: 0, contrast: 1, sat: 1, key: '#00ff00', tol: 0.1, spill: 0.85, edge: 0.1, blur: 1, fps: 30, mirror: true, ...store.get('videoFx', {}) };
   S.aiProv = store.get('aiProv', 'claude');
   applyTheme(store.get('theme', 'dark'));
   if (!S.studio) S.state = localState();
@@ -3316,6 +3316,8 @@ function renderBgFx() {
   const hasImg = !!store.get('fxBg', '');
   $('#bgFxImgRow').hidden = !['image', 'green'].includes(S.videoFx.effect);
   $('#bgFxKeyRow').hidden = S.videoFx.effect !== 'green';
+  $('#bgFxEdgeRow').hidden = !['blur', 'image'].includes(S.videoFx.effect);
+  $('#bgFxBlurRow').hidden = !(S.videoFx.effect === 'blur' || (S.videoFx.effect === 'green' && !hasImg));
   $('#bgFxClear').hidden = !hasImg;
   $('#bgFxThumb').hidden = !hasImg; if (hasImg) $('#bgFxThumb').src = store.get('fxBg', '');
   $('#bgFxNote').textContent = {
@@ -3342,6 +3344,17 @@ $('#keyColor').value = S.videoFx.key;
 $('#keyColor').oninput = async (e) => { S.videoFx.key = e.target.value; saveVideoFx(); await applyVideoFx(); };
 $('#keyTol').value = S.videoFx.tol;
 $('#keyTol').oninput = async (e) => { S.videoFx.tol = Number(e.target.value); saveVideoFx(); await applyVideoFx(); };
+for (const [id, k] of [['#keySpill', 'spill'], ['#fxEdge', 'edge'], ['#fxBlur', 'blur']]) {
+  $(id).value = S.videoFx[k];
+  $(id).oninput = async (e) => { S.videoFx[k] = Number(e.target.value); saveVideoFx(); await applyVideoFx(); };
+}
+$('#keyAuto').onclick = async () => {
+  if (!vfx?.autoKey) return toast('Turn your camera on with Green screen selected first.', { err: true });
+  const hex = vfx.autoKey();
+  if (!hex) return toast('Couldn’t find a screen colour at the edges of the picture. Pick it by hand.', { err: true });
+  S.videoFx.key = hex; $('#keyColor').value = hex; saveVideoFx(); await applyVideoFx();
+  toast(`Screen colour set to ${hex}.`);
+};
 renderBgFx();
 for (const k of ['turnUrl', 'turnUser', 'turnPass']) {
   $('#' + k).value = sess.get(k, '');

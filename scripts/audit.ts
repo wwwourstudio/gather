@@ -495,9 +495,10 @@ async function featureChecks(s: Session, browser: Browser, code: string): Promis
     await p.click('.rail-btn[data-tab="layouts"]');
     const row = p.locator('#elList li', { hasText: /support|paypal|tip|QR/i });
     if (await row.count()) {
-      await row.first().locator('button[aria-label="Delete"], button[aria-label*="Remove"]').first().click();
-      const gone = await p.waitForFunction(() => !(window as unknown as GatherWindow).__gather.state.elements.some((e) => e.type === 'tip'), null, { timeout: 4000 }).then(() => true, () => false);
-      if (gone) passes.push('QR hide: removable from Layouts → element list (two panels away from where it was added)');
+      await row.first().locator('button[aria-label^="Hide"]').first().click();
+      const gone = await p.waitForFunction(() => (window as unknown as GatherWindow).__gather.state.elements.some((e) => e.type === 'tip' && (e as StageElement & { hidden?: boolean }).hidden), null, { timeout: 4000 }).then(() => true, () => false);
+      if (gone) passes.push('QR hide: one click on its eye in Layouts → Layers (a different panel from where it was added)');
+      else add('Feature: QR hide', 'The eye toggle in Layers did not hide the QR card', 'P1', 'Check patchEl(hidden).', W);
     } else add('Feature: QR hide', 'QR card not listed in Layouts, so it can’t be removed at all', 'P0', 'List every element in #elList.', W);
     missing.set('Timed QR / support card', 'QR and call-in cards stay up until removed by hand. Show-for-N-seconds, or auto-show every N minutes like the sponsor rotation, would match how shows run donation calls.');
   });

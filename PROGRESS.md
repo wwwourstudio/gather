@@ -116,3 +116,64 @@ The stack is plain ES modules in the browser plus Node serverless functions on V
   - `node scripts/ui-kit.ts` screenshots each state in both themes (`audit/screens/ui-kit/`, 214 images) and checks the token contract in the browser: heights, radii, icon size and stroke, fonts, tabular numbers, glass values, motion and reduced motion, Popover, Tooltip, loading state, no hand-drawn SVGs, and only two UI fonts.
   - `node scripts/ui-shots.ts before|after` captures 14 states × 3 widths (`audit/screens/before`, `audit/screens/after`).
   - All seven Playwright suites pass.
+
+## Phase 3: layout engine and video effects
+### Layers (public/layout.js)
+- **Fixed tiers**, painted in this order:
+  - stage (cameras, colour blocks)
+  - media (presentation, images)
+  - overlays (lower thirds, logo, QR and call-in cards, text, timers, AI window, sponsor ads)
+  - chat & super chat
+  - ticker
+  - system (captions)
+
+  Inside a tier, list order decides what's on top. Host-only editing UI stays on its own canvas and DOM, so it never reaches the program.
+- **System layers:** banners, the ticker, the logo, sponsor ads, the featured chat card and captions used to be drawn at fixed spots. They are now real layers that can be moved, resized, hidden, locked, reset and saved per scene.
+- **Editor:**
+  - Drag, plus resize from all four corners.
+  - Snapping to the 8px grid, the title-safe and action-safe areas, the stage centre and other layers' edges and centres. Guides show while you drag.
+  - Arrow keys nudge 8px (Shift: 40px). Esc deselects. The selected box always sits on top, so you can grab it.
+- **Collision avoidance:** layers can't overlap unless one is stacked on purpose: Alt-drag, the "Allow overlap" switch, or a preset that designs it.
+  - A blocked move slides along the free axis and highlights the blocker in red.
+  - Adding a layer finds the first free spot, or adds it stacked and says so.
+  - A carried card that would collide in a new scene is hidden, and a toast says so.
+  - Showing a hidden layer, or turning stacking off, never creates an overlap.
+- **Layers list:** grouped by tier, with show/hide, lock and reset. Each layer's settings add stacking, picture-in-picture (a camera drawn above slides), bring forward / send back, a pixel readout and delete.
+- **Per-scene memory:** every edit saves the scene's arrangement (IndexedDB, images included). Switching away and back restores it, the last scene and its arrangement come back after a reload, and "Reset scene" restores the design.
+- **Presets:** Cinematic solo (2.39:1 letterbox), Interview panel, Slides + speaker (PiP), AI arena, Chat-led show and Newsroom. They're designed on 8px steps inside action-safe, with no unintended overlaps; this is checked in the browser by round6 and the preset audit. "Full-screen slides" (auto-present) and "Screen + AI" remain. The six generic templates they replace are gone.
+- **Brand controls:** the logo position/size and sponsor position controls now move those layers.
+
+### Green screen and background blur (public/fx.js)
+- **Multi-pass WebGL2 pipeline.**
+- **AI mask:**
+  - Motion-adaptive temporal smoothing of the AI mask.
+  - Joint-bilateral upsampling guided by the full-resolution frame.
+- **Background blur:**
+  - Premultiplied, mask-weighted background blur (three Gaussian rounds at quarter resolution), so no person-coloured halo.
+  - Light wrap.
+- **Chroma key:**
+  - Keying on chromaticity (shading-invariant) with an off-hue penalty.
+  - A 3×3 matte.
+  - Hue-aware spill removal (chromaticity projection weighted by hue alignment, plus a channel limiter).
+- **New controls:** automatic screen-colour pick from the frame border, plus spill, edge-softness and blur-amount controls.
+- **Fixed:** a picture chosen before it finished loading never painted.
+- **Measured by `node scripts/fx-bench.ts`** against ground truth: the previous algorithm, reimplemented exactly from commit 349f8aa, vs the current `fx.js` on identical synthetic frames (green screen with spill and shadow, room with noisy model-resolution masks, perfect-mask blur). Results are in `audit/fx-bench.json`:
+
+| Measure | Before | After | Better by |
+|---|---|---|---|
+| Green screen matte error, whole frame | 0.0821 | 0.0129 | 6.4× |
+| Green screen matte error, edges and hair | 0.2437 | 0.1293 | 1.9× |
+| Green cast near the subject's edge | 14.8 | 7.0 | 2.1× |
+| Subject colour error (noise floor) | 3.80 | 3.51 | 1.1× |
+| AI mask error, whole frame | 0.0058 | 0.0028 | 2.1× |
+| AI mask error, edges and hair | 0.1252 | 0.0606 | 2.1× |
+| AI mask edge flicker | 0.0909 | 0.0115 | 7.9× |
+| Blur halo (person colour in background) | 16.7 | 2.5 | 6.7× |
+
+Three of the eight measures beat the "250% better" target (3.5×): the overall green-screen matte, edge flicker and blur halo. Edge and hair accuracy is about 2×, capped by the segmentation model's 256×144 mask. The geometric mean across all eight measures is 2.98× (198% better).
+
+### Verified
+- All eight Playwright suites pass, including the new round6 (layout engine).
+- `scripts/ui-kit.ts` contract checks pass.
+- Live green screen with auto key and a picture background, and live MediaPipe blur, were checked in Chromium with the fake camera.
+- Screenshots are in `audit/screens/after` at 1440, 1024 and 390.
