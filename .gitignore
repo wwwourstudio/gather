@@ -4,3 +4,4 @@ node_modules/
 .DS_Store
 audit/screens/auto/
 audit/screens/ui-kit/
+tests/out/

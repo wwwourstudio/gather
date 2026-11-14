@@ -387,16 +387,25 @@ async function presentPDF(file) {
     const pres = {
       kind: 'pdf', name: file.name, page: 1, pages: doc.numPages, track, source: c,
       draw() { fitDraw(cg, page, page.width, page.height, '#0b0f1a'); },
+      // Fast next/previous presses: each request renders into its own canvas and cancels the one before,
+      // and only the newest finished page is shown (pdf.js can't render twice into one canvas at once).
       async go(n) {
         n = Math.max(1, Math.min(doc.numPages, n));
-        pres.page = n;
+        pres.page = n; renderPresBar();
+        const ticket = ++pres.ticket;
+        try { pres.task?.cancel(); } catch {}
         const pg = await doc.getPage(n);
+        if (ticket !== pres.ticket) return;
         const base = pg.getViewport({ scale: 1 });
         const vp = pg.getViewport({ scale: Math.min(PRES_W / base.width, PRES_H / base.height) * 1.5 });
-        page.width = Math.round(vp.width); page.height = Math.round(vp.height);
-        await pg.render({ canvasContext: page.getContext('2d'), viewport: vp }).promise;
+        const off = document.createElement('canvas'); off.width = Math.round(vp.width); off.height = Math.round(vp.height);
+        pres.task = pg.render({ canvasContext: off.getContext('2d'), viewport: vp });
+        try { await pres.task.promise; } catch (e) { if (e?.name === 'RenderingCancelledException') return; throw e; }
+        if (ticket !== pres.ticket) return;
+        page.width = off.width; page.height = off.height; page.getContext('2d').drawImage(off, 0, 0);
         renderPresBar();
       },
+      ticket: 0, task: null,
       stop() { track.stop(); doc.destroy(); },
     };
     await pres.go(1);
@@ -2224,29 +2233,52 @@ function tipUrl(provider, raw) {
   if (!/^https?:\/\//i.test(v)) v = 'https://' + v;
   return /^https:\/\/[^\s]+\.[^\s]+/.test(v.replace(/^http:/i, 'https:')) ? v.replace(/^http:/i, 'https:') : '';
 }
+// Support links: one row per provider. The button shows what the card is doing right now —
+// "On stage" adds it (in a free spot), then "Hide" / "Show" toggle it without losing where it sits.
 function renderTips() {
   const box = $('#tipList');
   if (!box) return;
-  const saved = store.get('tips', {});
-  box.replaceChildren(...TIP_FIELDS.map(([id, name, ph]) => {
-    const row = document.createElement('div'); row.className = 'tip-row';
-    const tag = document.createElement('span'); tag.className = 'tip-tag'; tag.textContent = name; tag.style.setProperty('--c', TIP_INFO[id].color);
-    const inp = document.createElement('input'); inp.className = 'input sm'; inp.placeholder = ph; inp.value = saved[id] || ''; inp.spellcheck = false; inp.setAttribute('aria-label', name + ' link');
-    inp.onchange = () => { const all = store.get('tips', {}); all[id] = inp.value.trim(); store.set('tips', all); };
-    const add = document.createElement('button'); add.type = 'button'; add.className = 'btn sm'; add.textContent = 'On stage';
-    add.disabled = !isHost();
-    add.onclick = () => {
-      const url = tipUrl(id, inp.value);
-      if (!url) return toast(`Add your ${name} link first.`, { err: true });
-      const all = store.get('tips', {}); all[id] = inp.value.trim(); store.set('tips', all);
-      const els = elementsCopy().filter((e) => !(e.type === 'tip' && e.provider === id));
-      els.push(withDefaults({ type: 'tip', provider: id, url, label: 'Support the show' }));
-      setStage({ elements: els });
-      toast(`${name} card is on stage. Drag it in Layouts → Edit on stage.`);
-    };
-    row.append(tag, inp, add);
-    return row;
-  }));
+  if (!box.children.length) {
+    const saved = store.get('tips', {});
+    box.replaceChildren(...TIP_FIELDS.map(([id, name, ph]) => {
+      const row = document.createElement('div'); row.className = 'tip-row'; row.dataset.provider = id;
+      const tag = document.createElement('span'); tag.className = 'tip-tag'; tag.textContent = name; tag.style.setProperty('--c', TIP_INFO[id].color);
+      const inp = document.createElement('input'); inp.className = 'input sm'; inp.placeholder = ph; inp.value = saved[id] || ''; inp.spellcheck = false; inp.setAttribute('aria-label', name + ' link');
+      inp.onchange = () => {
+        const all = store.get('tips', {}); all[id] = inp.value.trim(); store.set('tips', all);
+        const card = (S.state.elements || []).find((e) => e.type === 'tip' && e.provider === id), url = tipUrl(id, inp.value);
+        if (card && url && card.url !== url && isHost()) patchEl(card.id, { url });
+      };
+      const btn = document.createElement('button'); btn.type = 'button'; btn.className = 'btn sm tip-toggle';
+      btn.onclick = () => toggleTip(id, name, inp.value);
+      row.append(tag, inp, btn);
+      return row;
+    }));
+  }
+  for (const row of $$('.tip-row', box)) {
+    const card = (S.state.elements || []).find((e) => e.type === 'tip' && e.provider === row.dataset.provider);
+    const btn = $('.tip-toggle', row);
+    btn.textContent = !card ? 'On stage' : card.hidden ? 'Show' : 'Hide';
+    btn.setAttribute('aria-pressed', String(!!card && !card.hidden));
+    btn.disabled = !isHost();
+  }
+}
+function toggleTip(id, name, raw) {
+  const card = (S.state.elements || []).find((e) => e.type === 'tip' && e.provider === id);
+  if (card) {
+    patchEl(card.id, { hidden: !card.hidden }, card.hidden ? 'show' : 'hide');
+    if (!card.hidden) toast(`${name} card hidden. It keeps its spot for next time.`);
+    return;
+  }
+  const url = tipUrl(id, raw);
+  if (!url) return toast(`Add your ${name} link first.`, { err: true });
+  const all = store.get('tips', {}); all[id] = raw.trim(); store.set('tips', all);
+  const e = withDefaults({ type: 'tip', provider: id, url, label: 'Support the show' });
+  const els = stageElements(), spot = freeSpot(e, els);
+  if (spot) Object.assign(e, spot); else if (spot === false) e.stack = true;
+  e.home = [e.x, e.y, e.w, e.h];
+  setStage({ elements: [...els, e] });
+  toast(spot === false ? `${name} card is on stage, stacked: there was no free spot. Move it in Layouts.` : `${name} card is on stage. Hide it here any time.`)
 }
 
 // ---------------------------------------------------------------- profile photo (shown when the camera is off)
@@ -3136,7 +3168,16 @@ function renderPanels() {
   $('#chatEmptyText').innerHTML = S.studio ? 'Say hello to the studio.<br>Everyone here will see it.' : 'This is where the ideas flow.<br>Enter a studio to say hello.';
   $('#chatEmpty').hidden = !!$('#msgs').children.length;
 }
+function renderBannerState() {
+  const live = S.state.banner, text = $('#bannerText').value.trim(), sub = $('#bannerSub').value.trim();
+  const edited = !!live && (text !== live.text || sub !== (live.sub || ''));
+  $('#bannerEdited').hidden = !edited;
+  $('#bannerShow').textContent = edited ? 'Update banner' : 'Show on stage';
+}
+$('#bannerText').addEventListener('input', renderBannerState);
+$('#bannerSub').addEventListener('input', renderBannerState);
 function renderPresets() {
+  renderBannerState();
   const presets = store.get('presets', DEFAULT_PRESETS);
   const ul = $('#bannerPresets');
   const live = S.state.banner?.text;
@@ -3564,6 +3605,7 @@ function setDeck(name) {
     el.classList.toggle('above', j >= 0 && j < i);
     el.classList.toggle('below', j < 0 || j > i);
     el.setAttribute('aria-hidden', String(j !== i));
+    el.inert = j !== i;
   });
   $$('.deck-tabs button').forEach((b) => { const on = b.dataset.deck === name; b.classList.toggle('on', on); b.setAttribute('aria-selected', on); });
 }
@@ -3798,6 +3840,7 @@ function renderProducerUI() {
   const v = store.get('aiVoice', 'browser');
   $$('#aiVoiceSeg button').forEach((b) => b.classList.toggle('on', b.dataset.voice === v));
   $('#aiVoiceNameRow').hidden = v !== 'openai';
+  $('#aiVoiceTestRow').hidden = v === 'off';
   $('#aiVoiceName').value = store.get('aiVoiceName', 'alloy');
   $('#aiVoiceNote').textContent = v === 'openai' ? (store.get('aiKey:openai', '') ? 'Everyone in the stream and the recording hears it.' : 'Needs a ChatGPT (OpenAI) key, saved under ChatGPT above.') : v === 'browser' ? 'Only you hear this voice. Pick “Stream voice” for the audience.' : `${S.aiName} replies on screen without speaking.`;
 }
@@ -3883,11 +3926,12 @@ async function askProducer(text) {
     const j = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(j.error || 'The AI request failed.');
     upsertAI({ id: uid(), role: 'assistant', text: j.show || j.say || 'Done.', say: j.say, provider: prov, done: true });
-    $('#cmdReply').textContent = j.say || '';
+    $('#cmdReply').textContent = j.say || ''; $('#cmdReply').classList.remove('err');
     await runActions(j.actions);
     if (j.say) await speak(j.say);
   } catch (e) {
     upsertAI({ id: uid(), role: 'assistant', text: e.message, provider: prov, error: true, done: true });
+    $('#cmdReply').textContent = e.message; $('#cmdReply').classList.add('err');
     toast(e.message, { err: true });
   } finally { busy($('#cmdGo'), false); if (S.aiStatus !== 'listening') setAiStatus('idle'); }
 }

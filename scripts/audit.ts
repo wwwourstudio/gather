@@ -513,7 +513,9 @@ async function featureChecks(s: Session, browser: Browser, code: string): Promis
     await shot(s, 'feature-banner');
     await p.locator('#bannerText').pressSequentially('!'); await p.waitForTimeout(400);
     const followed = await p.evaluate(() => (window as unknown as GatherWindow).__gather.state.banner?.text.endsWith('!') ?? false);
-    if (!followed) add('Feature: banners', 'A live banner only changes after pressing “Show on stage” again; typing doesn’t update it and nothing says it’s out of date', 'P2', 'Mark the panel “Live, edited” with an Update button, or update live after a short pause.', W);
+    const flagged = await p.isVisible("#bannerEdited");
+    if (flagged) passes.push("Banners: editing a live banner shows “Live · edited” and the button becomes “Update banner”");
+    else if (!followed) add('Feature: banners', 'A live banner only changes after pressing “Show on stage” again; typing doesn’t update it and nothing says it’s out of date', 'P2', 'Mark the panel “Live, edited” with an Update button, or update live after a short pause.', W);
     await p.click('#bannerSave'); await p.waitForTimeout(200);
     const presetUse = p.locator('#bannerPresets .use').first();
     if (await presetUse.count()) { await presetUse.click(); passes.push('Banners: show, edit and show again, save preset, use preset all work'); }

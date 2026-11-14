@@ -234,7 +234,8 @@
           <div class="producer-card">
             <div class="row2"><label class="fld"><span>Your AI’s name</span><input id="aiName" maxlength="20" placeholder="Sam"></label>
               <div class="fld"><span>Voice</span><div class="seg block" id="aiVoiceSeg"><button type="button" data-voice="browser">Me</button><button type="button" data-voice="openai">Stream</button><button type="button" data-voice="off">Off</button></div></div></div>
-            <div class="row2" id="aiVoiceNameRow" hidden><label class="fld"><span>Stream voice</span><select id="aiVoiceName"><option value="alloy">Alloy</option><option value="ash">Ash</option><option value="ballad">Ballad</option><option value="coral">Coral</option><option value="echo">Echo</option><option value="fable">Fable</option><option value="nova">Nova</option><option value="onyx">Onyx</option><option value="sage">Sage</option><option value="shimmer">Shimmer</option></select></label><div class="fld"><span>&nbsp;</span><button type="button" class="btn" id="aiVoiceTest">Test voice</button></div></div>
+            <div class="row2" id="aiVoiceNameRow" hidden><label class="fld"><span>Stream voice</span><select id="aiVoiceName"><option value="alloy">Alloy</option><option value="ash">Ash</option><option value="ballad">Ballad</option><option value="coral">Coral</option><option value="echo">Echo</option><option value="fable">Fable</option><option value="nova">Nova</option><option value="onyx">Onyx</option><option value="sage">Sage</option><option value="shimmer">Shimmer</option></select></label></div>
+            <div class="row" id="aiVoiceTestRow"><button type="button" class="btn sm" id="aiVoiceTest">Test voice</button></div>
             <p class="hint" id="aiVoiceNote" style="margin:0"></p>
             <label class="toggle-row"><span><b>Wake word</b><small>Say “Hey Sam, pull up…” and it acts. Chrome or Edge.</small></span><input type="checkbox" class="toggle" id="aiWake" role="switch"></label>
             <p class="hint" style="margin:0">Or type on the stage: click the <b>orb</b> in the stage corner. It can switch scenes, present your library, show banners, start countdowns and find videos or sites for you to put on screen.</p>
@@ -270,6 +271,7 @@
           <div class="row">
             <button class="btn primary" id="bannerShow">Show on stage</button>
             <button class="btn" id="bannerHide">Hide banner</button>
+            <span class="pill warn" id="bannerEdited" hidden data-tip="The banner on stage still shows the old text">Live · edited</span>
           </div>
           <p class="hint" id="bannerHint">Banners appear on every participant's stage and in recordings.</p>
           <ul class="presets" id="bannerPresets"></ul>

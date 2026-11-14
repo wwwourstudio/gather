@@ -530,3 +530,4 @@ hr { border: 0; border-top: 1px solid var(--line); margin: var(--sp-1) 0; width:
   .tip-row { grid-template-columns: 80px minmax(0, 1fr) auto; }
 }
 .ebox.ghost:not(.sel):not(:hover) .elab { opacity: 0; } /* hidden layers often share a spot; name them on hover */
+.cmd-reply.err { color: #ffb4bd; }

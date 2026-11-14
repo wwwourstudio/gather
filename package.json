@@ -4,7 +4,12 @@
   "description": "The conversation studio: multi-party WebRTC with a recordable stage",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "test": "node tests/run.js",
+    "check": "node scripts/check.js",
+    "audit": "node scripts/audit.ts",
+    "bench": "node scripts/fx-bench.ts",
+    "ui-kit": "node scripts/ui-kit.ts"
   },
   "keywords": [],
   "author": "",
@@ -15,5 +20,10 @@
   "dependencies": {
     "@anthropic-ai/sdk": "1.3.0",
     "ioredis": "5.4.1"
+  },
+  "devDependencies": {
+    "@types/node": "22.20.5",
+    "playwright": "1.63.0",
+    "typescript": "6.0.2"
   }
 }
