@@ -1,5 +1,6 @@
 import { createAudioChain, createVideoFx, needsProcessing } from './fx.js';
 import { icon, busy, togglePopover } from './ui.js';
+import { configureGoogle, googleConfigured, googleSignedIn, googleToken, googleSignOut, saveToDrive, findLiveChat, pollLiveChat, ytModerate } from './google.js';
 import { TIERS, tierOf, drawOrder, isSystem, ensureSystem, blockerFor, overlaps, snapMove, snapResize, resolve, SAFE, GRID, PRESETS, materialize } from './layout.js';
 // gather — client. Full-mesh WebRTC studio with a canvas-composited stage.
 // The stage canvas is the single source of truth for what you see AND what gets recorded.
@@ -1180,8 +1181,15 @@ function moderate(kind, m, secs) {
   if (kind !== 'unhide' && f && (f.id === m.id || (kind !== 'hide' && f.src === src && String(f.name).toLowerCase() === user))) patch.featured = null;
   setStage(patch);
   const label = { hide: 'Message hidden', block: `${m.name} blocked`, timeout: `${m.name} timed out for ${secs >= 3600 ? secs / 3600 + ' h' : secs / 60 + ' min'}`, unhide: `${m.name} restored` }[kind];
-  const platformSide = { twitch: 'Twitch', youtube: 'YouTube', x: 'X' }[src];
-  toast(label + (kind !== 'unhide' && platformSide ? ` in gather. Connect ${platformSide} sign-in to also apply it on ${platformSide}.` : '.'));
+  if (src === 'youtube' && kind !== 'unhide') {
+    if (!yt.liveChatId) return toast(`${label} in gather. Connect YouTube in the Stream tab to also apply it on YouTube.`);
+    ytModerate(kind, yt.liveChatId, m, secs)
+      .then(() => toast(`${label}, in gather and on YouTube.`))
+      .catch((e) => toast(`${label} in gather. YouTube didn’t take it: ${e.message}`, { err: true, ms: 6000 }));
+    return;
+  }
+  const platformSide = { twitch: 'Twitch', x: 'X' }[src];
+  toast(label + (kind !== 'unhide' && platformSide ? ` in gather. ${platformSide} has no moderation access from gather yet, so it stays visible there.` : '.'));
 }
 let timeoutFor = null, timeoutPop = null;
 function timeoutMenu() {
@@ -1218,6 +1226,55 @@ function applyModeration(li) {
   li.dataset.why = why;
 }
 function applyModerationAll() { $$('#msgs li[data-fid]').forEach(applyModeration); }
+
+// YouTube: the host signs in with Google (in this browser only), gather reads the broadcast's live chat,
+// relays new messages to the studio, and Hide / Time out / Block act on YouTube too.
+const yt = { liveChatId: '', title: '', stop: null };
+function setYtStatus(state, detail = '') {
+  const el = $('#ytStatus');
+  el.dataset.state = state === 'live' ? 'live' : state === 'error' || state === 'ended' ? 'error' : 'off';
+  el.textContent = { live: `Reading “${yt.title}”`, connecting: 'Connecting…', error: detail || 'Something went wrong', ended: detail || 'The live chat has ended', off: googleConfigured() ? 'Not connected' : 'Needs Google sign-in set up on the server' }[state] || detail;
+  $('#ytGo').textContent = yt.liveChatId ? 'Disconnect' : 'Connect';
+}
+function stopYouTube() { yt.stop?.(); Object.assign(yt, { liveChatId: '', title: '', stop: null }); setYtStatus('off'); }
+$('#ytForm').addEventListener('submit', async (ev) => {
+  ev.preventDefault();
+  if (!isHost()) return toast('Only the host can connect platform chat.', { err: true });
+  if (yt.liveChatId) { stopYouTube(); return toast('YouTube chat disconnected.'); }
+  if (!S.studio) return toast('Enter your studio first, then connect YouTube chat.', { err: true });
+  busy($('#ytGo')); setYtStatus('connecting');
+  try {
+    const chat = await findLiveChat($('#ytInput').value);
+    Object.assign(yt, chat);
+    yt.stop = pollLiveChat(chat.liveChatId, (items) => {
+      const fresh = items.filter((m) => !seenFeed.has(m.id));
+      fresh.forEach(addExternal);
+      if (fresh.length) wsSend({ type: 'feed', items: fresh.map(({ id, src, name, color, text, ts, paid }) => ({ id, src, name, color, text, ts, paid })) });
+    }, (state, detail) => { if (state !== 'live') { yt.stop?.(); yt.liveChatId = ''; } setYtStatus(state, detail); });
+    setYtStatus('live');
+    toast(`Connected to “${chat.title}”. Its chat now flows into gather.`);
+  } catch (e) { setYtStatus('error', e.message); toast(e.message, { err: true }); }
+  finally { busy($('#ytGo'), false); renderGoogle(); }
+});
+$('#driveAuto').onchange = async (e) => {
+  if (!e.target.checked) { store.set('driveAuto', false); return renderGoogle(); }
+  try { await googleToken(['drive']); store.set('driveAuto', true); toast('New recordings will be saved to Google Drive.'); }
+  catch (err) { e.target.checked = false; toast(err.message, { err: true }); }
+  renderGoogle();
+};
+$('#googleOut').onclick = async () => { stopYouTube(); await googleSignOut(); store.set('driveAuto', false); renderGoogle(); toast('Disconnected from Google.'); };
+function renderGoogle() {
+  const ok = googleConfigured(), host = isHost();
+  $('#ytGo').disabled = !ok || !host; $('#ytInput').disabled = !ok || !host;
+  $('#driveAuto').disabled = !ok; $('#driveAuto').checked = ok && !!store.get('driveAuto', false);
+  $('#driveNote').textContent = ok ? 'Each recording goes into a “gather recordings” folder in your Drive.' : 'Needs Google sign-in set up on this server (GOOGLE_CLIENT_ID in Vercel).';
+  const parts = [googleSignedIn('drive') && 'Drive', googleSignedIn('youtube') && 'YouTube'].filter(Boolean);
+  $('#googleState').textContent = !ok ? 'Google sign-in isn’t set up on this server yet.' : parts.length ? `Connected to Google: ${parts.join(' and ')}. Sign-in lasts an hour, then Google asks again.` : 'Not connected. You’ll be asked to sign in the first time you use Drive or YouTube.';
+  $('#googleOut').hidden = !parts.length;
+  if (!yt.liveChatId) setYtStatus('off');
+  renderDriveButton();
+}
+api('config').then((c) => { configureGoogle(c.googleClientId); renderGoogle(); }).catch(() => renderGoogle());
 
 // Rumble: the host's personal Live Stream API URL (contains a key) stays in the host's browser.
 // The host polls it through our proxy and relays new messages to the studio.
@@ -2982,7 +3039,34 @@ function toggleRecord() {
   toast('Recording the stage. Everything you see is captured.');
   renderDock();
 }
-let lastRecUrl = null;
+let lastRecUrl = null, lastRec = null, driveBusy = false;
+function renderDriveButton() {
+  const b = $('#recDrive');
+  b.disabled = !googleConfigured() || driveBusy || !!lastRec?.saved;
+  b.lastChild.textContent = lastRec?.saved ? 'Saved to Drive' : driveBusy ? 'Uploading…' : 'Save to Google Drive';
+  if (!googleConfigured()) b.dataset.tip = 'Google sign-in isn’t set up on this server yet';
+}
+async function uploadRecording() {
+  if (!lastRec || driveBusy) return;
+  const rec = lastRec;
+  driveBusy = true; renderDriveButton();
+  const bar = $('#recDriveBar'), note = $('#recDriveNote');
+  bar.hidden = false; note.hidden = false; note.textContent = 'Connecting to Google Drive…'; bar.firstElementChild.style.width = '0%';
+  try {
+    const file = await saveToDrive(rec.blob, rec.name, (f) => {
+      bar.firstElementChild.style.width = Math.round(f * 100) + '%';
+      note.textContent = `Uploading to Drive · ${Math.round(f * 100)}% of ${(rec.blob.size / 1048576).toFixed(1)} MB`;
+    });
+    rec.saved = file;
+    note.replaceChildren(document.createTextNode('Saved to Drive → gather recordings. '));
+    if (file.webViewLink) { const a = document.createElement('a'); a.href = file.webViewLink; a.target = '_blank'; a.rel = 'noopener'; a.textContent = 'Open in Drive'; note.append(a); }
+    if (!$('#recDlg').open) toast('Recording saved to Google Drive.');
+  } catch (e) {
+    note.textContent = e.message;
+    bar.hidden = true;
+  } finally { driveBusy = false; renderDriveButton(); renderGoogle(); }
+}
+$('#recDrive').onclick = uploadRecording;
 function showRecording(blob, dur) {
   if (lastRecUrl) URL.revokeObjectURL(lastRecUrl);
   lastRecUrl = URL.createObjectURL(blob);
@@ -2992,7 +3076,14 @@ function showRecording(blob, dur) {
   $('#recDownload').href = lastRecUrl;
   $('#recDownload').download = `gather-${S.studio || 'studio'}-${stamp}.${ext}`;
   $('#recInfo').textContent = `${fmtTime(dur)} long · ${(blob.size / 1048576).toFixed(1)} MB · ${ext.toUpperCase()}`;
+  lastRec = { blob, name: $('#recDownload').download, saved: null };
+  $('#recDriveBar').hidden = true; $('#recDriveNote').hidden = true;
+  renderDriveButton();
   $('#recDlg').showModal();
+  if (store.get('driveAuto', false)) {
+    if (googleSignedIn('drive')) uploadRecording();
+    else { $('#recDriveNote').hidden = false; $('#recDriveNote').textContent = 'Your Google sign-in has expired. Click Save to Google Drive to sign in again and upload.'; }
+  }
 }
 
 // ---------------------------------------------------------------- chat
@@ -3421,7 +3512,7 @@ function leave() {
   $$('#msgs > *').forEach((n) => n.remove());
   $$('.crew-card').forEach((n) => n.remove());
   S.feed = []; seenFeed.clear(); editor.sel = null; if (editor.on) setEditing(false);
-  rumble.url = ''; clearTimeout(rumble.timer);
+  rumble.url = ''; clearTimeout(rumble.timer); stopYouTube();
   S.local.avatarId = ''; S.local.offbgId = ''; S.prePres = null; cap.lines.clear(); S.lobby = []; speechHub.ptt = false;
   history.replaceState(null, '', '/');
   setPhase('offline');

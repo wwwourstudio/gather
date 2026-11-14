@@ -12,7 +12,7 @@ const path = require('node:path');
 
 const ROOT = path.resolve(__dirname, '..');
 const OUT = path.join(__dirname, 'out');
-const ALL = ['e2e', 'feat', 'mod', 'twitch', 'round', 'round4', 'round5', 'round6'];
+const ALL = ['e2e', 'feat', 'mod', 'twitch', 'round', 'round4', 'round5', 'round6', 'google'];
 const NOISE = /irc-ws\.chat\.twitch\.tv|tunnel via proxy|ERR_TUNNEL|ERR_PROXY/;
 const pick = process.argv.slice(2).filter((a) => ALL.includes(a));
 const suites = pick.length ? pick : ALL;
@@ -52,7 +52,8 @@ async function main() {
   if (!process.env.GATHER_URL) {
     const port = process.env.TEST_PORT || '8090';
     process.env.GATHER_URL = `http://localhost:${port}`;
-    const env = { ...process.env, PORT: port };
+    // a stand-in OAuth client ID so the Google features are switched on (google.test.js mocks Google itself)
+    const env = { ...process.env, PORT: port, GOOGLE_CLIENT_ID: process.env.GOOGLE_CLIENT_ID || 'test-client.apps.googleusercontent.com' };
     for (const k of ['REDIS_URL', 'KV_REST_API_URL', 'KV_REST_API_TOKEN', 'UPSTASH_REDIS_REST_URL', 'UPSTASH_REDIS_REST_TOKEN']) delete env[k];
     server = spawn(process.execPath, ['server.js'], { cwd: ROOT, env, stdio: 'ignore' });
     await waitFor(process.env.GATHER_URL + '/', 15_000);

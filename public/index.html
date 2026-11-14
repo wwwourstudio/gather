@@ -210,13 +210,23 @@
               <div class="plat-body"><input id="rumbleInput" type="password" placeholder="Live Stream API URL" aria-label="Rumble Live Stream API URL" spellcheck="false"><i class="plat-st" id="rumbleStatus" data-state="off">Not connected</i></div>
               <button class="btn sm" id="rumbleGo">Connect</button>
             </form>
-            <div class="plat soon"><span class="pill caps src-youtube">YouTube</span><div class="plat-body"><b>Chat, bans and timeouts</b><i class="plat-st">Arrives with Google sign-in</i></div></div>
+            <form class="plat" id="ytForm" autocomplete="off">
+              <span class="pill caps src-youtube">YouTube</span>
+              <div class="plat-body"><input id="ytInput" placeholder="your live stream, or paste its link" aria-label="YouTube live video link (optional)" spellcheck="false"><i class="plat-st" id="ytStatus" data-state="off">Not connected</i></div>
+              <button class="btn sm" id="ytGo">Connect</button>
+            </form>
             <div class="plat soon"><span class="pill caps src-x">X</span><div class="plat-body"><b>Chat and timeouts</b><i class="plat-st">Needs an X developer app</i></div></div>
             <div class="plat soon"><span class="pill caps src-tiktok">TikTok</span><div class="plat-body"><b>Live chat</b><i class="plat-st">TikTok offers no official chat access</i></div></div>
+            <p class="hint" style="margin:0">YouTube: chat, Super Chats and memberships come in; Hide, Time out and Block also apply on YouTube.</p>
             <label class="toggle-row">
               <span><b>Chat overlay on stage</b><small id="overlayHint">1 chat source: studio</small></span>
               <input type="checkbox" class="toggle" id="overlaySwitch" role="switch">
             </label>
+          </div>
+          <hr>
+          <div class="fld"><span>Google <em>Drive saving and YouTube chat</em></span>
+            <label class="toggle-row"><span><b>Save recordings to Google Drive</b><small id="driveNote">Each recording goes into a “gather recordings” folder in your Drive.</small></span><input type="checkbox" class="toggle" id="driveAuto" role="switch"></label>
+            <div class="row"><span class="hint" id="googleState" style="margin:0">Not connected</span><button type="button" class="btn sm ghost" id="googleOut" hidden>Disconnect Google</button></div>
           </div>
         </div>
       </section>
@@ -758,8 +768,10 @@
     <h2 id="recH">Recording ready.</h2>
     <p class="sub" id="recInfo">—</p>
     <video id="recVideo" controls playsinline></video>
-    <a class="btn primary lg block" id="recDownload" download>Download video</a>
-    <p class="fine">Saved only on this computer. Close this and the recording is discarded unless you download it.</p>
+    <div class="row2"><a class="btn primary lg block" id="recDownload" download>Download video</a><button type="button" class="btn lg block" id="recDrive"><svg class="i" aria-hidden="true"><use href="/icons.svg#i-upload"/></svg>Save to Google Drive</button></div>
+    <div class="meter" id="recDriveBar" hidden><i></i></div>
+    <p class="hint num" id="recDriveNote" hidden style="margin:0"></p>
+    <p class="fine" id="recFine">Saved only on this computer. Close this and the recording is discarded unless you download it or save it to Drive.</p>
   </form>
 </dialog>
 
