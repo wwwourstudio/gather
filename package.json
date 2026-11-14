@@ -9,6 +9,7 @@
     "check": "node scripts/check.js",
     "audit": "node scripts/audit.ts",
     "bench": "node scripts/fx-bench.ts",
+    "fx:live": "node scripts/fx-live.ts",
     "ui-kit": "node scripts/ui-kit.ts"
   },
   "keywords": [],

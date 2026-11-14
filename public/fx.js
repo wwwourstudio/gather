@@ -62,11 +62,38 @@ void main() {
   float m = mix(prev, raw, k);
   o = vec4(m, m, m, 1.0);
 }`;
+// Guided filter (He, Sun & Tang): rebuilds a full-resolution, edge-following matte from the model's 256-px mask,
+// using the camera image as the guide. Locally, alpha = a·I + b, fitted per window, so edges land where the
+// picture's edges are (hair, glasses, shoulders) and come out smooth instead of a staircase.
+const GF_PACK_FS = HEAD + `
+uniform sampler2D uFrame, uMask;
+float luma(vec3 c) { return dot(c, vec3(0.299, 0.587, 0.114)); }
+void main() {
+  float I = luma(texture(uFrame, uv).rgb);
+  // confidence curve: weak, speckly detections (the stray blobs) drop out before refinement
+  float p = smoothstep(0.3, 0.7, texture(uMask, st).r);
+  o = vec4(I, p, I * I, I * p);
+}`;
+const BOX_FS = HEAD + `
+uniform sampler2D uSrc; uniform vec2 uStep; uniform int uR;
+void main() {
+  vec4 s = vec4(0.0);
+  for (int i = -16; i <= 16; i++) { if (i < -uR || i > uR) continue; s += texture(uSrc, st + uStep * float(i)); }
+  o = s / float(2 * uR + 1);
+}`;
+const GF_COEF_FS = HEAD + `
+uniform sampler2D uSrc; uniform float uEps;
+void main() {
+  vec4 m = texture(uSrc, st);                   // mean I, mean p, mean I², mean I·p
+  float varI = max(m.b - m.r * m.r, 0.0), cov = m.a - m.r * m.g;
+  float a = cov / (varI + uEps);
+  o = vec4(a, m.g - a * m.r, 0.0, 1.0);
+}`;
 const PRE_FS = HEAD + `
-uniform sampler2D uFrame, uMask; uniform int uUseMask;
+uniform sampler2D uFrame, uMask, uCoef; uniform int uUseMask, uGuided;
 void main() {
   vec3 f = texture(uFrame, uv).rgb;
-  float m = uUseMask == 1 ? texture(uMask, st).r : 0.0;
+  float m = uUseMask == 0 ? 0.0 : uGuided == 1 ? dot(texture(uCoef, st).rg, vec2(dot(f, vec3(0.299, 0.587, 0.114)), 1.0)) : texture(uMask, st).r;
   float w = 1.0 - smoothstep(0.15, 0.55, m);   // generous: anything that might be the person stays out of the blur
   o = vec4(f * w, w);
 }`;
@@ -79,7 +106,8 @@ void main() {
   o = c;
 }`;
 const FINAL_FS = HEAD + `
-uniform sampler2D uFrame, uBg, uMask, uBlur;
+uniform sampler2D uFrame, uBg, uMask, uBlur, uCoef;
+uniform int uGuided;   // 1: matte from the guided filter
 uniform int uMode;      // 0 none, 1 chroma key, 2 AI mask
 uniform int uBgKind;    // 0 blurred camera, 1 picture
 uniform vec2 uKey, uKeyC, uTex, uMaskTex; uniform vec3 uKeyRGB;
@@ -140,7 +168,8 @@ void main() {
     a = smoothstep(0.08, 0.92, mix(ctr, sum / 9.0, 0.6));
     c = despill(c, mix(1.0, uSpill, a));          // full strength at the edge, the chosen amount inside
   } else if (uMode == 2) {
-    a = smoothstep(0.5 - uFeather, 0.5 + uFeather, personMask());
+    float m = uGuided == 1 ? dot(texture(uCoef, st).rg, vec2(luma(raw), 1.0)) : personMask();
+    a = smoothstep(0.5 - uFeather, 0.5 + uFeather, m);
   }
   vec3 bg;
   if (uBgKind == 1) bg = texture(uBg, uv).rgb;
@@ -170,7 +199,7 @@ function loadSegmenter() {
     sc.onload = () => {
       try {
         const seg = new window.SelfieSegmentation({ locateFile: (f) => '/vendor/selfie/' + f });
-        seg.setOptions({ modelSelection: 1, selfieMode: false });
+        seg.setOptions({ modelSelection: 0, selfieMode: false }); // general model: better edges than the landscape one
         res(seg);
       } catch (e) { rej(e); }
     };
@@ -207,7 +236,7 @@ export function createFxRenderer(W, H, opts = {}) {
     const u = {};
     return { prog, u: (n) => (u[n] ??= gl.getUniformLocation(prog, n)) };
   };
-  const P = { mask: compile(MASK_FS), pre: compile(PRE_FS), blur: compile(BLUR_FS), final: compile(FINAL_FS) };
+  const P = { mask: compile(MASK_FS), pre: compile(PRE_FS), blur: compile(BLUR_FS), final: compile(FINAL_FS), pack: compile(GF_PACK_FS), box: compile(BOX_FS), coef: compile(GF_COEF_FS) };
   const buf = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, buf);
   gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]), gl.STATIC_DRAW);
   gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
@@ -223,6 +252,10 @@ export function createFxRenderer(W, H, opts = {}) {
   const tFrame = texture(), tBg = texture(0, 0, { mip: true }), tMaskRaw = texture();
   const qw = Math.max(16, Math.round(W / 4)), qh = Math.max(16, Math.round(H / 4));
   const pre = target(qw, qh, true), blurA = target(qw, qh, true), blurB = target(qw, qh, true);
+  // Guided filter at up to 640 px wide; needs float render targets (variances), else the bilateral path is used.
+  const gw = Math.min(W, 640), gh = Math.max(16, Math.round(gw * H / W));
+  const guided = floatOk;
+  const gfA = guided ? target(gw, gh, true) : null, gfB = guided ? target(gw, gh, true) : null;
   let maskA = null, maskB = null, maskW = 0, maskH = 0, maskFirst = true, haveMask = false, maskCh = 0;
   const imgC = document.createElement('canvas'); imgC.width = W; imgC.height = H; const imgG = imgC.getContext('2d');
   let o = { ...DEFAULTS, ...opts };
@@ -250,7 +283,52 @@ export function createFxRenderer(W, H, opts = {}) {
   set({});
 
   /** A new person mask: an image/canvas whose red (or alpha) channel is 1 where the person is. */
-  function setMask(src, channel) {
+  // Stray-detection cleanup: the model now and then lights up a lamp, a chair back or a poster. Those patches
+  // are detached from the body and weak, so keep the big connected regions, confident ones (a hand waved clear of
+  // the body) and anything touching the bottom edge, where a body enters the frame; drop the rest before refining.
+  const cw = 256, ch = 144, cc = document.createElement('canvas'); cc.width = cw; cc.height = ch;
+  const cg = cc.getContext('2d', { willReadFrequently: true });
+  const label = new Int32Array(cw * ch), stack = new Int32Array(cw * ch);
+  function cleanMask(src, channel) {
+    cg.clearRect(0, 0, cw, ch); cg.drawImage(src, 0, 0, cw, ch);
+    const im = cg.getImageData(0, 0, cw, ch), d = im.data, n = cw * ch;
+    label.fill(0);
+    const areas = [0], bottom = [false], sums = [0];
+    for (let i = 0; i < n; i++) {
+      if (label[i] || d[i * 4 + channel] < 100) continue;
+      const id = areas.length; let top = 0, area = 0, low = false, sum = 0;
+      stack[top++] = i; label[i] = id;
+      while (top) {
+        const j = stack[--top]; area++; sum += d[j * 4 + channel];
+        const x = j % cw, y = (j - x) / cw;
+        if (y === ch - 1) low = true;
+        if (x > 0 && !label[j - 1] && d[(j - 1) * 4 + channel] >= 100) { label[j - 1] = id; stack[top++] = j - 1; }
+        if (x < cw - 1 && !label[j + 1] && d[(j + 1) * 4 + channel] >= 100) { label[j + 1] = id; stack[top++] = j + 1; }
+        if (y > 0 && !label[j - cw] && d[(j - cw) * 4 + channel] >= 100) { label[j - cw] = id; stack[top++] = j - cw; }
+        if (y < ch - 1 && !label[j + cw] && d[(j + cw) * 4 + channel] >= 100) { label[j + cw] = id; stack[top++] = j + cw; }
+      }
+      areas.push(area); bottom.push(low); sums.push(sum);
+    }
+    const biggest = Math.max(0, ...areas);
+    // a hand waved clear of the body is small but confident (mean ≥ 0.85); false positives are weak
+    const keep = areas.map((a, id) => id > 0 && (a >= biggest * 0.2 || sums[id] / a >= 217 || (bottom[id] && a >= n * 0.004)));
+    // islands go to zero along with their soft fringe (the weak pixels that touch them)
+    for (let i = 0; i < n; i++) {
+      const id = label[i];
+      const v = id ? (keep[id] ? d[i * 4 + channel] : 0) : d[i * 4 + channel];
+      d[i * 4] = v; d[i * 4 + 3] = 255;
+    }
+    for (let pass = 0; pass < 3; pass++) for (let i = 0; i < n; i++) {
+      if (label[i] || d[i * 4] === 0) continue;
+      const x = i % cw, near = (j) => (label[j] > 0 && !keep[label[j]]) || (label[j] < 0 && label[j] !== -2 - pass);
+      if ((x > 0 && near(i - 1)) || (x < cw - 1 && near(i + 1)) || (i >= cw && near(i - cw)) || (i < n - cw && near(i + cw))) { d[i * 4] = 0; label[i] = -2 - pass; }
+    }
+    
+    cg.putImageData(im, 0, 0);
+    return cc;
+  }
+  function setMask(rawSrc, rawChannel) {
+    const src = cleanMask(rawSrc, rawChannel), channel = 0;
     const w = src.width || src.videoWidth, h = src.height || src.videoHeight;
     if (!w || !h) return;
     if (w !== maskW || h !== maskH) { maskW = w; maskH = h; maskA = target(w, h, true); maskB = target(w, h, true); maskFirst = true; }
@@ -270,10 +348,21 @@ export function createFxRenderer(W, H, opts = {}) {
     const ai = o.effect === 'blur' || o.effect === 'image';
     const mode = o.effect === 'green' ? 1 : ai && haveMask ? 2 : 0;
     const bgKind = o.effect === 'image' || (o.effect === 'green' && o.bgImage) ? 1 : 0;
+    const useGuided = mode === 2 && guided && maskA;
+    if (useGuided) {
+      // pack → box → coefficients → box: mean a and b end up in gfB
+      const r = Math.max(2, Math.round((o.radius ?? 8) * gw / 640));
+      pass(P.pack, gfA, gw, gh); bind(0, tFrame); bind(1, maskA.tex);
+      gl.uniform1i(P.pack.u('uFrame'), 0); gl.uniform1i(P.pack.u('uMask'), 1); draw();
+      const box = (from, to, dx, dy) => { pass(P.box, to, gw, gh); bind(0, from.tex); gl.uniform1i(P.box.u('uSrc'), 0); gl.uniform2f(P.box.u('uStep'), dx / gw, dy / gh); gl.uniform1i(P.box.u('uR'), r); draw(); };
+      box(gfA, gfB, 1, 0); box(gfB, gfA, 0, 1);
+      pass(P.coef, gfB, gw, gh); bind(0, gfA.tex); gl.uniform1i(P.coef.u('uSrc'), 0); gl.uniform1f(P.coef.u('uEps'), o.eps ?? 0.0008); draw();
+      box(gfB, gfA, 1, 0); box(gfA, gfB, 0, 1);
+    }
     if (mode !== 0 && bgKind === 0) {
       pass(P.pre, pre, qw, qh);
-      bind(0, tFrame); bind(1, maskA ? maskA.tex : tMaskRaw);
-      gl.uniform1i(P.pre.u('uFrame'), 0); gl.uniform1i(P.pre.u('uMask'), 1); gl.uniform1i(P.pre.u('uUseMask'), mode === 2 ? 1 : 0);
+      bind(0, tFrame); bind(1, maskA ? maskA.tex : tMaskRaw); bind(2, useGuided ? gfB.tex : tMaskRaw);
+      gl.uniform1i(P.pre.u('uFrame'), 0); gl.uniform1i(P.pre.u('uMask'), 1); gl.uniform1i(P.pre.u('uCoef'), 2); gl.uniform1i(P.pre.u('uGuided'), useGuided ? 1 : 0); gl.uniform1i(P.pre.u('uUseMask'), mode === 2 ? 1 : 0);
       draw();
       let src2 = pre;
       const strength = Math.max(0.2, o.blur ?? 1);
@@ -287,8 +376,8 @@ export function createFxRenderer(W, H, opts = {}) {
     }
     const F = P.final;
     pass(F, null, W, H);
-    bind(0, tFrame); bind(1, tBg); bind(2, maskA ? maskA.tex : tMaskRaw); bind(3, blurB.tex);
-    gl.uniform1i(F.u('uFrame'), 0); gl.uniform1i(F.u('uBg'), 1); gl.uniform1i(F.u('uMask'), 2); gl.uniform1i(F.u('uBlur'), 3);
+    bind(0, tFrame); bind(1, tBg); bind(2, maskA ? maskA.tex : tMaskRaw); bind(3, blurB.tex); bind(4, useGuided ? gfB.tex : tMaskRaw);
+    gl.uniform1i(F.u('uFrame'), 0); gl.uniform1i(F.u('uBg'), 1); gl.uniform1i(F.u('uMask'), 2); gl.uniform1i(F.u('uBlur'), 3); gl.uniform1i(F.u('uCoef'), 4); gl.uniform1i(F.u('uGuided'), useGuided ? 1 : 0);
     gl.uniform1i(F.u('uMode'), mode); gl.uniform1i(F.u('uBgKind'), bgKind);
     const key = keyColour(o.key);
     gl.uniform2f(F.u('uKey'), ...key.cbcr); gl.uniform2f(F.u('uKeyC'), ...key.chroma); gl.uniform3f(F.u('uKeyRGB'), ...key.rgb); gl.uniform2f(F.u('uTex'), 1 / W, 1 / H); gl.uniform2f(F.u('uMaskTex'), 1 / (maskW || W), 1 / (maskH || H));
@@ -296,23 +385,39 @@ export function createFxRenderer(W, H, opts = {}) {
     gl.uniform1f(F.u('uWrap'), o.wrap); gl.uniform1f(F.u('uBright'), o.bright); gl.uniform1f(F.u('uContrast'), o.contrast); gl.uniform1f(F.u('uSat'), o.sat);
     draw();
   }
-  return { canvas, gl, set, setMask, render, get haveMask() { return haveMask; }, get maskChannel() { return maskCh; } };
+  return { canvas, gl, set, setMask, render, guided, get haveMask() { return haveMask; }, get maskChannel() { return maskCh; } };
 }
 
-/** Estimate the screen colour from the frame's border, where the backdrop almost always is. */
-export function estimateKey(src) {
+// A green or blue screen sits behind the person, so it fills the top and sides of the picture; the bottom edge
+// is mostly the person (a blue shirt there must never be taken for a screen).
+const BORDER = (x, y) => (x < 8 || x > 87 || y < 7) && y < 44;
+function sampleBorder(src) {
   const c = document.createElement('canvas'); c.width = 96; c.height = 54;
   const g = c.getContext('2d', { willReadFrequently: true }); g.drawImage(src, 0, 0, 96, 54);
-  const d = g.getImageData(0, 0, 96, 54).data, picks = [];
-  for (let y = 0; y < 54; y++) for (let x = 0; x < 96; x++) {
-    if (x > 6 && x < 89 && y > 6 && y < 47) continue;
-    const i = (y * 96 + x) * 4, r = d[i], gg = d[i + 1], b = d[i + 2];
-    const mx = Math.max(r, gg, b), mn = Math.min(r, gg, b);
-    if (mx > 40 && (mx - mn) / mx > 0.35) picks.push([r, gg, b]);
-  }
-  if (picks.length < 40) return null;
+  const d = g.getImageData(0, 0, 96, 54).data, px = [];
+  for (let y = 0; y < 54; y++) for (let x = 0; x < 96; x++) if (BORDER(x, y)) { const i = (y * 96 + x) * 4; px.push([d[i], d[i + 1], d[i + 2]]); }
+  return px;
+}
+const isScreenish = ([r, g, b]) => { // a keyable backdrop: clearly green or clearly blue, not a skin, wall or wood tone
+  const mx = Math.max(r, g, b), mn = Math.min(r, g, b);
+  return mx > 40 && (mx - mn) / mx > 0.35 && (g === mx || b === mx) && Math.max(g, b) > r * 1.25;
+};
+const near = (p, k) => { const s = p[0] + p[1] + p[2] + 1, ks = k[0] + k[1] + k[2] + 1; return s >= 60 && Math.hypot(p[0] / s - k[0] / ks, p[1] / s - k[1] / ks) < 0.07; };
+
+/** Estimate the screen colour from the top and sides of the frame, or null when no screen fills them. */
+export function estimateKey(src) {
+  const px = sampleBorder(src), picks = px.filter(isScreenish);
+  if (picks.length < px.length * 0.3) return null;
   const med = (k) => picks.map((p) => p[k]).sort((a, b) => a - b)[picks.length >> 1];
-  return '#' + [med(0), med(1), med(2)].map((v) => v.toString(16).padStart(2, '0')).join('');
+  const key = [med(0), med(1), med(2)];
+  if (px.filter((p) => near(p, key)).length < px.length * 0.3) return null; // scattered colours, not one backdrop
+  return '#' + key.map((v) => v.toString(16).padStart(2, '0')).join('');
+}
+
+/** Share of the top and sides of the picture that match the screen colour (0–1). Under 0.3: no screen in view. */
+export function screenCoverage(src, keyHex) {
+  const k = [1, 3, 5].map((i) => parseInt(keyHex.slice(i, i + 2), 16)), px = sampleBorder(src);
+  return px.filter((p) => near(p, k)).length / px.length;
 }
 
 export async function createVideoFx(srcTrack, opts) {
@@ -362,6 +467,8 @@ export async function createVideoFx(srcTrack, opts) {
     set: apply,
     /** Pick the green/blue screen colour from what the camera sees right now. */
     autoKey() { return video.readyState >= 2 ? estimateKey(video) : null; },
+    /** How much of the frame is the screen colour right now, or -1 before the camera has a frame. */
+    coverage(keyHex) { return video.readyState >= 2 ? screenCoverage(video, keyHex) : -1; },
     stop() { stopped = true; clearInterval(timer); track.stop(); video.srcObject = null; },
   };
 }

@@ -177,3 +177,31 @@ Three of the eight measures beat the "250% better" target (3.5×): the overall g
 - `scripts/ui-kit.ts` contract checks pass.
 - Live green screen with auto key and a picture background, and live MediaPipe blur, were checked in Chromium with the fake camera.
 - Screenshots are in `audit/screens/after` at 1440, 1024 and 390.
+
+## Cut-out edges, blur halo and green-screen detection
+Feedback: the line around the person was pixelated, Blur left a halo, and Green screen did nothing.
+- **Guided filter** (He, Sun & Tang) in `public/fx.js`, at up to 640 px on float textures. It rebuilds a full-resolution, edge-following matte from the model's 256×144 mask, using the camera picture as the guide, so the outline lands on the real edge and comes out smooth instead of stair-stepped. Without float render targets, it falls back to the joint-bilateral path.
+- **The MediaPipe general model** (`modelSelection: 0`), whose edges are more accurate than the landscape model's. Weak detections go through a confidence curve before refinement.
+- **Stray-patch cleanup:**
+  - The mask is split into connected regions at model resolution.
+  - Kept: large regions, confident ones (a hand waved clear of the body) and anything entering from the bottom edge.
+  - Dropped, together with their soft fringe: weak islands such as lamps, chair backs and posters.
+- **Green screen with no screen.** Green screen only removes a real coloured backdrop. The app now samples the top and sides of the picture.
+  - If no green or blue backdrop fills them, it says so and offers **Use Blur** and **Use Replace**.
+  - If a backdrop is there but the picked colour is off, it picks the right one automatically.
+  - "Pick automatically" ignores the bottom edge and requires a clearly green or blue backdrop. It used to be able to take a blue shirt as the screen colour.
+- **Benchmark** (`npm run bench`): the mask simulation is now realistic, with a 2–3 px soft band, noise, jitter and false-positive patches. It saves close-ups to `audit/fx-bench-*.png`.
+
+| Measure | Before | After | Better by |
+|---|---|---|---|
+| AI mask error, whole frame (incl. stray patches) | 0.0174 | 0.0033 | 5.3× |
+| AI mask error, edges and hair | 0.1590 | 0.0705 | 2.3× |
+| AI mask edge flicker | 0.1073 | 0.0176 | 6.1× |
+| Blur halo | 16.7 | 2.3 | 7.3× |
+| Green screen matte error, whole frame | 0.0821 | 0.0129 | 6.4× |
+
+The geometric mean across all eight measures is 3.31× (231% better).
+- **Verified:**
+  - `npm run fx:live`, now in CI, runs the real app twice. With Chromium's green fake camera, the screen is found and there's no warning. With a room camera that has no screen, the warning shows and "Use Blur" switches to Blur. Blur and Replace never warn.
+  - Screenshots: `audit/screens/fx-green-*.png`.
+- **Limit:** fine hair strands thinner than the model can see are still smoothed into the head outline rather than kept strand by strand.

@@ -120,14 +120,20 @@ window.runFxBench = async function runFxBench() {
     const out = [];
     for (let f = 0; f < n; f++) {
       const c = cv(256, 144), g2 = c.getContext('2d');
-      g2.filter = 'blur(1px)'; g2.drawImage(sil, noise ? (rnd() - 0.5) * 1.6 : 0, noise ? (rnd() - 0.5) * 1.6 : 0, 256, 144); g2.filter = 'none';
+      g2.fillStyle = '#000'; g2.fillRect(0, 0, 256, 144);
+      g2.filter = noise ? 'blur(2.2px)' : 'blur(1px)'; g2.drawImage(sil, noise ? (rnd() - 0.5) * 1.6 : 0, noise ? (rnd() - 0.5) * 1.6 : 0, 256, 144); g2.filter = 'none';
+      if (noise) { // false positives: faint blobs on the shelf and the lamp
+        g2.globalAlpha = 0.45 + rnd() * 0.2; g2.fillStyle = '#fff';
+        g2.beginPath(); g2.ellipse(205 + rnd() * 2, 60, 9, 13, 0, 0, Math.PI * 2); g2.fill();
+        g2.beginPath(); g2.ellipse(44, 52 + rnd() * 2, 6, 8, 0, 0, Math.PI * 2); g2.fill(); g2.globalAlpha = 1;
+      }
       if (noise) { const im = g2.getImageData(0, 0, 256, 144); for (let i = 0; i < im.data.length; i += 4) { const v = Math.min(255, Math.max(0, im.data[i] + gauss() * noise * 255)); im.data[i] = im.data[i + 1] = im.data[i + 2] = v; } g2.putImageData(im, 0, 0); }
       out.push(c);
     }
     return out;
   };
 
-  const results = {};
+  const results = {}, shots = {};
   // 1. green screen
   {
     const old = oldKey(greenFrame, 0.1, 0.08);
@@ -157,6 +163,16 @@ window.runFxBench = async function runFxBench() {
       if (f >= 4) { oldFlick += mean((i) => Math.abs(oa[i] - oldPrev[i]), band); newFlick += mean((i) => Math.abs(na[i] - newPrev[i]), band); n++; }
       oldPrev = oa; newPrev = na; oldLast = oa; newLast = na;
     }
+    const crop = (alpha) => { // composite over a bright backdrop so edge defects are easy to see
+      const c = cv(360, 240), g2 = c.getContext('2d'), im = g2.createImageData(360, 240), fr = pixels(roomFrame);
+      for (let y = 0; y < 240; y++) for (let x = 0; x < 360; x++) {
+        const i = (y + 60) * W + (x + 420), o = (y * 360 + x) * 4;
+        for (let k = 0; k < 3; k++) im.data[o + k] = fr[i * 4 + k] * alpha[i] + [70, 200, 120][k] * (1 - alpha[i]);
+        im.data[o + 3] = 255;
+      }
+      g2.putImageData(im, 0, 0); return c.toDataURL('image/png');
+    };
+    shots.maskBefore = crop(oldLast); shots.maskAfter = crop(newLast); shots.maskTruth = crop(gt);
     results.mask = {
       'mask error, whole frame': [alphaErr(oldLast), alphaErr(newLast)],
       'mask error, edges and hair': [alphaErr(oldLast, band), alphaErr(newLast, band)],
@@ -175,6 +191,22 @@ window.runFxBench = async function runFxBench() {
     const oldHalo = mean((i) => { let s = 0; for (let k = 0; k < 3; k++) { const out = fr[i * 3 + k] * oldA[i] + oldBg[i * 3 + k] * (1 - oldA[i]); s += Math.abs(out - oldIdeal[i * 3 + k]); } return s / 3; }, ring);
     const newHalo = mean((i) => (Math.abs(neuOut[i * 4] - neuIdeal[i * 4]) + Math.abs(neuOut[i * 4 + 1] - neuIdeal[i * 4 + 1]) + Math.abs(neuOut[i * 4 + 2] - neuIdeal[i * 4 + 2])) / 3, ring);
     results.blur = { 'person colour bleeding into the background (0–255)': [oldHalo, newHalo] };
+    // close-ups with a realistic (soft, noisy, blobby) mask: old blur vs new, plus the whole frame for stray blobs
+    const real = maskFrames(1, 0.07)[0], realA = oldUpsample(real);
+    r.setMask(real, 0); r.render(roomFrame); const realOut = readback(r);
+    const pic = (get, x0, y0, w, h, scale = 1) => {
+      const c = cv(w / scale, h / scale), g2 = c.getContext('2d'), im = g2.createImageData(w / scale, h / scale);
+      for (let y = 0; y < h / scale; y++) for (let x = 0; x < w / scale; x++) {
+        const i = (y0 + y * scale) * W + (x0 + x * scale), o = (y * w / scale + x) * 4;
+        for (let k = 0; k < 3; k++) im.data[o + k] = get(i, k);
+        im.data[o + 3] = 255;
+      }
+      g2.putImageData(im, 0, 0); return c.toDataURL('image/png');
+    };
+    shots.blurBefore = pic((i, k) => fr[i * 3 + k] * realA[i] + oldBg[i * 3 + k] * (1 - realA[i]), 420, 60, 360, 240);
+    shots.blurAfter = pic((i, k) => realOut[i * 4 + k], 420, 60, 360, 240);
+    shots.blurFullAfter = pic((i, k) => realOut[i * 4 + k], 0, 0, W, H, 2);
+    shots.blurFullBefore = pic((i, k) => fr[i * 3 + k] * realA[i] + oldBg[i * 3 + k] * (1 - realA[i]), 0, 0, W, H, 2);
   }
-  return { key: keyHex, results };
+  return { key: keyHex, results, shots };
 };

@@ -3459,10 +3459,31 @@ function renderBgFx() {
     green: 'For a physical green or blue screen. Pick the screen colour and adjust until the edges look clean.',
   }[S.videoFx.effect];
 }
+// Green screen with no screen behind the person does nothing; notice and say so instead of looking broken.
+let screenTimer = 0;
+function watchScreen() {
+  clearInterval(screenTimer); $('#bgFxNoScreen').hidden = true;
+  if (S.videoFx.effect !== 'green') return;
+  let tries = 0, autoTried = false;
+  screenTimer = setInterval(async () => {
+    if (S.videoFx.effect !== 'green' || !vfx?.coverage) { if (++tries > 20) clearInterval(screenTimer); return; }
+    let cov = vfx.coverage(S.videoFx.key);
+    if (cov < 0) return;
+    if (cov < 0.3 && !autoTried) { // maybe the colour is just off: try the one at the edges of the picture
+      autoTried = true;
+      const hex = vfx.autoKey();
+      if (hex && vfx.coverage(hex) >= 0.3) { S.videoFx.key = hex; $('#keyColor').value = hex; saveVideoFx(); await applyVideoFx(); cov = vfx.coverage(hex); }
+    }
+    $('#bgFxNoScreen').hidden = cov >= 0.3;
+    if (++tries > 3) clearInterval(screenTimer);
+  }, 700);
+}
+$$('#bgFxNoScreen [data-fx-switch]').forEach((b) => b.addEventListener('click', () => $(`#bgFxSeg button[data-fx="${b.dataset.fxSwitch}"]`).click()));
 $$('#bgFxSeg button').forEach((b) => b.addEventListener('click', async () => {
   S.videoFx.effect = b.dataset.fx; saveVideoFx(); renderBgFx();
   if (S.local.camRaw) { await applyVideoFx(); syncMedia(); }
   else if (b.dataset.fx !== 'none') toast('Turn your camera on to see the effect.');
+  watchScreen();
 }));
 $('#bgFxPick').onclick = () => $('#bgFxFile').click();
 $('#bgFxFile').onchange = async (e) => {

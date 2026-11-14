@@ -477,6 +477,10 @@
             <button type="button" role="radio" data-fx="green">Green screen</button>
           </div>
           <p class="hint" id="bgFxNote" style="margin-top:0"></p>
+          <div class="callout warn" id="bgFxNoScreen" role="status" hidden>
+            <p><strong>No green or blue screen in view.</strong> Green screen only removes a real coloured backdrop behind you. Without one, use Blur or Replace: they cut you out with AI.</p>
+            <div class="row"><button type="button" class="btn sm" data-fx-switch="blur">Use Blur</button><button type="button" class="btn sm" data-fx-switch="image">Use Replace</button></div>
+          </div>
           <div class="row" id="bgFxImgRow" hidden>
             <img id="bgFxThumb" class="bgfx-thumb" alt="" hidden>
             <button type="button" class="btn sm" id="bgFxPick">Choose a picture</button>

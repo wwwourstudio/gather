@@ -9,7 +9,7 @@ const fs = require('node:fs') as typeof import('node:fs');
 const path = require('node:path') as typeof import('node:path');
 
 type Pair = [number, number];
-interface Bench { key: string; results: Record<string, Record<string, Pair>> }
+interface Bench { key: string; results: Record<string, Record<string, Pair>>; shots?: Record<string, string> }
 
 async function main(): Promise<void> {
   const BASE = (process.env.GATHER_URL || 'http://localhost:8080').replace(/\/$/, '');
@@ -34,6 +34,7 @@ async function main(): Promise<void> {
   rows.push('', `Geometric mean: ${geo.toFixed(2)}× less error (${Math.round((geo - 1) * 100)}% better). Key colour: ${out.key}.`);
   console.log(rows.join('\n'));
   fs.mkdirSync(path.resolve(__dirname, '..', 'audit'), { recursive: true });
-  fs.writeFileSync(path.resolve(__dirname, '..', 'audit', 'fx-bench.json'), JSON.stringify({ ...out, geometricMean: geo }, null, 2));
+  for (const [name, url] of Object.entries(out.shots ?? {})) fs.writeFileSync(path.resolve(__dirname, '..', 'audit', `fx-bench-${name}.png`), Buffer.from(url.split(',')[1], 'base64'));
+  fs.writeFileSync(path.resolve(__dirname, '..', 'audit', 'fx-bench.json'), JSON.stringify({ key: out.key, results: out.results, geometricMean: geo }, null, 2));
 }
 void main();
