@@ -185,9 +185,9 @@ function layoutScan(): LayoutHit[] {
     if (focusable && (layer as HTMLElement).checkVisibility()) hits.push({ kind: 'hiddenfocus', where: name(layer), detail: `${layer.querySelectorAll('button, a[href], input, select').length} focusable controls` });
   }
   // 7 controls that aren't built from a design-system primitive (tokens.css + ui.css)
-  const PRIMITIVE = '.btn, .icon-btn, .tile, .menu-item, .pill, .toggle, .input, .seg > *, .swatches > *, .bgs > *, .avatar-pick, .more > summary';
+  const PRIMITIVE = '.btn, .icon-btn, .tile, .menu-item, .pill, .toggle, .input, .chip, .send-btn, .seg > *, .swatches > *, .bgs > *, .avatar-pick, .more > summary';
   for (const el of Array.from(document.querySelectorAll('button, select, input:not([type=hidden]):not([type=file]), textarea, summary'))) {
-    if (!shown(el) || el.matches(PRIMITIVE) || el.closest('.fld, .composer-row, .plat-body, .dest-grid') || ['range', 'color'].includes((el as HTMLInputElement).type)) continue;
+    if (!shown(el) || el.matches(PRIMITIVE) || el.closest('.fld, .composer-row, .composer-box, .plat-body, .dest-grid') || ['range', 'color'].includes((el as HTMLInputElement).type)) continue;
     hits.push({ kind: 'adhoc', where: where(el), detail: (el.textContent || el.getAttribute('aria-label') || '').trim().slice(0, 30) });
   }
   // 4 text cut off with no ellipsis

@@ -241,29 +241,8 @@ hr { border: 0; border-top: 1px solid var(--line); margin: var(--sp-1) 0; width:
 .feat-bar { display: flex; align-items: center; gap: var(--sp-2); border: 1px solid var(--accent-line); background: var(--accent-soft); border-radius: var(--r-md); padding: var(--sp-2) var(--sp-3); font-size: var(--fs-12); }
 .feat-label { font-weight: 700; color: var(--accent); flex: none; }
 .feat-text { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-/* One composer for chat, the AI panel and the command bar: a single rounded field that grows with the text,
-   with the send button inside it. Enter sends, Shift+Enter adds a line. */
+/* Composer placement in panels (the Composer primitive itself lives in ui.css). */
 .composer { border-top: 1px solid var(--line); padding: var(--sp-3) var(--sp-4) max(var(--sp-3), env(safe-area-inset-bottom, 0px)); display: grid; gap: 6px; }
-.composer-box { display: flex; align-items: flex-end; gap: var(--sp-1); min-height: 44px; padding: 5px 5px 5px var(--sp-3); border: 1px solid var(--line-2); border-radius: var(--r-lg); background: var(--fill); transition: border-color var(--dur) var(--ease-out), box-shadow var(--dur) var(--ease-out), background-color var(--dur) var(--ease-out); }
-.composer-box:has(.comp-mic) { padding-left: 5px; }
-.composer-box:focus-within { border-color: var(--accent-line); background: var(--fill-hover); box-shadow: 0 0 0 3px var(--accent-soft); }
-.composer-box > :is(input, textarea) { flex: 1; min-width: 0; align-self: center; border: 0; background: none; box-shadow: none; padding: 7px 0; min-height: 0; height: auto; font: 400 var(--fs-14)/1.45 var(--font-ui); color: var(--ink); resize: none; outline: none; max-height: 160px; }
-.composer-box > :is(input, textarea):focus, .composer-box > :is(input, textarea):focus-visible { box-shadow: none; outline: none; }
-.composer-box > :is(input, textarea)::placeholder { color: var(--ink-3); }
-.send-btn { flex: none; width: 32px; height: 32px; display: grid; place-items: center; border-radius: var(--r-md); border: 0; background: var(--accent); color: var(--accent-ink); cursor: pointer; transition: background-color var(--dur) var(--ease-out), opacity var(--dur) var(--ease-out), transform var(--dur-fast) var(--ease-out); }
-.send-btn .i { width: var(--icon-sm); height: var(--icon-sm); stroke-width: 2.25; }
-.send-btn:hover { background: var(--accent-hover); }
-.send-btn:active { transform: scale(0.94); }
-.send-btn:focus-visible { box-shadow: var(--ring); outline: none; }
-.composer-box:has(:is(input, textarea):placeholder-shown) .send-btn { background: var(--fill-active); color: var(--ink-3); }
-.send-btn:disabled { opacity: 0.45; cursor: not-allowed; }
-.send-btn[aria-busy="true"] { color: transparent; position: relative; }
-.send-btn[aria-busy="true"]::after { content: ""; position: absolute; inset: 0; margin: auto; width: 14px; height: 14px; border-radius: 50%; border: 2px solid var(--ink-2); border-right-color: transparent; animation: spin 700ms linear infinite; }
-.composer-box .comp-mic { align-self: flex-end; width: 32px; height: 32px; }
-.composer-hint { margin: 0; display: flex; align-items: center; justify-content: space-between; gap: var(--sp-2); padding: 0 var(--sp-1); font-size: var(--fs-11); color: var(--ink-3); min-height: 18px; }
-.composer-hint .keys { white-space: nowrap; }
-.composer-hint kbd { font-size: 10px; padding: 1px 4px; }
-.composer-hint .btn.link { font-size: var(--fs-11); }
 /* older single-line rows (layouts panel) */
 .composer-row { display: flex; gap: var(--sp-2); align-items: center; border: 1px solid var(--glass-border); border-radius: var(--r-md); padding: var(--sp-1) var(--sp-1) var(--sp-1) var(--sp-3); background: var(--fill); transition: border-color var(--dur) var(--ease-out), box-shadow var(--dur) var(--ease-out); }
 .composer-row:focus-within { border-color: var(--accent-line); box-shadow: 0 0 0 3px var(--accent-soft); }
