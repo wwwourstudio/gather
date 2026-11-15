@@ -1,97 +1,6 @@
 {
   "base": "http://localhost:8080",
-  "findings": [
-    {
-      "area": "Feature: QR hide",
-      "issue": "No way to hide a QR card where it was added: the Brand “On stage” button stays the same after it’s shown",
-      "severity": "P1",
-      "fix": "Make the button a toggle (“On stage” ↔ “Hide”), and add a hide control to the card in Layouts and on the stage editor.",
-      "widths": [
-        1440
-      ],
-      "evidence": [
-        "button reads “On stage”"
-      ]
-    },
-    {
-      "area": "Host: runtime",
-      "issue": "Uncaught error: Cannot use the same canvas during multiple render() operations. Use different canvas or ensure previous operations were cancelled or complet",
-      "severity": "P1",
-      "fix": "pdf.js: pres.go() starts a new render while the previous page is still drawing (fast Next/arrow presses). Keep the RenderTask, cancel() it (or await it) before rendering the next page.",
-      "widths": [
-        1440
-      ],
-      "evidence": [
-        "at InternalRenderTask.initializeGraphics (http://localhost:8080/vendor/pdf.min.js:22:51390)"
-      ]
-    },
-    {
-      "area": "Accessibility",
-      "issue": "Controls in an aria-hidden layer are still focusable: div.deck-layer.below",
-      "severity": "P2",
-      "fix": "Deck layers that slide away keep their buttons in the tab order. Set the inert attribute on .deck-layer:not(.on) in setDeck().",
-      "widths": [
-        1440,
-        1024,
-        390
-      ],
-      "evidence": [
-        "Home (signed out): 1 focusable controls",
-        "Account dialog: 1 focusable controls",
-        "Account (signed in): 1 focusable controls",
-        "Step into the studio: 1 focusable controls"
-      ]
-    },
-    {
-      "area": "Accessibility",
-      "issue": "Controls in an aria-hidden layer are still focusable: div.deck-layer.above",
-      "severity": "P2",
-      "fix": "Deck layers that slide away keep their buttons in the tab order. Set the inert attribute on .deck-layer:not(.on) in setDeck().",
-      "widths": [
-        1440,
-        1024,
-        390
-      ],
-      "evidence": [
-        "Deck-Invite → inviteDlg: 12 focusable controls",
-        "Deck: people: 12 focusable controls",
-        "Deck: people-Invite a guest → inviteDlg: 12 focusable controls",
-        "Dock-Invite → inviteDlg: 12 focusable controls"
-      ]
-    },
-    {
-      "area": "Feature: AI producer",
-      "issue": "Errors appear only as a toast, not in the on-stage bar",
-      "severity": "P2",
-      "fix": "Write the error into #cmdReply so it stays next to the input.",
-      "widths": [
-        1440
-      ],
-      "evidence": [
-        "Claude rejected the API key. Check it in the AI panel."
-      ]
-    },
-    {
-      "area": "Feature: AI voice",
-      "issue": "“Test voice” is only visible for the Stream voice",
-      "severity": "P2",
-      "fix": "Show Test voice for every voice mode.",
-      "widths": [
-        1440
-      ],
-      "evidence": []
-    },
-    {
-      "area": "Feature: banners",
-      "issue": "A live banner only changes after pressing “Show on stage” again; typing doesn’t update it and nothing says it’s out of date",
-      "severity": "P2",
-      "fix": "Mark the panel “Live, edited” with an Update button, or update live after a short pause.",
-      "widths": [
-        1440
-      ],
-      "evidence": []
-    }
-  ],
+  "findings": [],
   "missing": {
     "AI image maker outside the wizard": "Image generation exists only inside “Start a stream → thumbnail”. It can’t make a stage background, overlay or sponsor image from the Brand panel, and the AI producer can’t generate an image on request.",
     "Media library sync": "The media library lives in one browser (IndexedDB). It does not follow the account to another computer and guests can’t see it; uploads to storage (e.g. Vercel Blob) would fix that.",
@@ -109,6 +18,8 @@
     "Dock: “Leave studio” not clicked (destructive or leaves the page)",
     "AI chat: asking without a key explains what to do",
     "AI chat: invalid key → readable error (“Claude rejected the API key. Check it in the AI panel.”)",
+    "AI producer: reply shown in the stage bar",
+    "AI voice: browser voice speaks",
     "AI voice: stream voice without key → “Add a ChatGPT (OpenAI) key in the AI panel for the stream vo”",
     "AI image maker: feedback shown (“Claude doesn’t make images. Pick ChatGPT, Gemini or Grok in the AI pan”)",
     "Video upload: MP4 presents with on-stage controls",
@@ -116,6 +27,7 @@
     "Video upload: media library exists (browser-local)",
     "PDF: full-screen slides, next/previous buttons and arrow keys work",
     "QR hide: one click on its eye in Layouts → Layers (a different panel from where it was added)",
+    "Banners: editing a live banner shows “Live · edited” and the button becomes “Update banner”",
     "Banners: show, edit and show again, save preset, use preset all work",
     "Editor-only: program frame identical for host and guest (0 px differ); the hint is on the editor canvas only (3922 px)",
     "Guest view: no recording, stream, layout, brand, banner, AI producer, lock or people controls",
