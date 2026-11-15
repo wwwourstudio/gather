@@ -14,7 +14,7 @@ const SP = process.argv[2];
   // guest with a camera-off background
   await b.goto((process.env.GATHER_URL || 'http://localhost:8080') + '/s/' + code); await b.waitForSelector('#enterDlg[open]'); await b.fill('#enterName', 'Jordan Lee'); await b.click('#enterGo');
   await b.waitForFunction(() => [...window.__gather.peers.values()].some(p => p.conn === 'connected'), null, { timeout: 15000 });
-  await b.click('[data-tab="settings"]'); await b.setInputFiles('#offBgFile', SP + '/logo.png');
+  await b.click('#settingsTop'); await b.setInputFiles('#offBgFile', SP + '/logo.png');
   await a.waitForFunction(() => { const p = [...window.__gather.peers.values()][0]; return p.offbg && window.__gather.assets.get(p.offbg)?.img; }, null, { timeout: 10000 });
   console.log('1 guest camera-off background reached host; stored in IndexedDB, not localStorage:', await b.evaluate(() => localStorage.getItem('gather:offBg') === null));
   // 2 drop a PDF on the stage
@@ -54,8 +54,8 @@ const SP = process.argv[2];
   await c.waitForFunction(() => !window.__gather.studio, null, { timeout: 10000 });
   console.log('5 removed caller is out:', true, '| host peers:', await a.evaluate(() => window.__gather.peers.size));
   // 6 call-in card + sponsors + glass panel
-  await a.click('[data-tab="stream"]'); await a.click('#callinCard');
-  await a.click('[data-tab="brand"]'); await a.setInputFiles('#adFile', SP + '/logo.png');
+  await a.click('[data-tab="show"]'); await a.click('#callinCard');
+  await a.click('[data-tab="look"]'); await a.click('.look-seg:visible [data-look="brand"]'); await a.setInputFiles('#adFile', SP + '/logo.png');
   await b.waitForFunction(() => window.__gather.state.ads.on && window.__gather.state.ads.items.length === 1 && window.__gather.state.elements.some(e => e.type === 'callin' && e.url.includes('/c/')), null, { timeout: 8000 });
   await a.click('#panelSeg [data-panel="solid"]'); await b.waitForFunction(() => window.__gather.state.brand.panel === 'solid', null, { timeout: 5000 });
   console.log('6 call-in card, sponsor ad and solid panels synced');

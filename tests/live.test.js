@@ -46,10 +46,10 @@ const check = (name, cond, detail = '') => { console.log(`${cond ? 'ok  ' : 'FAI
   await b.waitForFunction(() => !!window.__gather.studio, null, { timeout: 12000 });
   const guestTry = await b.evaluate(async () => { const g = window.__gather; const r = await fetch('/api/studio?action=relay', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ studio: g.studio, id: g.id, tok: g.tok }) }); return r.status; });
   check('a guest cannot get a relay token', guestTry === 403, String(guestTry));
-  check('guests don’t see the Go live button', await b.isHidden('#liveDock'));
+  check('guests don’t see the Go live button', await b.isHidden('#liveTop'));
 
   // two destinations: YouTube (server URL edited to the local stand-in) and a custom RTMP server
-  await a.click('.rail-btn[data-tab="stream"]');
+  await a.click('#liveTop');
   await a.selectOption('#destAdd', 'youtube');
   await a.fill('#destList li:nth-child(1) [data-k="url"]', `rtmp://127.0.0.1:${sinks[0].port}/live`); await a.press('#destList li:nth-child(1) [data-k="url"]', 'Tab');
   await a.fill('#destList li:nth-child(1) [data-k="key"]', sinks[0].key); await a.press('#destList li:nth-child(1) [data-k="key"]', 'Tab');
@@ -67,7 +67,7 @@ const check = (name, cond, detail = '') => { console.log(`${cond ? 'ok  ' : 'FAI
   const codecPath = await a.evaluate(() => (MediaRecorder.isTypeSupported('video/webm;codecs=h264,opus') ? 'H.264 passed through' : 'VP8 re-encoded by the relay'));
   console.log('  live; video path:', codecPath);
   await a.waitForTimeout(7000);
-  console.log('  stats:', await a.textContent('#liveStats'), '| header:', await a.textContent('#livePill'));
+  console.log('  stats:', await a.textContent('#liveStats'), '| header:', await a.textContent('#liveTop'));
   await a.screenshot({ path: path.join(process.argv[2] || TMP, 'live-on-air.png') });
   await w.reload(); await w.waitForSelector('#wPlayer iframe', { timeout: 8000 });
   const src = await w.getAttribute('#wPlayer iframe', 'src');

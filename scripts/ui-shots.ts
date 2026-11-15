@@ -35,10 +35,16 @@ async function main(): Promise<void> {
     await p.keyboard.press('Escape');
     await snap(p, w, '05-studio');
     await p.click('#shareBtn'); await snap(p, w, '06-present-menu'); await p.keyboard.press('Escape'); await p.mouse.click(5, 5);
-    for (const [i, tab] of ['stream', 'ai', 'banners', 'layouts', 'brand', 'settings', 'help'].entries()) {
-      await p.click(`.rail-btn[data-tab="${tab}"]`);
-      if (w < 900) await p.locator(`.panel[data-panel="${tab}"]`).scrollIntoViewIfNeeded();
-      await snap(p, w, `${String(7 + i).padStart(2, '0')}-panel-${tab}`);
+    // the four tabs, then the three dialogs (Go live, Settings, Help)
+    const views: Array<[string, string, string]> = [['show', '.rail-btn[data-tab="show"]', 'show'], ['look-layout', '.rail-btn[data-tab="look"]', 'layouts'], ['look-brand', '.look-seg:visible [data-look="brand"]', 'brand'], ['ai', '.rail-btn[data-tab="ai"]', 'ai']];
+    for (const [i, [name, sel, panel]] of views.entries()) {
+      await p.click(sel);
+      if (w < 900) await p.locator(`.panel[data-panel="${panel}"]`).scrollIntoViewIfNeeded();
+      await snap(p, w, `${String(7 + i).padStart(2, '0')}-panel-${name}`);
+    }
+    for (const [i, [name, sel]] of [['golive', '#liveTop'], ['settings', '#settingsTop'], ['help', '#helpTop']].entries()) {
+      await p.evaluate(() => window.scrollTo(0, 0));
+      await p.click(sel); await snap(p, w, `${String(11 + i).padStart(2, '0')}-dialog-${name}`); await p.keyboard.press('Escape');
     }
     await p.evaluate(() => window.scrollTo(0, 0));
     await p.click('[data-deck="people"]').catch(() => undefined);

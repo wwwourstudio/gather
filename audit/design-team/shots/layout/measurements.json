@@ -1,0 +1,906 @@
+{
+ "1920x1080": {
+  "vw": 1920,
+  "vh": 1080,
+  "docW": 1920,
+  "horizOverflow": false,
+  "horizOverflowEls": [],
+  "docH": 1080,
+  "interactiveInView": 38,
+  "interactiveTotalVisible": 40,
+  "overlaps": [
+   {
+    "a": "button.tile.scene.on \"Side by side2\"",
+    "b": "#addSlot \"Invite\"",
+    "px": 6147
+   }
+  ],
+  "clipped": [],
+  "smallTargets": [
+   {
+    "n": "a.logo \"gather.\"",
+    "w": 105,
+    "h": 34
+   },
+   {
+    "n": "#userBtn \"Sign in\"",
+    "w": 101,
+    "h": 36
+   },
+   {
+    "n": "#enterTop \"Invite\"",
+    "w": 93,
+    "h": 36
+   },
+   {
+    "n": "button.host-only.on[data-deck=scenes] \"Scenes\"",
+    "w": 109,
+    "h": 22
+   },
+   {
+    "n": "button[data-deck=people] \"In the studio 1\"",
+    "w": 109,
+    "h": 22
+   },
+   {
+    "n": "#lockWrap \"Lock\"",
+    "w": 64,
+    "h": 28
+   },
+   {
+    "n": "#lockSwitch",
+    "w": 28,
+    "h": 16
+   },
+   {
+    "n": "#inviteCrew \"Invite\"",
+    "w": 82,
+    "h": 28
+   },
+   {
+    "n": "button.icon-btn.sm.on-media",
+    "w": 24,
+    "h": 24
+   },
+   {
+    "n": "#chatInput",
+    "w": 271,
+    "h": 34
+   },
+   {
+    "n": "#chatSend",
+    "w": 32,
+    "h": 32
+   },
+   {
+    "n": "#guideGo \"Show me\"",
+    "w": 79,
+    "h": 28
+   },
+   {
+    "n": "#guideSkip",
+    "w": 28,
+    "h": 28
+   },
+   {
+    "n": "#leaveBtn \"Leave studio\"",
+    "w": 114,
+    "h": 36
+   }
+  ],
+  "stage": {
+   "w": 1184,
+   "h": 666,
+   "top": 101,
+   "pctViewport": 38,
+   "pctVisibleAtLoad": 38,
+   "pctOfWidth": 61.7
+  },
+  "surfaces": [
+   "header.top.glass \"gather. The conversation\"",
+   "div.stage-card.glass \"Drop to presentPDF, vide\"",
+   "#deck \"Scenes In the studio 1 W\"",
+   "#side \"ChatStudio chat plus you\"",
+   "nav.rail.glass \"Chat Stream AI Layouts B\"",
+   "footer.dock.glass \"Unmute Stop camera Prese\""
+  ],
+  "scrollers": [
+   {
+    "n": "#sceneStrip \"Solo1Side by side2Spotli\"",
+    "axis": "x",
+    "h": 128
+   }
+  ],
+  "dock": {
+   "top": 998,
+   "h": 70,
+   "pos": "relative"
+  },
+  "streamPanel": {
+   "overlaps": 1,
+   "small": 18,
+   "clipped": 0,
+   "interactiveInView": 42
+  }
+ },
+ "1440x900": {
+  "vw": 1440,
+  "vh": 900,
+  "docW": 1440,
+  "horizOverflow": false,
+  "horizOverflowEls": [],
+  "docH": 900,
+  "interactiveInView": 35,
+  "interactiveTotalVisible": 40,
+  "overlaps": [
+   {
+    "a": "button.tile.scene.on \"Side by side2\"",
+    "b": "#addSlot \"Invite\"",
+    "px": 6147
+   }
+  ],
+  "clipped": [],
+  "smallTargets": [
+   {
+    "n": "a.logo \"gather.\"",
+    "w": 105,
+    "h": 34
+   },
+   {
+    "n": "#userBtn \"Sign in\"",
+    "w": 101,
+    "h": 36
+   },
+   {
+    "n": "#enterTop \"Invite\"",
+    "w": 93,
+    "h": 36
+   },
+   {
+    "n": "button.host-only.on[data-deck=scenes] \"Scenes\"",
+    "w": 109,
+    "h": 22
+   },
+   {
+    "n": "button[data-deck=people] \"In the studio 1\"",
+    "w": 109,
+    "h": 22
+   },
+   {
+    "n": "#lockWrap \"Lock\"",
+    "w": 64,
+    "h": 28
+   },
+   {
+    "n": "#lockSwitch",
+    "w": 28,
+    "h": 16
+   },
+   {
+    "n": "#inviteCrew \"Invite\"",
+    "w": 82,
+    "h": 28
+   },
+   {
+    "n": "button.icon-btn.sm.on-media",
+    "w": 24,
+    "h": 24
+   },
+   {
+    "n": "#chatInput",
+    "w": 271,
+    "h": 34
+   },
+   {
+    "n": "#chatSend",
+    "w": 32,
+    "h": 32
+   },
+   {
+    "n": "#guideGo \"Show me\"",
+    "w": 79,
+    "h": 28
+   },
+   {
+    "n": "#guideSkip",
+    "w": 28,
+    "h": 28
+   },
+   {
+    "n": "#leaveBtn \"Leave studio\"",
+    "w": 114,
+    "h": 36
+   }
+  ],
+  "stage": {
+   "w": 864,
+   "h": 486,
+   "top": 101,
+   "pctViewport": 32.4,
+   "pctVisibleAtLoad": 32.4,
+   "pctOfWidth": 60
+  },
+  "surfaces": [
+   "header.top.glass \"gather. The conversation\"",
+   "div.stage-card.glass \"Drop to presentPDF, vide\"",
+   "#deck \"Scenes In the studio 1 W\"",
+   "#side \"ChatStudio chat plus you\"",
+   "nav.rail.glass \"Chat Stream AI Layouts B\"",
+   "footer.dock.glass \"Mute Stop camera Present\""
+  ],
+  "scrollers": [
+   {
+    "n": "#sceneStrip \"Solo1Side by side2Spotli\"",
+    "axis": "x",
+    "h": 128
+   }
+  ],
+  "dock": {
+   "top": 818,
+   "h": 70,
+   "pos": "relative"
+  },
+  "streamPanel": {
+   "overlaps": 1,
+   "small": 16,
+   "clipped": 0,
+   "interactiveInView": 37
+  }
+ },
+ "1280x720": {
+  "vw": 1280,
+  "vh": 720,
+  "docW": 1280,
+  "horizOverflow": false,
+  "horizOverflowEls": [],
+  "docH": 720,
+  "interactiveInView": 34,
+  "interactiveTotalVisible": 40,
+  "overlaps": [
+   {
+    "a": "button.tile.scene.on \"Side by side2\"",
+    "b": "#addSlot \"Invite\"",
+    "px": 6147
+   }
+  ],
+  "clipped": [],
+  "smallTargets": [
+   {
+    "n": "a.logo \"gather.\"",
+    "w": 105,
+    "h": 34
+   },
+   {
+    "n": "#userBtn \"Sign in\"",
+    "w": 101,
+    "h": 36
+   },
+   {
+    "n": "#enterTop \"Invite\"",
+    "w": 93,
+    "h": 36
+   },
+   {
+    "n": "button.host-only.on[data-deck=scenes] \"Scenes\"",
+    "w": 109,
+    "h": 22
+   },
+   {
+    "n": "button[data-deck=people] \"In the studio 1\"",
+    "w": 109,
+    "h": 22
+   },
+   {
+    "n": "#lockWrap \"Lock\"",
+    "w": 64,
+    "h": 28
+   },
+   {
+    "n": "#lockSwitch",
+    "w": 28,
+    "h": 16
+   },
+   {
+    "n": "#inviteCrew \"Invite\"",
+    "w": 82,
+    "h": 28
+   },
+   {
+    "n": "button.icon-btn.sm.on-media",
+    "w": 24,
+    "h": 24
+   },
+   {
+    "n": "#chatInput",
+    "w": 271,
+    "h": 34
+   },
+   {
+    "n": "#chatSend",
+    "w": 32,
+    "h": 32
+   },
+   {
+    "n": "#guideGo \"Show me\"",
+    "w": 79,
+    "h": 28
+   },
+   {
+    "n": "#guideSkip",
+    "w": 28,
+    "h": 28
+   },
+   {
+    "n": "#leaveBtn \"Leave studio\"",
+    "w": 114,
+    "h": 36
+   }
+  ],
+  "stage": {
+   "w": 544,
+   "h": 306,
+   "top": 101,
+   "pctViewport": 18.1,
+   "pctVisibleAtLoad": 18.1,
+   "pctOfWidth": 42.5
+  },
+  "surfaces": [
+   "header.top.glass \"gather. The conversation\"",
+   "div.stage-card.glass \"Drop to presentPDF, vide\"",
+   "#deck \"Scenes In the studio 1 W\"",
+   "#side \"ChatStudio chat plus you\"",
+   "nav.rail.glass \"Chat Stream AI Layouts B\"",
+   "footer.dock.glass \"Mute Stop camera Present\""
+  ],
+  "scrollers": [
+   {
+    "n": "#sceneStrip \"Solo1Side by side2Spotli\"",
+    "axis": "x",
+    "h": 128
+   }
+  ],
+  "dock": {
+   "top": 638,
+   "h": 70,
+   "pos": "relative"
+  },
+  "streamPanel": {
+   "overlaps": 1,
+   "small": 14,
+   "clipped": 0,
+   "interactiveInView": 34
+  }
+ },
+ "1024x768": {
+  "vw": 1024,
+  "vh": 768,
+  "docW": 1024,
+  "horizOverflow": false,
+  "horizOverflowEls": [],
+  "docH": 768,
+  "interactiveInView": 32,
+  "interactiveTotalVisible": 40,
+  "overlaps": [
+   {
+    "a": "button.tile.scene.on \"Side by side2\"",
+    "b": "#addSlot \"Invite\"",
+    "px": 6147
+   }
+  ],
+  "clipped": [],
+  "smallTargets": [
+   {
+    "n": "a.logo \"gather.\"",
+    "w": 105,
+    "h": 34
+   },
+   {
+    "n": "#userBtn \"Sign in\"",
+    "w": 101,
+    "h": 36
+   },
+   {
+    "n": "#enterTop \"Invite\"",
+    "w": 93,
+    "h": 36
+   },
+   {
+    "n": "button.host-only.on[data-deck=scenes] \"Scenes\"",
+    "w": 109,
+    "h": 22
+   },
+   {
+    "n": "button[data-deck=people] \"In the studio 1\"",
+    "w": 109,
+    "h": 22
+   },
+   {
+    "n": "#lockWrap \"Lock\"",
+    "w": 64,
+    "h": 28
+   },
+   {
+    "n": "#lockSwitch",
+    "w": 28,
+    "h": 16
+   },
+   {
+    "n": "#inviteCrew \"Invite\"",
+    "w": 82,
+    "h": 28
+   },
+   {
+    "n": "button.icon-btn.sm.on-media",
+    "w": 24,
+    "h": 24
+   },
+   {
+    "n": "#chatInput",
+    "w": 231,
+    "h": 34
+   },
+   {
+    "n": "#chatSend",
+    "w": 32,
+    "h": 32
+   },
+   {
+    "n": "#guideGo \"Show me\"",
+    "w": 79,
+    "h": 28
+   },
+   {
+    "n": "#guideSkip",
+    "w": 28,
+    "h": 28
+   },
+   {
+    "n": "#leaveBtn \"Leave studio\"",
+    "w": 114,
+    "h": 36
+   }
+  ],
+  "stage": {
+   "w": 546,
+   "h": 307,
+   "top": 124,
+   "pctViewport": 21.3,
+   "pctVisibleAtLoad": 21.3,
+   "pctOfWidth": 53.3
+  },
+  "surfaces": [
+   "header.top.glass \"gather. The conversation\"",
+   "div.stage-card.glass \"Drop to presentPDF, vide\"",
+   "#deck \"Scenes In the studio 1 W\"",
+   "#side \"ChatStudio chat plus you\"",
+   "nav.rail.glass \"Chat Stream AI Layouts B\"",
+   "footer.dock.glass \"Mute Stop camera Present\""
+  ],
+  "scrollers": [
+   {
+    "n": "#sceneStrip \"Solo1Side by side2Spotli\"",
+    "axis": "x",
+    "h": 128
+   }
+  ],
+  "dock": {
+   "top": 686,
+   "h": 70,
+   "pos": "relative"
+  },
+  "streamPanel": {
+   "overlaps": 1,
+   "small": 14,
+   "clipped": 0,
+   "interactiveInView": 32
+  }
+ },
+ "768x1024": {
+  "vw": 768,
+  "vh": 1024,
+  "docW": 768,
+  "horizOverflow": false,
+  "horizOverflowEls": [],
+  "docH": 1673,
+  "interactiveInView": 31,
+  "interactiveTotalVisible": 40,
+  "overlaps": [
+   {
+    "a": "button.tile.scene.on \"Side by side2\"",
+    "b": "#addSlot \"Invite\"",
+    "px": 6147
+   }
+  ],
+  "clipped": [],
+  "smallTargets": [
+   {
+    "n": "a.logo \"gather.\"",
+    "w": 86,
+    "h": 28
+   },
+   {
+    "n": "#userBtn \"Sign in\"",
+    "w": 36,
+    "h": 36
+   },
+   {
+    "n": "#enterTop \"Invite\"",
+    "w": 93,
+    "h": 36
+   },
+   {
+    "n": "button.host-only.on[data-deck=scenes] \"Scenes\"",
+    "w": 109,
+    "h": 30
+   },
+   {
+    "n": "button[data-deck=people] \"In the studio 1\"",
+    "w": 109,
+    "h": 30
+   },
+   {
+    "n": "#lockWrap \"Lock\"",
+    "w": 64,
+    "h": 28
+   },
+   {
+    "n": "#lockSwitch",
+    "w": 28,
+    "h": 16
+   },
+   {
+    "n": "#inviteCrew \"Invite\"",
+    "w": 82,
+    "h": 28
+   },
+   {
+    "n": "button.icon-btn.sm.on-media",
+    "w": 24,
+    "h": 24
+   },
+   {
+    "n": "#guideGo \"Show me\"",
+    "w": 79,
+    "h": 28
+   },
+   {
+    "n": "#guideSkip",
+    "w": 28,
+    "h": 28
+   },
+   {
+    "n": "#leaveBtn \"Leave studio\"",
+    "w": 64,
+    "h": 36
+   }
+  ],
+  "stage": {
+   "w": 718,
+   "h": 404,
+   "top": 93,
+   "pctViewport": 36.9,
+   "pctVisibleAtLoad": 36.9,
+   "pctOfWidth": 93.5
+  },
+  "surfaces": [
+   "header.top.glass \"gather. The conversation\"",
+   "div.stage-card.glass \"Drop to presentPDF, vide\"",
+   "#deck \"Scenes In the studio 1 W\"",
+   "#side \"ChatStudio chat plus you\"",
+   "nav.rail.glass \"Chat Stream AI Layouts B\"",
+   "footer.dock.glass \"Mute Stop camera Present\""
+  ],
+  "scrollers": [
+   {
+    "n": "#sceneStrip \"Solo1Side by side2Spotli\"",
+    "axis": "x",
+    "h": 128
+   }
+  ],
+  "dock": {
+   "top": 912,
+   "h": 104,
+   "pos": "sticky"
+  },
+  "behindDock": {
+   "dockTop": 912,
+   "dockH": 104,
+   "coveredSample": [
+    "#chatInput ",
+    "#chatSend "
+   ]
+  },
+  "sideHeight": 737,
+  "streamPanel": {
+   "overlaps": 1,
+   "small": 12,
+   "clipped": 0,
+   "interactiveInView": 31
+  }
+ },
+ "390x844": {
+  "vw": 390,
+  "vh": 844,
+  "docW": 390,
+  "horizOverflow": false,
+  "horizOverflowEls": [],
+  "docH": 1367,
+  "interactiveInView": 27,
+  "interactiveTotalVisible": 40,
+  "overlaps": [
+   {
+    "a": "button.tile.scene \"Solo1\"",
+    "b": "button.icon-btn.sm.on-media",
+    "px": 158
+   },
+   {
+    "a": "button.tile.scene.on \"Side by side2\"",
+    "b": "#addSlot \"Invite\"",
+    "px": 5424
+   }
+  ],
+  "clipped": [
+   {
+    "n": "#studioTitle \"The conversation studio\"",
+    "full": "The conversation studio",
+    "sw": 164,
+    "cw": 63
+   }
+  ],
+  "smallTargets": [
+   {
+    "n": "a.logo \"gather.\"",
+    "w": 86,
+    "h": 28
+   },
+   {
+    "n": "#userBtn \"Sign in\"",
+    "w": 36,
+    "h": 36
+   },
+   {
+    "n": "#enterTop \"Invite\"",
+    "w": 93,
+    "h": 36
+   },
+   {
+    "n": "button.host-only.on[data-deck=scenes] \"Scenes\"",
+    "w": 109,
+    "h": 30
+   },
+   {
+    "n": "button[data-deck=people] \"In the studio 1\"",
+    "w": 109,
+    "h": 30
+   },
+   {
+    "n": "#lockWrap \"Lock\"",
+    "w": 64,
+    "h": 28
+   },
+   {
+    "n": "#lockSwitch",
+    "w": 28,
+    "h": 16
+   },
+   {
+    "n": "#inviteCrew \"Invite\"",
+    "w": 82,
+    "h": 28
+   },
+   {
+    "n": "button.icon-btn.sm.on-media",
+    "w": 24,
+    "h": 24
+   },
+   {
+    "n": "#guideGo \"Show me\"",
+    "w": 79,
+    "h": 28
+   },
+   {
+    "n": "#guideSkip",
+    "w": 28,
+    "h": 28
+   },
+   {
+    "n": "#leaveBtn \"Leave studio\"",
+    "w": 64,
+    "h": 36
+   }
+  ],
+  "stage": {
+   "w": 340,
+   "h": 191,
+   "top": 93,
+   "pctViewport": 19.8,
+   "pctVisibleAtLoad": 19.8,
+   "pctOfWidth": 87.2
+  },
+  "surfaces": [
+   "header.top.glass \"gather. The conversation\"",
+   "div.stage-card.glass \"Drop to presentPDF, vide\"",
+   "#deck \"Scenes In the studio 1 W\"",
+   "#side \"ChatStudio chat plus you\"",
+   "nav.rail.glass \"Chat Stream AI Layouts B\"",
+   "footer.dock.glass \"Mute Stop camera Present\""
+  ],
+  "scrollers": [
+   {
+    "n": "#sceneStrip \"Solo1Side by side2Spotli\"",
+    "axis": "x",
+    "h": 128
+   },
+   {
+    "n": "nav.rail.glass \"Chat Stream AI Layouts B\"",
+    "axis": "x",
+    "h": 66
+   }
+  ],
+  "dock": {
+   "top": 732,
+   "h": 104,
+   "pos": "sticky"
+  },
+  "behindDock": {
+   "dockTop": 732,
+   "dockH": 104,
+   "coveredSample": [
+    "#chatInput ",
+    "#chatSend "
+   ]
+  },
+  "sideHeight": 608,
+  "streamPanel": {
+   "overlaps": 2,
+   "small": 12,
+   "clipped": 1,
+   "interactiveInView": 27
+  }
+ },
+ "360x740": {
+  "vw": 360,
+  "vh": 740,
+  "docW": 360,
+  "horizOverflow": false,
+  "horizOverflowEls": [],
+  "docH": 1289,
+  "interactiveInView": 27,
+  "interactiveTotalVisible": 40,
+  "overlaps": [
+   {
+    "a": "button.tile.scene \"Solo1\"",
+    "b": "button.icon-btn.sm.on-media",
+    "px": 158
+   },
+   {
+    "a": "button.tile.scene.on \"Side by side2\"",
+    "b": "#addSlot \"Invite\"",
+    "px": 5424
+   }
+  ],
+  "clipped": [
+   {
+    "n": "#studioTitle \"The conversation studio\"",
+    "full": "The conversation studio",
+    "sw": 164,
+    "cw": 33
+   }
+  ],
+  "smallTargets": [
+   {
+    "n": "a.logo \"gather.\"",
+    "w": 86,
+    "h": 28
+   },
+   {
+    "n": "#userBtn \"Sign in\"",
+    "w": 36,
+    "h": 36
+   },
+   {
+    "n": "#enterTop \"Invite\"",
+    "w": 93,
+    "h": 36
+   },
+   {
+    "n": "button.host-only.on[data-deck=scenes] \"Scenes\"",
+    "w": 109,
+    "h": 30
+   },
+   {
+    "n": "button[data-deck=people] \"In the studio 1\"",
+    "w": 109,
+    "h": 30
+   },
+   {
+    "n": "#lockWrap \"Lock\"",
+    "w": 64,
+    "h": 28
+   },
+   {
+    "n": "#lockSwitch",
+    "w": 28,
+    "h": 16
+   },
+   {
+    "n": "#inviteCrew \"Invite\"",
+    "w": 82,
+    "h": 28
+   },
+   {
+    "n": "button.icon-btn.sm.on-media",
+    "w": 24,
+    "h": 24
+   },
+   {
+    "n": "#guideGo \"Show me\"",
+    "w": 79,
+    "h": 28
+   },
+   {
+    "n": "#guideSkip",
+    "w": 28,
+    "h": 28
+   },
+   {
+    "n": "#leaveBtn \"Leave studio\"",
+    "w": 64,
+    "h": 36
+   }
+  ],
+  "stage": {
+   "w": 310,
+   "h": 174,
+   "top": 93,
+   "pctViewport": 20.3,
+   "pctVisibleAtLoad": 20.3,
+   "pctOfWidth": 86.1
+  },
+  "surfaces": [
+   "header.top.glass \"gather. The conversation\"",
+   "div.stage-card.glass \"Drop to presentPDF, vide\"",
+   "#deck \"Scenes In the studio 1 W\"",
+   "#side \"ChatStudio chat plus you\"",
+   "nav.rail.glass \"Chat Stream AI Layouts B\"",
+   "footer.dock.glass \"Mute Stop camera Present\""
+  ],
+  "scrollers": [
+   {
+    "n": "#sceneStrip \"Solo1Side by side2Spotli\"",
+    "axis": "x",
+    "h": 128
+   },
+   {
+    "n": "nav.rail.glass \"Chat Stream AI Layouts B\"",
+    "axis": "x",
+    "h": 66
+   },
+   {
+    "n": "div.dock-tools \"Mute Stop camera Present\"",
+    "axis": "x",
+    "h": 54
+   }
+  ],
+  "dock": {
+   "top": 614,
+   "h": 118,
+   "pos": "sticky"
+  },
+  "behindDock": {
+   "dockTop": 614,
+   "dockH": 118,
+   "coveredSample": [
+    "#chatInput ",
+    "#chatSend "
+   ]
+  },
+  "sideHeight": 533,
+  "streamPanel": {
+   "overlaps": 2,
+   "small": 12,
+   "clipped": 1,
+   "interactiveInView": 27
+  }
+ }
+}

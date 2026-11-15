@@ -2,8 +2,9 @@
  * Verifies the design system: screenshots every primitive in every state from /ui-kit.html
  * (default, hover, active, focus-visible, plus the disabled / loading / pressed specimens on the page)
  * in dark and light, and checks the token contract in the live page:
- *   control heights 28/36/44 · radii 8/12/16 · icons 16/20 at stroke 1.75 · Inter for UI ·
- *   tabular numbers · 180ms ease-out UI motion · ~0ms under prefers-reduced-motion.
+ *   control heights 28/34/42 · radii 6/8/12 · icons 16/20 at stroke 1.75 · Inter for UI ·
+ *   tabular numbers · 150ms ease-out UI motion · ~0ms under prefers-reduced-motion ·
+ *   docked regions are flat (no blur, no shadow); real glass only on .raised and .on-media.
  *
  *   node scripts/ui-kit.ts            # → audit/screens/ui-kit/, exits 1 if a check fails
  */
@@ -77,17 +78,17 @@ async function main(): Promise<void> {
       glass: [cs('[data-kit="glass"]').backgroundColor, cs('[data-kit="glass"]').backdropFilter, cs('[data-kit="glass"]').borderTopColor, cs('[data-kit="glass"]').boxShadow],
     };
   });
-  check(m.btn.join() === '28,36,44', `Button heights sm/md/lg = 28/36/44 (got ${m.btn.join('/')})`);
-  check(m.ib.join() === '28,36,44', `IconButton sizes = 28/36/44 (got ${m.ib.join('/')})`);
-  check(m.seg === 36, `SegmentedControl height 36 (got ${m.seg})`);
-  check(m.radii[0] === '8px' && m.radii[1] === '16px' && m.radii[2] === '12px', `radii 8/12/16 (got ${m.radii.join(' ')})`);
+  check(m.btn.join() === '28,34,42', `Button heights sm/md/lg = 28/34/42 (got ${m.btn.join('/')})`);
+  check(m.ib.join() === '28,34,42', `IconButton sizes = 28/34/42 (got ${m.ib.join('/')})`);
+  check(m.seg === 34, `SegmentedControl height 34 (got ${m.seg})`);
+  check(m.radii[0] === '6px' && m.radii[1] === '12px' && m.radii[2] === '8px', `radii 6/8/12 (got ${m.radii.join(' ')})`);
   check(m.iconStroke.every((w) => w === '1.75px' || w === '1.75'), `icon stroke 1.75 (got ${m.iconStroke.join(', ')})`);
   check(m.iconSize.join() === '16,20,16', `icon sizes 16/20 (got ${m.iconSize.join('/')})`);
   check(/^"?Inter/.test(m.uiFont), `UI font is Inter (got ${m.uiFont})`);
   check(/Plus Jakarta Sans/.test(m.displayFont), `display font is Plus Jakarta Sans (got ${m.displayFont})`);
   check(m.tnum.includes('tabular-nums'), `.num uses tabular numbers (got ${m.tnum})`);
-  check(m.motion[0] === '0.18s' && /cubic-bezier\(0\.22, 1, 0\.36, 1\)/.test(m.motion[1]), `UI motion 180ms ease-out (got ${m.motion.join(' ')})`);
-  check(m.glass[0] === 'rgba(255, 255, 255, 0.06)' && /blur\(20px\) saturate\(1\.4\)/.test(m.glass[1]) && m.glass[2] === 'rgba(255, 255, 255, 0.1)' && /0px 8px 32px/.test(m.glass[3]), `glass bg/blur/border/shadow match the spec (got ${m.glass.join(' | ')})`);
+  check(m.motion[0] === '0.15s' && /cubic-bezier\(0\.22, 1, 0\.36, 1\)/.test(m.motion[1]), `UI motion 150ms ease-out (got ${m.motion.join(' ')})`);
+  check(m.glass[0] === 'rgb(15, 21, 36)' && m.glass[1] === 'none' && m.glass[2] === 'rgb(29, 37, 55)' && m.glass[3] === 'none', `docked panels are flat: surface, no blur, hairline, no shadow (got ${m.glass.join(' | ')})`);
 
   // ---- every state, both themes
   await states(p, 'dark');

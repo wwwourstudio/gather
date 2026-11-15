@@ -426,7 +426,7 @@ async function featureChecks(s: Session, browser: Browser, code: string): Promis
   });
 
   await step('AI image maker', async () => {
-    await p.click('.rail-btn[data-tab="stream"]'); await p.click('#wizOpen'); await p.waitForTimeout(400);
+    await p.click('#liveTop'); await p.click('#wizOpen'); await p.waitForTimeout(400);
     await shot(s, 'feature-wizard');
     await p.click('#wizDlg [data-wmode="later"]');
     for (let i = 0; i < 4 && !(await p.isVisible('#wThumbTabs')); i++) { await p.fill('#wTitle', 'Audit episode').catch(() => undefined); await p.click('#wNext', { timeout: 3000 }); await p.waitForTimeout(300); }
@@ -485,7 +485,7 @@ async function featureChecks(s: Session, browser: Browser, code: string): Promis
   });
 
   await step('QR hide', async () => {
-    await p.click('.rail-btn[data-tab="brand"]');
+    await p.click('.rail-btn[data-tab="look"]'); await p.click('.look-seg:visible [data-look="brand"]');
     await p.fill('[aria-label="PayPal link"]', 'gathershow');
     await clickOrExplain(p.locator('.tip-row', { hasText: 'PayPal' }).locator('button'), 'Feature: QR hide');
     await p.waitForFunction(() => (window as unknown as GatherWindow).__gather.state.elements.some((e) => e.type === 'tip'), null, { timeout: 5000 });
@@ -494,7 +494,7 @@ async function featureChecks(s: Session, browser: Browser, code: string): Promis
     const toggles = /hide|remove|off/i.test(btn);
     if (!toggles) add('Feature: QR hide', 'No way to hide a QR card where it was added: the Brand “On stage” button stays the same after it’s shown', 'P1', 'Make the button a toggle (“On stage” ↔ “Hide”), and add a hide control to the card in Layouts and on the stage editor.', W, `button reads “${btn}”`);
     // the only route today: Layouts → element list ✕
-    await p.click('.rail-btn[data-tab="layouts"]');
+    await p.click('.rail-btn[data-tab="look"]'); await p.click('.look-seg:visible [data-look="layouts"]');
     const row = p.locator('#elList li', { hasText: /support|paypal|tip|QR/i });
     if (await row.count()) {
       await row.first().locator('button[aria-label^="Hide"]').first().click();
@@ -506,7 +506,7 @@ async function featureChecks(s: Session, browser: Browser, code: string): Promis
   });
 
   await step('Banner editing', async () => {
-    await p.click('.rail-btn[data-tab="banners"]');
+    await p.click('.rail-btn[data-tab="show"]');
     await p.fill('#bannerText', 'Audit headline'); await p.fill('#bannerSub', 'first line'); await p.click('#bannerShow');
     await p.waitForFunction(() => (window as unknown as GatherWindow).__gather.state.banner?.text === 'Audit headline', null, { timeout: 4000 });
     await p.fill('#bannerText', 'Audit headline, edited'); await p.click('#bannerShow');
@@ -565,7 +565,7 @@ async function featureChecks(s: Session, browser: Browser, code: string): Promis
     await gp.waitForFunction(() => !!(window as unknown as GatherWindow).__gather.studio, null, { timeout: 12000 });
     await gp.waitForTimeout(800);
     await shot(gs, 'guest-studio'); await checkLayout(gs, 'Studio (guest)');
-    const leaks = await gp.evaluate(() => Array.from(document.querySelectorAll('#recBtn, .rail-btn[data-tab="stream"], .rail-btn[data-tab="layouts"], .rail-btn[data-tab="brand"], .rail-btn[data-tab="banners"], #aiDock, #cmdBar, #aiSetup, #aiForm, #lockWrap, .crew-tools'))
+    const leaks = await gp.evaluate(() => Array.from(document.querySelectorAll('#recBtn, #liveTop, .rail-btn[data-tab="show"], .rail-btn[data-tab="look"], .rail-btn[data-tab="ai"], #aiDock, #cmdBar, #aiSetup, #aiForm, #lockWrap, .crew-tools'))
       .filter((e) => (e as HTMLElement).checkVisibility()).map((e) => e.id || e.className));
     if (leaks.length) add('Guest view', `Host controls visible to guests: ${leaks.join(', ')}`, 'P0', 'Hide with the host-only flag in renderGuestView().', 1440);
     else passes.push('Guest view: no recording, stream, layout, brand, banner, AI producer, lock or people controls');

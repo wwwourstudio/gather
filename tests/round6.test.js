@@ -16,7 +16,7 @@ const SP = process.argv[2];
   await b.waitForFunction(() => window.__gather.state.scene === 'p-interview', null, { timeout: 5000 });
   console.log('  guest sees layers:', await G(b, () => window.__gather.state.elements.map((e) => e.type).sort().join(',')));
   // edit mode
-  await a.click('.rail-btn[data-tab="layouts"]'); await a.click('#editToggle');
+  await a.click('[data-tab="look"]'); await a.click('.look-seg:visible [data-look="layouts"]'); await a.click('#editToggle');
   const box = async (type, n = 0) => a.locator(`.ebox[data-id="${await G(a, ([t, i]) => window.__gather.state.elements.filter((e) => e.type === t)[i].id, [type, n])}"]`);
   const el = (type, n = 0) => G(a, ([t, i]) => { const e = window.__gather.state.elements.filter((x) => x.type === t)[i]; return { ...e }; }, [type, n]);
   const st = await a.locator('#stage').boundingBox();

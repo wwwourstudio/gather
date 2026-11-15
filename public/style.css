@@ -4,12 +4,7 @@
    Layout: header / [program + deck | side panel | rail] / dock, floating glass over a lit backdrop. */
 
 /* ---------------------------------------------------------------- lit backdrop */
-.backdrop { position: fixed; inset: 0; z-index: -1; overflow: hidden; background: radial-gradient(120% 90% at 50% 0%, var(--bg-2), var(--bg) 70%); }
-.backdrop i { position: absolute; border-radius: 50%; filter: blur(80px); opacity: 0.9; }
-.backdrop .b1 { width: 52vw; height: 52vw; left: -14vw; top: -18vw; background: var(--blob-1); animation: drift 38s ease-in-out infinite alternate; }
-.backdrop .b2 { width: 40vw; height: 40vw; right: -12vw; top: 18vh; background: var(--blob-2); animation: drift 46s ease-in-out infinite alternate-reverse; }
-.backdrop .b3 { width: 46vw; height: 46vw; left: 30vw; bottom: -26vw; background: var(--blob-3); animation: drift 54s ease-in-out infinite alternate; }
-@keyframes drift { to { transform: translate(6vw, 4vh) scale(1.08); } }
+.backdrop { position: fixed; inset: 0; z-index: -1; background: radial-gradient(90% 60% at 40% -10%, color-mix(in srgb, var(--accent) 10%, transparent), transparent 70%), var(--bg); } /* one still, faint blue light; no moving blobs */
 
 .app { height: 100%; display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr) auto; gap: var(--sp-3); padding: var(--sp-3) max(var(--sp-3), env(safe-area-inset-right, 0px)) var(--sp-3) max(var(--sp-3), env(safe-area-inset-left, 0px)); }
 .grow { flex: 1; min-width: 0; }
@@ -451,10 +446,6 @@ hr { border: 0; border-top: 1px solid var(--line); margin: var(--sp-1) 0; width:
 .dock .icon-btn.stacked { color: var(--ink-2); }
 .dock .icon-btn.stacked.active { color: var(--cyan); background: var(--fill); }
 .dock .icon-btn.stacked.mutes[aria-pressed="true"] { --ib-bg: transparent; --ib-bg-hover: var(--danger-soft); color: var(--danger); }
-.rec-tool.icon-btn.stacked { color: var(--danger); }
-.rec-tool .rec-dot { fill: currentColor; stroke: none; }
-.rec-tool.recording.icon-btn.stacked { --ib-bg: var(--live); --ib-bg-hover: var(--live); color: #fff; }
-.rec-tool.recording .rec-dot { animation: blink 1.2s infinite; }
 .dock-note { flex: 1; margin: 0; display: flex; justify-content: center; align-items: center; gap: var(--sp-2); color: var(--ink-3); font-size: var(--fs-12); white-space: nowrap; overflow: hidden; font-variant-numeric: tabular-nums; }
 .present-menu { width: 300px; }
 
@@ -578,3 +569,99 @@ hr { border: 0; border-top: 1px solid var(--line); margin: var(--sp-1) 0; width:
   .tip-row { grid-template-columns: 80px minmax(0, 1fr) auto; }
 }
 .ebox.ghost:not(.sel):not(:hover) .elab { opacity: 0; } /* hidden layers often share a spot; name them on hover */
+
+/* ================================================================ V4: a docked control room
+   Regions sit edge to edge, divided by hairlines, so the stage is the only lit object on screen.
+   The side panel folds away (click the open tab again), and before you enter a studio only the stage shows. */
+.app { gap: 0; padding: 0; }
+.app > .top, .main > .side, .main > .rail, .app > .dock, .studio > .deck, .studio > .stage-card { border-radius: 0; }
+.top { height: 52px; border-width: 0 0 1px; padding: 0 var(--sp-3) 0 var(--sp-4); gap: var(--sp-3); }
+.logo-word { font-size: 24px; letter-spacing: -0.045em; }
+.top-title { border-left-color: var(--line-2); }
+.top-title strong { font-weight: 600; }
+.top-title strong.editable { cursor: text; border-radius: var(--r-sm); padding: 3px 6px; margin: -3px -6px; }
+.top-title strong.editable:hover { background: var(--fill-hover); }
+.top-title strong[contenteditable="plaintext-only"] { background: var(--surface-2); box-shadow: 0 0 0 1px var(--accent); outline: none; text-overflow: clip; }
+.status[hidden] { display: none; }
+.hdr-ic { color: var(--ink-2); }
+.top-actions { gap: 6px; }
+.live-top.on-air { --btn-bg: var(--live); --btn-bg-hover: var(--live); --btn-ink: #fff; font-variant-numeric: tabular-nums; }
+.live-top.on-air .i { animation: blink 1.2s infinite; }
+.main { gap: 0; grid-template-columns: minmax(0, 1fr) 344px 60px; }
+.studio { gap: 0; }
+.stage-card { border: 0; background: transparent; padding: var(--sp-4) var(--sp-5) var(--sp-3); }
+.stage { width: min(100%, calc((100vh - 268px) * 16 / 9)); box-shadow: 0 0 0 1px var(--line-2), 0 24px 60px -30px rgba(0, 0, 0, 0.8); }
+.deck { border-width: 1px 0 0; padding: var(--sp-2) var(--sp-5) var(--sp-3); }
+.deck-body { height: 112px; }
+.scene, .crew-card, .crew-add { width: 124px; }
+.side { border-width: 0 1px; }
+.panel-head { display: flex; align-items: center; gap: var(--sp-3); min-height: 52px; padding: var(--sp-2) var(--sp-4); }
+.panel-head h2 { font-size: var(--fs-14); font-weight: 600; }
+.look-seg { margin-left: auto; width: 168px; }
+.panel-body { padding: var(--sp-4); }
+.rail { border-width: 0; padding: var(--sp-2) 0; gap: 2px; }
+.rail-btn.icon-btn.stacked { width: 52px; padding: var(--sp-2) 0 6px; font-size: 10px; }
+.rail-btn.on { background: var(--surface-3); box-shadow: inset 2px 0 0 var(--accent); }
+.rail-btn.on .i, :root[data-theme="light"] .rail-btn.on .i { color: var(--accent-text); }
+.dock { border-width: 1px 0 0; padding: 4px var(--sp-3); }
+.dock .icon-btn.stacked.active { color: var(--accent-text); }
+body.panel-closed .main { grid-template-columns: minmax(0, 1fr) 60px; }
+body.panel-closed .side { display: none; }
+body.pre .main > .side, body.pre .main > .rail, body.pre .studio > .deck, body.pre .app > .dock { display: none; }
+body.pre .main { grid-template-columns: minmax(0, 1fr); }
+body.pre .stage-card { flex: 1; justify-content: center; }
+body.pre .stage { width: min(100%, calc((100vh - 140px) * 16 / 9)); }
+.settings-card { width: 640px; }
+.live-body, .settings-body, .help-body { display: grid; gap: var(--sp-4); }
+.stage-empty h1 { font: 700 var(--fs-24)/1.2 var(--font-display); letter-spacing: -0.02em; }
+@media (max-width: 1240px) { .main { grid-template-columns: minmax(0, 1fr) 320px 60px; } }
+@media (max-width: 900px) {
+  .main, body.panel-closed .main { grid-template-columns: minmax(0, 1fr); }
+  .rail { flex-direction: row; justify-content: space-around; border-width: 1px 0; }
+  .rail-btn.icon-btn.stacked { flex: 1; width: auto; min-height: 48px; }
+  .rail-btn.on { box-shadow: inset 0 -2px 0 var(--accent); }
+  .side { height: auto; min-height: 60vh; border-width: 0; }
+  .panel { height: auto; min-height: 60vh; }
+  .panel-body { overflow: visible; }
+  .composer { position: sticky; bottom: calc(var(--dock-h, 64px) + env(safe-area-inset-bottom, 0px)); background: var(--surface); z-index: 2; }
+  .dock { position: fixed; left: 0; right: 0; bottom: 0; margin: 0; padding-bottom: max(4px, env(safe-area-inset-bottom, 0px)); z-index: var(--z-sticky); }
+  .app { padding-bottom: calc(var(--dock-h, 64px) + env(safe-area-inset-bottom, 0px)); }
+  body.pre .app { padding-bottom: 0; }
+  .stage-card { padding: var(--sp-2); }
+  .deck { padding: var(--sp-2) var(--sp-3); }
+  .top-title strong { max-width: 38vw; }
+}
+@media (pointer: coarse) {
+  .deck-tabs.seg.sm, .lock-row .toggle, .guide .btn, .guide .icon-btn, #leaveBtn, .user-btn, .hdr-ic { min-height: 44px; min-width: 44px; }
+}
+.stage-empty .up-block { width: min(420px, 100%); margin-top: var(--sp-4); text-align: left; }
+.stage-empty .up-block:has(#upSignin:not([hidden])) { display: none; } /* landing shows it only when there's something to start */
+.panel-toggle { margin-top: auto; color: var(--ink-3); }
+.panel-toggle .i { transition: transform var(--dur) var(--ease-out); }
+body.panel-closed .panel-toggle .i { transform: rotate(180deg); }
+@media (max-width: 900px) { .panel-toggle { display: none; } }
+/* Guests get the chat and nothing else in the side: no AI, no show or look controls, so no tab bar either. */
+.is-guest .main > .rail { display: none; }
+.is-guest .main { grid-template-columns: minmax(0, 1fr) 344px; }
+.is-guest.panel-closed .main { grid-template-columns: minmax(0, 1fr) 344px; }
+.is-guest.panel-closed .side { display: flex; }
+@media (max-width: 900px) { .is-guest .main { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 600px) {
+  .top { gap: var(--sp-2); padding: 0 var(--sp-2) 0 var(--sp-3); }
+  .logo-word { font-size: 22px; }
+  .top-title { display: none; }
+  #enterTop span { display: none; }
+  #enterTop { width: var(--h-md); padding: 0; }
+  .top-actions { gap: 2px; }
+  .hdr-ic { width: 34px; }
+}
+#liveOff p { margin: 0; }
+#liveOff .fine { margin-top: var(--sp-2); color: var(--ink-3); font-size: var(--fs-12); }
+/* Record: a neutral ring with a centred red dot; while recording, a red button with a white stop square and the timer. */
+.rec-ic .rec-ring { fill: none; stroke: currentColor; stroke-width: 1.75; }
+.rec-ic .rec-dot { fill: var(--live); stroke: none; }
+.rec-ic .rec-stop { display: none; fill: #fff; stroke: none; }
+.rec-tool.recording.icon-btn.stacked { --ib-bg: var(--live); --ib-bg-hover: color-mix(in srgb, var(--live) 88%, black); --ib-ink: #fff; color: #fff; font-variant-numeric: tabular-nums; }
+.rec-tool.recording .rec-ring { stroke: rgba(255, 255, 255, 0.55); }
+.rec-tool.recording .rec-dot { display: none; }
+.rec-tool.recording .rec-stop { display: inline; }

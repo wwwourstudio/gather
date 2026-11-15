@@ -16,8 +16,9 @@ const fakeSR = () => {
   await a.waitForFunction(() => window.__acct.user, null, { timeout: 8000 });
   console.log('1 signed up as', await a.evaluate(() => window.__acct.user.name), '| header shows:', await a.textContent('#userLabel'));
   await a.click('#acctDlg .modal-close');
-  await a.click('[data-tab="brand"]'); await a.selectOption('#fontSel', 'playfair'); await a.click('#bannerStyleSeg [data-bs="glass"]');
-  await a.click('[data-tab="settings"]'); await a.check('#aiNoiseChk').catch(() => {});
+  // before entering a studio only Settings is reachable; brand prefs are set through the same store the Look tab uses
+  await a.evaluate(() => { localStorage.setItem('gather:brandPrefs', JSON.stringify({ ...JSON.parse(localStorage.getItem('gather:brandPrefs') || '{}'), font: 'playfair', bannerStyle: 'glass' })); });
+  await a.click('#settingsTop'); await a.check('#aiNoiseChk').catch(() => {}); await a.click('#themeSeg [data-theme-opt="light"]'); await a.click('#themeSeg [data-theme-opt="dark"]'); await a.keyboard.press('Escape');
   await a.waitForTimeout(2200);
   const a2 = await mk(); await a2.goto((process.env.GATHER_URL || 'http://localhost:8080') + '/');
   await a2.click('#userBtn'); await a2.fill('#acEmail', email); await a2.fill('#acPass', 'correct horse'); await a2.click('#acGo');
@@ -25,7 +26,7 @@ const fakeSR = () => {
   console.log('  settings followed to a second browser:', await a2.evaluate(() => JSON.stringify({ font: window.__gather.state.brand.font, banner: window.__gather.state.brand.bannerStyle, aiNoise: window.__gather.audioFx.ai })));
   await a2.close();
   // 2 wizard: schedule (email not configured locally -> clear note), thumbnail designed
-  await a.click('[data-tab="stream"]'); await a.click('#wizOpen'); await a.click('[data-wmode="later"]');
+  await a.click('#heroSchedule'); await a.click('[data-wmode="later"]');
   await a.fill('#wTitle', 'Episode 12: Building in public'); await a.fill('#wInvites', 'jordan@example.com, sam@example.com');
   await a.click('#wNext'); await a.waitForSelector('[data-step="3"]:not([hidden])');
   const ink = await a.evaluate(() => { const c = document.getElementById('wThumb'); const d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data; let n = 0; for (let i = 0; i < d.length; i += 4000) if (d[i] + d[i + 1] + d[i + 2] > 600) n++; return n; });
@@ -42,21 +43,21 @@ const fakeSR = () => {
   const b = await mk();
   await b.goto((process.env.GATHER_URL || 'http://localhost:8080') + '/s/' + code); await b.waitForSelector('#enterDlg[open]'); await b.fill('#enterName', 'Jordan Lee'); await b.click('#enterGo');
   await b.waitForFunction(() => window.__gather.studio, null, { timeout: 8000 });
-  console.log('3 early guest is host?', await b.evaluate(() => window.__gather.host === window.__gather.id), '| sees host-only tabs?', await b.isVisible('[data-tab="stream"]'));
+  console.log('3 early guest is host?', await b.evaluate(() => window.__gather.host === window.__gather.id), '| sees host-only tabs?', await b.isVisible('#liveTop'));
   await a.click('#upList .up-item .btn.primary'); await a.waitForSelector('#enterDlg[open]'); await a.click('#enterGo');
   await a.waitForFunction(() => window.__gather.studio && window.__gather.host === window.__gather.id, null, { timeout: 10000 });
   await b.waitForFunction((id) => window.__gather.host === id, await a.evaluate(() => window.__gather.id), { timeout: 8000 });
   console.log('  owner joined as host; guest sees new host; title:', await b.evaluate(() => window.__gather.state.title));
   await b.waitForFunction(() => [...window.__gather.peers.values()].some((p) => p.conn === 'connected'), null, { timeout: 15000 });
   // 4 brand options reach the guest
-  await a.click('[data-tab="brand"]');
-  await a.click('#frameSeg [data-frame="corners"]'); await a.click('#tagSeg [data-tag="glass"]');
+  await a.click('[data-tab="look"]'); await a.click('.look-seg:visible [data-look="brand"]');
+  await a.selectOption('#fontSel', 'playfair'); await a.click('#frameSeg [data-frame="corners"]'); await a.click('#tagSeg [data-tag="glass"]');
   await a.setInputFiles('#logoFile', SP + '/logo.png');
   await b.waitForFunction(() => { const br = window.__gather.state.brand; return br.frame === 'corners' && br.tag === 'glass' && br.font === 'playfair' && br.logo && window.__gather.assets.get(br.logo)?.img; }, null, { timeout: 8000 });
   console.log('4 brand synced to guest (font, tag, frame, logo):', true);
-  await a.click('[data-tab="banners"]'); await a.click('#bannerShow');
+  await a.click('[data-tab="show"]'); await a.click('#bannerShow');
   // 5 captions
-  await a.click('[data-tab="stream"]'); await a.click('.toggle-row:has(#capSwitch)');
+  await a.click('[data-tab="show"]'); await a.click('.toggle-row:has(#capSwitch)');
   await b.waitForFunction(() => [...(window.__gather.state.captions?.on ? [1] : [])].length, null, { timeout: 5000 });
   await a.waitForFunction(() => window.__gather.state.captions.on);
   await a.waitForTimeout(1800);
@@ -67,13 +68,13 @@ const fakeSR = () => {
   await a.screenshot({ path: SP + '/r4-host.png' });
   await b.screenshot({ path: SP + '/r4-guest.png' });
   // 6 vertical
-  await a.click('#aspectSeg [data-aspect="9:16"]');
+  await a.click('#liveTop'); await a.click('#aspectSeg [data-aspect="9:16"]'); await a.keyboard.press('Escape');
   await b.waitForFunction(() => document.getElementById('stageCanvas').height === 1280, null, { timeout: 5000 });
   console.log('6 vertical stage on guest:', await b.evaluate(() => { const c = document.getElementById('stageCanvas'); return c.width + 'x' + c.height; }), '| host scenes:', await a.evaluate(() => [...document.querySelectorAll('#sceneStrip .sc-name')].slice(3, 6).map((n) => n.textContent.replace(/\d$/, '')).join(', ')));
   await a.waitForTimeout(500); await a.screenshot({ path: SP + '/r4-vertical.png' });
-  await a.click('#aspectSeg [data-aspect="16:9"]');
+  await a.click('#liveTop'); await a.click('#aspectSeg [data-aspect="16:9"]'); await a.keyboard.press('Escape');
   // 7 help search jumps to the setting
-  await a.click('[data-tab="help"]'); await a.fill('#helpSearch', 'echo');
+  await a.click('#helpTop'); await a.fill('#helpSearch', 'echo');
   console.log('7 help results for "echo":', await a.textContent('#helpResults .help-item b'));
   await a.click('#helpResults .help-item'); await a.waitForTimeout(400);
   console.log('  opened tab:', await a.evaluate(() => window.__gather.tab), '| highlighted:', await a.evaluate(() => !!document.querySelector('.flash')));
@@ -83,7 +84,7 @@ const fakeSR = () => {
     out.aiNoise = window.__gather.audioFx.ai;
     return out;
   });
-  await a.click('[data-tab="settings"]');
+  if (!(await a.isVisible('#settingsDlg'))) await a.click('#settingsTop');
   if (!fx.aiNoise) await a.click('.toggle-row:has(#aiNoiseChk)');
   await a.waitForTimeout(1500);
   console.log('8 AI noise removal running:', await a.evaluate(() => !!window.__gather.local.audioOut));

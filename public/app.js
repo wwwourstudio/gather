@@ -242,7 +242,7 @@ const outVideo = () => (S.local.camOn ? S.local.cam : null);
 async function setMic(on) {
   S.local.micOn = on;
   if (on && !S.local.audio) await startMic();
-  if (S.local.audio) S.local.audio.enabled = on;
+  if (!on && S.local.audio) stopMic(); // muting releases the microphone, so the browser's mic indicator goes off
   if (on && !S.local.audio) S.local.micOn = false;
   syncMedia();
   syncCaptions();
@@ -2997,29 +2997,30 @@ const HELP = [
   ['Video looks dark or washed out', 'brightness contrast light dark saturation colour', 'settings', '#fxBright', 'Settings → Camera → Light'],
   ['Video is choppy', 'choppy laggy fps frame rate quality bandwidth', 'settings', '#qualitySelect', 'Settings → Camera → Quality'],
   ['Mirror my camera', 'mirror flip reversed', 'settings', '#mirrorChk', 'Settings → Camera'],
-  ['Go live or schedule a stream', 'go live schedule stream start upcoming', 'stream', '#wizOpen', 'Stream → Start a stream'],
-  ['Send reminders to guests', 'email reminder invite calendar', 'stream', '#wizOpen', 'Stream → Start a stream → Schedule'],
-  ['Make a thumbnail', 'thumbnail cover image ai', 'stream', '#wizOpen', 'Stream → Start a stream → Thumbnail'],
-  ['Vertical video for TikTok, Reels, Shorts', 'vertical portrait 9:16 tiktok reels shorts mobile', 'stream', '#aspectSeg', 'Stream → Format'],
-  ['Turn on live captions', 'captions subtitles transcript accessibility', 'stream', '#capSwitch', 'Stream → Live captions'],
-  ['Show Twitch or Rumble chat on stage', 'chat overlay twitch rumble comments', 'stream', '#overlaySwitch', 'Stream → Platform chat'],
-  ['Switch scenes / layouts', 'scene layout switch arrange', 'layouts', '#editToggle', 'Layouts'],
+  ['Go live or schedule a stream', 'go live schedule stream start upcoming', 'stream', '#wizOpen', 'Go live → Schedule'],
+  ['Send reminders to guests', 'email reminder invite calendar', 'stream', '#wizOpen', 'Go live → Schedule'],
+  ['Make a thumbnail', 'thumbnail cover image ai', 'stream', '#wizOpen', 'Go live → Schedule → Thumbnail'],
+  ['Vertical video for TikTok, Reels, Shorts', 'vertical portrait 9:16 tiktok reels shorts mobile', 'stream', '#aspectSeg', 'Go live → Format'],
+  ['Turn on live captions', 'captions subtitles transcript accessibility', 'show', '#capSwitch', 'Show → Live captions'],
+  ['Show Twitch or Rumble chat on stage', 'chat overlay twitch rumble comments', 'show', '#overlaySwitch', 'Show → Chat overlay'],
+  ['Switch scenes / layouts', 'scene layout switch arrange', 'layouts', '#editToggle', 'Look → Layout'],
   ['Present slides, a screen or a video', 'present pdf slides screen share video', null, '#shareBtn', 'Present button in the dock'],
-  ['Ask the on-air AI', 'ai claude chatgpt gemini grok research', 'ai', '#aiInput', 'AI'],
-  ['Add a banner or ticker', 'banner lower third ticker headline', 'banners', '#bannerText', 'Banners'],
-  ['Change stage colours, fonts and animations', 'brand colour color font animation style', 'brand', '#fontSel', 'Brand'],
-  ['Add my logo or an overlay', 'logo overlay watermark frame', 'brand', '#logoPick', 'Brand → Overlays'],
-  ['Show my PayPal, Venmo or Cash App', 'tip donate paypal venmo cash app stripe support', 'brand', '#tipList', 'Brand → Support links'],
+  ['Ask your AI', 'ai claude chatgpt gemini grok research', 'ai', '#aiInput', 'AI'],
+  ['Add a banner or ticker', 'banner lower third ticker headline', 'banners', '#bannerText', 'Show → Banner'],
+  ['Change stage colours, fonts and animations', 'brand colour color font animation style', 'brand', '#fontSel', 'Look → Brand'],
+  ['Add my logo or an overlay', 'logo overlay watermark frame', 'brand', '#logoPick', 'Look → Brand → Logo'],
+  ['Show my PayPal, Venmo or Cash App', 'tip donate paypal venmo cash app stripe support', 'brand', '#tipList', 'Look → Brand → Support links'],
   ['Change my name or photo', 'name nickname photo avatar profile', null, '#userBtn', 'Your account (top right)'],
   ['Change my password', 'password reset account security', null, '#userBtn', 'Your account → Change password'],
   ['Record the show', 'record recording save download', null, '#recBtn', 'Record button in the dock'],
-  ['A guest can’t connect', 'connect firewall turn network corporate', 'settings', '#turnUrl', 'Settings → TURN server'],
+  ['A guest can’t connect', 'connect firewall turn network corporate', 'settings', '#turnUrl', 'Settings → Your own relay server'],
   ['Switch to light mode', 'light dark theme appearance', 'settings', '#themeSeg', 'Settings → Appearance'],
 ];
 const POPULAR = [3, 2, 5, 10, 14, 17];
 function helpGo(row) {
   const [, , tab, sel] = row;
   const hits = store.get('helpHits', {}); hits[row[0]] = (hits[row[0]] || 0) + 1; rawSet('helpHits', hits);
+  if ($('#helpDlg').open) $('#helpDlg').close();
   if (tab) setTab(tab);
   if (sel === '#userBtn') return openAccount();
   if (sel === '#wizOpen') { setTab('stream'); return openWizard(); }
@@ -3120,17 +3121,14 @@ function renderLive() {
   $('#liveOff').hidden = S.relayOn;
   for (const id of ['#destList', '#destAdd', '#liveNote', '#liveBtn']) $(id).hidden = !S.relayOn;
   $('#destAdd').parentElement.hidden = !S.relayOn;
-  $('#liveDock').hidden = !host || !S.relayOn || !S.studio;
   renderDests();
   const n = readyDests().length;
   const label = !L ? (n ? `Go live on ${n} platform${n === 1 ? '' : 's'}` : 'Go live') : L.phase === 'live' ? 'End the stream' : L.phase === 'stopping' ? 'Ending…' : 'Connecting…';
   $('#liveBtn').textContent = label;
   $('#liveBtn').disabled = !host || !S.studio || (!L && !n) || L?.phase === 'stopping';
   $('#liveBtn').classList.toggle('ending', on);
-  $('#liveDock').classList.toggle('on-air', !!L);
-  $('#liveDockLabel').textContent = on ? fmtClock(Date.now() - L.t0) : L ? 'Starting…' : 'Go live';
-  $('#livePill').hidden = !on;
-  if (on) $('#livePillText').textContent = 'Live ' + fmtClock(Date.now() - L.t0);
+  $('#liveTop').classList.toggle('on-air', !!L);
+  $('#livePillText').textContent = on ? 'Live ' + fmtClock(Date.now() - L.t0) : L ? 'Starting…' : 'Go live';
   $('#liveStats').hidden = !L;
   $('#watchRow').hidden = !S.relayOn || !S.studio;
   if (L) $('#liveStats').textContent = on && L.stats ? [`Live on ${L.names.join(', ')}`, L.stats.kbps != null && `${Math.round(L.stats.kbps).toLocaleString()} kbps`, L.stats.fps && `${Math.round(L.stats.fps)} fps`, L.slow && 'your upload is struggling'].filter(Boolean).join(' · ') : L.phase === 'connecting' ? 'Connecting to the relay…' : L.phase === 'live' ? `Live on ${L.names.join(', ')}` : '';
@@ -3202,7 +3200,6 @@ function endLive(L) {
   S.live = null; renderLive(); renderDock();
 }
 $('#liveBtn').onclick = goLive;
-$('#liveDock').onclick = () => (S.live ? stopLive() : readyDests().length ? goLive() : (setTab('stream'), revealSide(), toast('Add a destination and its stream key, then Go live.')));
 
 function pickMime() {
   const opts = ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm', 'video/mp4;codecs=avc1,mp4a', 'video/mp4'];
@@ -3330,7 +3327,8 @@ function setPhase(p) {
   S.phase = p;
   const pill = $('#statusPill');
   pill.dataset.state = p === 'online' ? 'online' : p === 'offline' ? 'offline' : 'connecting';
-  $('#statusText').textContent = { offline: 'Offline', connecting: 'Connecting…', online: 'Live in studio', reconnecting: 'Reconnecting…' }[p];
+  $('#statusText').textContent = { offline: 'Offline', connecting: 'Connecting…', online: '', reconnecting: 'Reconnecting…' }[p];
+  pill.hidden = p === 'online';
   renderAll();
 }
 function renderAll() { renderHeader(); renderStageUI(); renderCrew(); renderDock(); renderPanels(); renderFeedUI(); renderLayoutsPanel(); renderAIPanel(); renderTips(); renderBrandPanel(); renderStreamPanel(); renderGuestView(); syncTwitch(); syncCaptions(); renderDeck(); renderAds(); renderCallin(); renderProducerUI(); renderGreenRoom(); renderLive(); }
@@ -3338,9 +3336,15 @@ function renderHeader() {
   // The studio name belongs to the studio you're in; outside one the header is just the wordmark.
   const inside = !!S.studio || S.phase === 'reconnecting';
   $('#topTitle').hidden = !inside;
-  $('#studioTitle').textContent = S.state.title || DEFAULT_TITLE;
-  $('#enterTopText').textContent = S.studio ? 'Invite' : 'Enter studio';
-  $('#enterTopIcon').firstElementChild.setAttribute('href', S.studio ? '/icons.svg#i-user-plus' : '/icons.svg#i-log-in');
+  if (document.activeElement !== $('#studioTitle')) $('#studioTitle').textContent = S.state.title || DEFAULT_TITLE;
+  $('#studioTitle').classList.toggle('editable', isHost());
+  $('#studioTitle').title = isHost() ? 'Click to rename the show' : '';
+  $('#enterTop').hidden = !S.studio;
+  $('#liveTop').hidden = !S.studio || !isHost();
+  document.body.classList.toggle('pre', !S.studio && S.phase !== 'reconnecting'); // landing: just the stage hero
+  // Scheduled shows: on the landing page they sit under the hero (that's where you start one); inside a studio, in Go live.
+  const upHome = document.body.classList.contains('pre') ? $('#stageEmpty') : $('#liveDlg .live-body');
+  if ($('#upBlock').parentElement !== upHome) upHome.append($('#upBlock'));
 }
 function renderStageUI() {
   $('#stageEmpty').hidden = !!S.studio || previewActive();
@@ -3389,7 +3393,7 @@ function renderCrew() {
     const tags = $('.tagrow', li); tags.replaceChildren();
     const on = S.state.stage.includes(p.id);
     if (p.id === S.host) tags.insertAdjacentHTML('beforeend', '<span class="pill caps on-media">Host</span>');
-    if (on) tags.insertAdjacentHTML('beforeend', '<span class="pill caps live">Live</span>');
+    if (on) tags.insertAdjacentHTML('beforeend', '<span class="pill caps accent">On stage</span>'); // "Live" only ever means broadcasting
     if (p.sharing) tags.insertAdjacentHTML('beforeend', '<span class="pill caps on-media">Presenting</span>');
     li.classList.toggle('on-stage', on);
     $('.crew-tools', li).hidden = !host;
@@ -3434,11 +3438,11 @@ function renderDock() {
 // Five steps for a new host. Each ticks itself off from what actually happened (a title set, camera and mic on,
 // a guest invited, a scene picked, recording or live), so it never asks you to confirm anything. Shown once.
 const GUIDE = [
-  { id: 'name', label: 'Name your show', done: () => !!S.state.title && S.state.title !== DEFAULT_TITLE, go: () => { setTab('brand'); revealSide(); $('#titleInput').focus(); } },
-  { id: 'av', label: 'Turn on camera and mic', done: () => !!(S.local.camOn && S.local.micOn && S.local.audio), go: () => { setTab('settings'); revealSide(); } },
+  { id: 'name', label: 'Name your show', done: () => !!S.state.title && S.state.title !== DEFAULT_TITLE, go: () => editTitle() },
+  { id: 'av', label: 'Turn on camera and mic', done: () => !!(S.local.camOn && S.local.micOn && S.local.audio), go: () => openDlg('settingsDlg') },
   { id: 'invite', label: 'Invite a guest', done: () => S.guide.invited || S.peers.size > 0, go: () => openInvite() },
   { id: 'scene', label: 'Pick a scene', done: () => S.guide.scened, go: () => { $('#deck')?.scrollIntoView({ behavior: smooth(), block: 'center' }); $('#sceneStrip .scene:not(.on)')?.focus(); } },
-  { id: 'show', label: 'Record or go live', done: () => !!(S.rec || S.live?.phase === 'live'), go: () => { setTab('stream'); revealSide(); } },
+  { id: 'show', label: 'Record or go live', done: () => !!(S.rec || S.live?.phase === 'live'), go: () => openDlg('liveDlg') },
 ];
 S.guide = { ...{ dismissed: false, finished: false, invited: false, scened: false }, ...store.get('guide', {}) };
 function saveGuide() { store.set('guide', { dismissed: S.guide.dismissed, finished: S.guide.finished, invited: S.guide.invited, scened: S.guide.scened }); }
@@ -3474,7 +3478,7 @@ function renderDockNote() {
 }
 function renderPanels() {
   const host = isHost();
-  for (const id of ['bannerShow', 'bannerHide', 'tickerShow', 'tickerHide', 'titleApply', 'colorPick', 'namesChk']) $('#' + id).disabled = !host;
+  for (const id of ['bannerShow', 'bannerHide', 'tickerShow', 'tickerHide', 'colorPick', 'namesChk']) $('#' + id).disabled = !host;
   $$('#swatches button, #bgs button, #bannerPresets .use').forEach((b) => (b.disabled = !host));
   $('#bannerHint').textContent = host ? 'Banners appear on every participant’s stage and in recordings.' : 'Only the host can show banners. You’ll see them on your stage.';
   $('#brandHint').textContent = host ? 'Brand changes apply to everyone in the studio.' : 'Only the host can change the brand.';
@@ -3516,15 +3520,41 @@ function renderPresets() {
 }
 
 // ---------------------------------------------------------------- panels & controls
+// Four tabs in the rail (Chat, Show, Look, AI). Go live, Settings and Help are dialogs; older names still work.
+const TAB_ALIAS = { banners: 'show', stream: 'dlg:liveDlg', settings: 'dlg:settingsDlg', help: 'dlg:helpDlg', layouts: 'look:layouts', brand: 'look:brand', look: 'look:' };
+function openDlg(id) {
+  for (const other of ['liveDlg', 'settingsDlg', 'helpDlg']) if (other !== id && $('#' + other).open) $('#' + other).close();
+  const d = $('#' + id);
+  if (!d.open) d.showModal();
+  if (id === 'settingsDlg') listDevices();
+  if (id === 'liveDlg') renderLive();
+  if (id === 'helpDlg') { $('#helpSearch').value = ''; renderHelp(''); $('#helpSearch').focus(); }
+}
 function setTab(tab) {
-  S.tab = tab;
-  $$('.rail-btn').forEach((b) => b.classList.toggle('on', b.dataset.tab === tab));
-  $$('.panel').forEach((p) => (p.hidden = p.dataset.panel !== tab));
-  if (tab === 'chat') { S.unread = 0; $('#chatBadge').hidden = true; }
-  if (tab === 'settings') listDevices();
-  if (tab !== 'layouts' && editor.on) setEditing(false);
+  const a = TAB_ALIAS[tab] || tab;
+  if (a.startsWith('dlg:')) return openDlg(a.slice(4));
+  let panel = a, rail = a;
+  if (a.startsWith('look:')) { S.lookSub = a.slice(5) || S.lookSub || 'layouts'; panel = S.lookSub; rail = 'look'; }
+  S.tab = rail;
+  document.body.classList.remove('panel-closed'); $('#panelToggle').setAttribute('aria-expanded', 'true');
+  $$('.rail-btn').forEach((b) => { const on = b.dataset.tab === rail; b.classList.toggle('on', on); if (on) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current'); });
+  $$('.panel').forEach((p) => (p.hidden = p.dataset.panel !== panel));
+  $$('.look-seg [data-look]').forEach((b) => { const on = b.dataset.look === panel; b.classList.toggle('on', on); b.setAttribute('aria-selected', on); });
+  if (rail === 'chat') { S.unread = 0; $('#chatBadge').hidden = true; }
+  if (panel !== 'layouts' && editor.on) setEditing(false);
 }
 $$('.rail-btn').forEach((b) => b.addEventListener('click', () => setTab(b.dataset.tab)));
+// Hide the panel to give the stage the room; any tab brings it back.
+$('#panelToggle').onclick = () => {
+  const closed = document.body.classList.toggle('panel-closed');
+  $('#panelToggle').setAttribute('aria-expanded', !closed);
+  $('#panelToggle').dataset.tip = closed ? 'Show the panel' : 'Hide the panel';
+  if (closed) $$('.rail-btn').forEach((x) => { x.classList.remove('on'); x.removeAttribute('aria-current'); }); else setTab(S.tab);
+};
+$$('.look-seg [data-look]').forEach((b) => b.addEventListener('click', () => setTab(b.dataset.look)));
+$('#helpTop').onclick = () => openDlg('helpDlg');
+$('#settingsTop').onclick = () => openDlg('settingsDlg');
+$('#liveTop').onclick = () => openDlg('liveDlg');
 
 function sceneList() {
   return [...BUILTINS.map((b) => ({ ...b, kind: 'builtin' })), ...(isVertical() ? V_TEMPLATES : TEMPLATES).map((t) => ({ ...t, kind: 'template' })), ...savedLayouts().map((l) => ({ id: 'saved:' + l.name, name: l.name, kind: 'saved', saved: l }))];
@@ -3601,7 +3631,26 @@ $$('#swatches button').forEach((b) => b.addEventListener('click', () => setStage
 let colorT; $('#colorPick').addEventListener('input', (e) => { clearTimeout(colorT); colorT = setTimeout(() => setStage({ brand: { color: e.target.value } }), 120); });
 $$('#bgs button').forEach((b) => b.addEventListener('click', () => setStage({ brand: { bg: b.dataset.bg } })));
 $('#namesChk').onchange = (e) => setStage({ brand: { names: e.target.checked } });
-$('#titleApply').onclick = () => { setStage({ title: $('#titleInput').value.trim() }); toast('Title applied.'); };
+$('#titleInput').addEventListener('change', (e) => setStage({ title: e.target.value.trim().slice(0, 60) }));
+// The show title in the header is editable in place by the host: click, type, Enter.
+function editTitle() {
+  if (!isHost() || !S.studio) return;
+  const t = $('#studioTitle');
+  t.contentEditable = 'plaintext-only'; t.focus();
+  getSelection()?.selectAllChildren(t);
+}
+$('#studioTitle').addEventListener('click', editTitle);
+$('#studioTitle').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); e.target.blur(); } if (e.key === 'Escape') { e.target.textContent = S.state.title || DEFAULT_TITLE; e.target.blur(); } });
+$('#studioTitle').addEventListener('blur', (e) => {
+  e.target.contentEditable = 'false';
+  const v = e.target.textContent.replace(/\s+/g, ' ').trim().slice(0, 60);
+  if (isHost() && S.studio && v && v !== (S.state.title || DEFAULT_TITLE)) setStage({ title: v });
+  else e.target.textContent = S.state.title || DEFAULT_TITLE;
+});
+$('#keysChk').checked = store.get('keys', true);
+// the phone layout keeps the composer above the fixed dock, whatever the dock's height (the guide adds a row)
+new ResizeObserver(() => document.documentElement.style.setProperty('--dock-h', $('.dock').offsetHeight + 'px')).observe($('.dock'));
+$('#keysChk').onchange = (e) => store.set('keys', e.target.checked);
 
 // Appearance: dark by default; light or follow the OS on request.
 function applyTheme(t) {
@@ -3749,7 +3798,13 @@ for (const k of ['turnUrl', 'turnUser', 'turnPass']) {
 $('#micBtn').onclick = () => setMic(!(S.local.micOn && S.local.audio));
 $('#camBtn').onclick = () => setCam(!S.local.camOn);
 $('#recBtn').onclick = toggleRecord;
-$('#leaveBtn').onclick = leave;
+$('#leaveBtn').onclick = () => {
+  const lose = [S.live && 'end the live stream', S.rec && 'stop the recording (you can still save it)', isHost() && S.peers.size && `hand the studio to ${S.peers.size === 1 ? 'your guest' : 'a guest'}`].filter(Boolean);
+  if (!lose.length) return leave();
+  $('#leaveWhat').textContent = 'Leaving will ' + lose.join(', ') + '.';
+  $('#leaveDlg').showModal();
+};
+$('#leaveGo').onclick = () => { $('#leaveDlg').close(); leave(); };
 
 function leave() {
   if (!S.studio) return;
@@ -4382,7 +4437,7 @@ const speechHub = { rec: null, lang: '', ptt: false, armed: 0, target: '#cmdInpu
 function speechWanted() {
   const c = S.state.captions || {};
   const caps = !!(S.studio && c.on && S.local.micOn && S.local.audio);
-  const ai = isHost() && (S.aiWake || speechHub.ptt);
+  const ai = !!S.studio && isHost() && (S.aiWake || speechHub.ptt); // never listen outside a studio
   return { caps, ai, any: caps || ai, lang: c.on ? (c.lang || 'en-US') : 'en-US' };
 }
 function syncCaptions() {
@@ -4509,9 +4564,9 @@ function openInvite() {
 }
 $('#copyCode').onclick = () => { copy(S.studio, 'Room code copied.'); guideMark('invited'); };
 $('#copyLink').onclick = () => { copy(inviteLink(), 'Invite link copied.'); guideMark('invited'); };
-$('#inviteCrew').onclick = openInvite;
 $('#addSlot').onclick = openInvite;
-$('#enterTop').onclick = () => (S.studio ? openInvite() : openEnter('create'));
+$('#enterTop').onclick = openInvite;
+$('#heroSchedule').onclick = () => openWizard();
 $('#enterStage').onclick = () => openEnter('create');
 $('#recDlg').addEventListener('close', () => { $('#recVideo').pause(); });
 
@@ -4521,6 +4576,8 @@ addEventListener('keydown', (e) => {
   const tag = document.activeElement?.tagName;
   if (['INPUT', 'TEXTAREA', 'SELECT'].includes(tag) || document.querySelector('dialog[open]')) return;
   const k = e.key.toLowerCase();
+  if (k === 'escape') { if (editor.on) { e.preventDefault(); setEditing(false); } return; } // never swallow Esc for menus
+  if (!store.get('keys', true) || document.activeElement?.closest?.('button, a, [role="tab"], [role="radio"], [contenteditable="true"], .popover')) return;
   const act = {
     m: () => setMic(!(S.local.micOn && S.local.audio)),
     v: () => setCam(!S.local.camOn),
@@ -4533,7 +4590,6 @@ addEventListener('keydown', (e) => {
     pageup: () => S.local.pres?.kind === 'pdf' && S.local.pres.go(S.local.pres.page - 1),
     delete: () => { if (editor.on && editor.sel) deleteEl(editor.sel); },
     backspace: () => { if (editor.on && editor.sel) deleteEl(editor.sel); },
-    escape: () => editor.on && setEditing(false),
     '/': () => { if (isHost() && S.studio) setCmd(true); else { setTab('chat'); $('#chatInput').focus(); } },
   }[k];
   if (act) { e.preventDefault(); act(); }
@@ -4548,6 +4604,29 @@ function chime() {
     o.connect(gn).connect(ctx.destination); o.start(); o.stop(ctx.currentTime + .4);
   } catch {}
 }
+
+// ---------------------------------------------------------------- selection state for assistive tech, in one place
+// Segmented controls, look tabs and the rail mark the chosen option with .on. Mirror that into aria-checked /
+// aria-selected, and let arrow keys move along radio groups and tab lists.
+function syncAria(b) {
+  const r = b.getAttribute('role'), on = b.classList.contains('on');
+  if (r === 'radio') b.setAttribute('aria-checked', on); else if (r === 'tab') b.setAttribute('aria-selected', on);
+}
+for (const g of $$('.seg')) {
+  if (!g.getAttribute('role')) g.setAttribute('role', 'radiogroup');
+  for (const b of g.querySelectorAll(':scope > button')) { if (!b.getAttribute('role')) b.setAttribute('role', g.getAttribute('role') === 'tablist' ? 'tab' : 'radio'); syncAria(b); }
+}
+new MutationObserver((ms) => { for (const m of ms) if (m.target.matches?.('.seg > button')) syncAria(m.target); })
+  .observe(document.body, { subtree: true, attributes: true, attributeFilter: ['class'] });
+document.addEventListener('keydown', (e) => {
+  const g = e.target.closest?.('[role="radiogroup"], [role="tablist"]');
+  if (!g || !['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(e.key)) return;
+  const items = [...g.querySelectorAll(':scope > button:not([disabled])')], i = items.indexOf(e.target);
+  if (i < 0) return;
+  e.preventDefault(); e.stopPropagation();
+  const next = items[(i + (e.key === 'ArrowLeft' || e.key === 'ArrowUp' ? -1 : 1) + items.length) % items.length];
+  next.focus(); next.click();
+});
 
 // ---------------------------------------------------------------- boot
 document.fonts?.ready.then(() => S.banner.key = '');

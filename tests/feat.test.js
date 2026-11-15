@@ -9,7 +9,7 @@ const SP = process.argv[2];
   await b.goto((process.env.GATHER_URL || 'http://localhost:8080') + '/s/' + code); await b.waitForSelector('#enterDlg[open]'); await b.fill('#enterName', 'Jordan Lee'); await b.click('#enterGo');
   await b.waitForFunction(() => [...window.__gather.peers.values()].some(p => p.conn === 'connected'), null, { timeout: 15000 });
   // 1. template
-  await a.click('[data-tab="layouts"]'); await a.click('.tpl:has-text("Chat-led show")');
+  await a.click('[data-tab="look"]'); await a.click('.look-seg:visible [data-look="layouts"]'); await a.click('.tpl:has-text("Chat-led show")');
   await b.waitForFunction(() => window.__gather.state.layout === 'custom' && window.__gather.state.scene === 'p-chat' && window.__gather.state.elements.some(e => e.type === 'chat'), null, { timeout: 5000 });
   console.log('template synced to guest:', await b.evaluate(() => window.__gather.state.elements.map(e => e.type).join(',')));
   // 2. text element + edit
@@ -41,7 +41,7 @@ const SP = process.argv[2];
   await b.waitForFunction(() => window.__gather.state.featured?.text?.includes('relay'), null, { timeout: 5000 });
   console.log('featured message synced; feed length on guest:', await b.evaluate(() => window.__gather.feed.length));
   // 7. twitch connect attempt (network may block)
-  await a.click('[data-tab="stream"]'); await a.fill('#twitchInput', 'https://twitch.tv/SomeChannel'); await a.click('#twitchGo');
+  await a.click('#settingsTop'); await a.fill('#twitchInput', 'https://twitch.tv/SomeChannel'); await a.click('#twitchGo'); await a.keyboard.press('Escape');
   await b.waitForFunction(() => window.__gather.state.feeds.twitch === 'somechannel', null, { timeout: 5000 });
   await a.waitForTimeout(2500);
   console.log('twitch channel synced; host status:', await a.textContent('#twitchStatus'));
@@ -49,9 +49,9 @@ const SP = process.argv[2];
   console.log('guest add buttons disabled:', await b.isDisabled('[data-add="text"]'), '| guest edit layer hidden:', await b.isHidden('#editLayer'));
   await a.waitForTimeout(800);
   await a.screenshot({ path: SP + '/f-host.png' });
-  console.log('guest sees host-only controls:', JSON.stringify({ layouts: await b.isVisible('[data-tab="layouts"]'), stream: await b.isVisible('[data-tab="stream"]'), brand: await b.isVisible('[data-tab="brand"]'), scenes: await b.isVisible('#sceneStrip'), record: await b.isVisible('#recBtn'), chat: await b.isVisible('[data-tab="chat"]'), settings: await b.isVisible('[data-tab="settings"]') })); await b.screenshot({ path: SP + '/f-guest.png' });
+  console.log('guest sees host-only controls:', JSON.stringify({ layouts: await b.isVisible('[data-tab="look"]'), stream: await b.isVisible('#liveTop'), brand: await b.isVisible('[data-tab="show"]'), scenes: await b.isVisible('#sceneStrip'), record: await b.isVisible('#recBtn'), chat: await b.isVisible('[data-tab="chat"]'), settings: await b.isVisible('[data-tab="settings"]') })); await b.screenshot({ path: SP + '/f-guest.png' });
   // edit mode screenshot
-  await a.click('[data-tab="layouts"]'); await a.click('#editToggle'); await a.waitForTimeout(300); await a.screenshot({ path: SP + '/f-edit.png' });
+  await a.click('[data-tab="look"]'); await a.click('.look-seg:visible [data-look="layouts"]'); await a.click('#editToggle'); await a.waitForTimeout(300); await a.screenshot({ path: SP + '/f-edit.png' });
   console.log('errors A', a.errs, 'B', b.errs);
   await browser.close();
 })().catch(e => { console.error('FAIL', e.message); process.exit(1); });

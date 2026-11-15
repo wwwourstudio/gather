@@ -286,3 +286,38 @@ See `AUDIT-V3.md` for the findings and plan. Screens: `audit/screens/v3-before` 
 1. **TURN:** Cloudflare dashboard → Realtime → TURN → create a key. In Vercel, set `CF_TURN_KEY_ID` and `CF_TURN_API_TOKEN`.
 2. **Go live:** deploy `relay/` (see `relay/README.md`, about $2–5/month on Fly.io). In Vercel, set `RELAY_URL` and `RELAY_SECRET`.
 3. **AI allowance (optional):** in Vercel, set `HOUSE_AI_PROVIDER` (e.g. `gemini`), `HOUSE_AI_KEY` and, optionally, `HOUSE_AI_DAILY`.
+
+## V4: design-team audit, then a simpler, less generic interface
+Five reviewers (flow, visual, layout, interaction/accessibility, simplification) audited every element. Their reports and the merged plan are in `audit/design-team/`. Screens: `audit/screens/design-before` → `audit/screens/design-after` (1440 / 1024 / 390).
+
+- **Navigation:** the rail goes from 8 tabs to 4: **Chat · Show · Look · AI**.
+  - Show holds banners, ticker, captions, the chat overlay and the call-in card.
+  - Look holds Layout and Brand, switched by a toggle at the top.
+  - Settings and Help are header icons that open dialogs. Platform-chat connections and Drive live under Settings → Connections, and TURN sits under an "own relay server" disclosure.
+  - Stream became the **Go live** dialog: destinations, format, schedule and upcoming shows.
+  - Guests see only Chat (no AI, no rail). The AI is host-only.
+- **Header:**
+  - Wordmark, then the show title (the host clicks it to rename), then a status that appears only while connecting.
+  - On the right: ?, ⚙, account, Invite, and **Go live**, the one primary action, which turns into a red Live timer while broadcasting.
+  - Before entering a studio, the page is just the stage hero, with "Create or join" and "schedule one for later". Upcoming shows sit under the hero when you have any.
+- **Look:**
+  - Flat, docked regions divided by 1 px hairlines. No floating cards, drifting blobs or glass on static regions; glass is kept only for controls over video and overlays.
+  - The surfaces are a deep blue-graphite. The accent is #2f6bf0 (4.7:1 contrast with white text) and the lightest grey text is #8a97ae (≥5:1).
+  - Radii are 6/8/12 and controls are 28/34/42.
+  - Red now means only live or recording: the selected scene uses the accent, and people cards say "On stage".
+- **Behaviour:**
+  - Leave asks first when it would end a stream or recording, or hand the studio to a guest.
+  - Muting now releases the microphone, so the browser's mic indicator goes off.
+  - The AI wake word never listens outside a studio, which was keeping the mic on at the home page.
+  - The invite dialog's primary button copies the link.
+  - A button hides or shows the side panel.
+  - On phones, the bottom bar is fixed and the chat box stays above it.
+- **Record icon:** the ring and dot are drawn on one grid, so the dot is centred. The ring is neutral with a red dot. While recording, the button is red with a white stop square and the timer.
+- **Accessibility:**
+  - Esc closes menus again, since a global handler no longer swallows it.
+  - Every button variant shows a focus ring.
+  - Segmented controls and tabs announce their selected option (aria-checked / aria-selected) and move with the arrow keys.
+  - The rail marks the open tab with aria-current.
+  - Single-key shortcuts don't fire while a control has focus, and can be turned off in Help.
+- **Copy:** panel subtitles, "Scroll to switch", the X/TikTok "soon" rows and the extra Invite buttons are gone. One verb per action. "Live" means only broadcasting.
+- **Verified:** all 12 suites (updated for the new structure), `npm run check` and `npm run ui-kit` (with the contract updated to the V4 spec) pass.
