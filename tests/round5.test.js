@@ -61,9 +61,11 @@ const SP = process.argv[2];
   console.log('6 call-in card, sponsor ad and solid panels synced');
   // 7 AI producer (provider mocked)
   await a.click('[data-tab="ai"]'); await a.fill('#aiKey', 'sk-test'); await a.fill('#aiName', 'Sam');
-  await a.route('**/api/ai', (r) => r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ say: 'Switching to Solo and pulling up the dog video.', show: 'Here you go.', actions: [{ type: 'scene', name: 'Solo' }, { type: 'banner', text: 'Dogs running', sub: 'via YouTube' }, { type: 'open', url: 'https://www.youtube.com/results?search_query=dog+running', label: 'Dog running' }] }) }));
+  const nd = (evs) => evs.map((e) => JSON.stringify(e)).join('\n') + '\n';
+  await a.route('**/api/ai', (r) => r.fulfill({ status: 200, contentType: 'application/x-ndjson', body: nd([{ t: 'text', d: 'Switching to Solo and pulling up the dog video.' }, { t: 'action', a: { type: 'scene', name: 'Solo' } }, { t: 'action', a: { type: 'banner', text: 'Dogs running', sub: 'via YouTube' } }, { t: 'action', a: { type: 'open', url: 'https://www.youtube.com/results?search_query=dog+running', label: 'Dog running' } }, { t: 'done' }]) }));
   await a.evaluate(() => localStorage.setItem('gather:aiVoice', '"off"'));
-  await a.click('#cmdToggle'); await a.fill('#cmdInput', 'switch to solo and pull up the dog running video'); await a.press('#cmdInput', 'Enter');
+  console.log('  AI hidden from the stage until asked for:', await a.isHidden('#cmdBar'));
+  await a.click('#aiDock'); await a.fill('#cmdInput', 'switch to solo and pull up the dog running video'); await a.press('#cmdInput', 'Enter');
   await b.waitForFunction(() => window.__gather.state.layout === 'solo' && window.__gather.state.banner?.text === 'Dogs running', null, { timeout: 8000 });
   console.log('7 Sam switched scene + banner on guest; offers to open:', await a.textContent('#cmdShow'));
   await a.waitForTimeout(500); await a.screenshot({ path: SP + '/r5-sam.png' });

@@ -1,4 +1,4 @@
-// Vercel serverless entry: POST /api/ai → streams the AI answer as plain text.
+// Vercel serverless entry: POST /api/ai (assistant stream, AI thumbnails, stream voice).
 const { handleAI } = require('../lib/ai');
 
 module.exports = async (req, res) => {

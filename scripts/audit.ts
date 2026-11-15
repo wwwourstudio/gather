@@ -280,7 +280,7 @@ async function sweep(s: Session, scope: string, area: string, depth = 0): Promis
         const c = top.closest('[id]'); return `covered by ${top.tagName.toLowerCase()}${top.className && typeof top.className === 'string' ? '.' + top.className.split(' ')[0] : ''}${c ? ' in #' + c.id : ''}`;
       }).catch(() => 'detached');
       const inMenu = await el.evaluate((n: Element) => !!n.closest('#presentMenu')).catch(() => false);
-      if (inMenu) add('Present menu', 'Present menu items can’t be reached (Share screen, Play a video, Present slides, Show an image, On-air AI)', 'P0', '', s.width, cover);
+      if (inMenu) add('Present menu', 'Present menu items can’t be reached (Share screen, Play a video, Present slides, Show an image, AI answer)', 'P0', '', s.width, cover);
       else if (!/not covered/.test(cover)) add(area, `“${label}” can’t be clicked: ${cover}`, 'P1', 'Fix stacking or scrolling so the control is reachable at this width.', s.width, id);
       continue;
     }
@@ -376,7 +376,9 @@ async function featureChecks(s: Session, browser: Browser, code: string): Promis
   };
 
   await step('AI chat', async () => {
-    await p.click('.rail-btn[data-tab="ai"]'); await p.click('#aiProv [data-prov="claude"]');
+    await p.click('.rail-btn[data-tab="ai"]');
+    if (await p.isHidden('#aiSetup')) await p.click('#aiSetupBtn');
+    await p.click('#aiProv [data-prov="claude"]');
     await p.fill('#aiKey', ''); await p.locator('#aiKey').dispatchEvent('change');
     await p.fill('#aiInput', 'Who won the 1966 World Cup?'); await p.click('#aiAsk'); await p.waitForTimeout(500);
     const t = await lastToast(p);
@@ -393,7 +395,7 @@ async function featureChecks(s: Session, browser: Browser, code: string): Promis
   });
 
   await step('AI producer', async () => {
-    await p.click('#cmdToggle'); await p.fill('#cmdInput', 'switch to solo'); await p.press('#cmdInput', 'Enter');
+    if (await p.isHidden('#cmdBar')) await p.click('#aiDock'); await p.fill('#cmdInput', 'switch to solo'); await p.press('#cmdInput', 'Enter');
     await p.waitForFunction(() => (window as unknown as GatherWindow).__gather.aiStatus === 'idle', null, { timeout: 25000 });
     await shot(s, 'feature-ai-producer');
     const reply = (await p.textContent('#cmdReply')) ?? '';
@@ -563,7 +565,7 @@ async function featureChecks(s: Session, browser: Browser, code: string): Promis
     await gp.waitForFunction(() => !!(window as unknown as GatherWindow).__gather.studio, null, { timeout: 12000 });
     await gp.waitForTimeout(800);
     await shot(gs, 'guest-studio'); await checkLayout(gs, 'Studio (guest)');
-    const leaks = await gp.evaluate(() => Array.from(document.querySelectorAll('#recBtn, .rail-btn[data-tab="stream"], .rail-btn[data-tab="layouts"], .rail-btn[data-tab="brand"], .rail-btn[data-tab="banners"], #cmdToggle, #lockWrap, .crew-tools'))
+    const leaks = await gp.evaluate(() => Array.from(document.querySelectorAll('#recBtn, .rail-btn[data-tab="stream"], .rail-btn[data-tab="layouts"], .rail-btn[data-tab="brand"], .rail-btn[data-tab="banners"], #aiDock, #cmdBar, #aiSetup, #aiForm, #lockWrap, .crew-tools'))
       .filter((e) => (e as HTMLElement).checkVisibility()).map((e) => e.id || e.className));
     if (leaks.length) add('Guest view', `Host controls visible to guests: ${leaks.join(', ')}`, 'P0', 'Hide with the host-only flag in renderGuestView().', 1440);
     else passes.push('Guest view: no recording, stream, layout, brand, banner, AI producer, lock or people controls');

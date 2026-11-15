@@ -29,16 +29,14 @@
   <!-- ================= HEADER ================= -->
   <header class="top glass">
     <a class="logo" href="/" aria-label="gather home"><span class="logo-word">gather<i>.</i></span></a>
-    <div class="top-title">
-      <strong id="studioTitle">The conversation studio</strong>
-      <span id="studioSub">Your next great conversation starts here</span>
+    <div class="top-title" id="topTitle" hidden>
+      <strong id="studioTitle"></strong>
+      <span class="status" id="statusPill" data-state="offline"><i class="dot"></i><span id="statusText">Offline</span></span>
     </div>
     <div class="top-actions">
-      <span class="pill lg status" id="statusPill" data-state="offline"><i class="dot"></i><span id="statusText">Studio offline</span></span>
-      <span class="pill lg status rec" id="recPill" hidden><i class="dot"></i><span id="recPillText">Recording</span></span>
-      <button class="btn round user-btn" id="userBtn" aria-label="Your account"><span class="user-av" id="userAv"></span><svg id="userIcon" class="i" aria-hidden="true"><use href="/icons.svg#i-user"/></svg><span class="user-label" id="userLabel">Sign in</span></button>
-      <button class="btn" id="inviteTop"><svg class="i" aria-hidden="true"><use href="/icons.svg#i-users"/></svg><span class="label">Invite</span></button>
-      <button class="btn primary" id="enterTop"><span id="enterTopText">Enter studio</span><svg class="i" aria-hidden="true"><use href="/icons.svg#i-arrow-up-right"/></svg></button>
+      <span class="rec-chip" id="recPill" hidden><i class="dot"></i><span id="recPillText">Recording</span></span>
+      <button class="btn hdr user-btn" id="userBtn" aria-label="Your account"><span class="user-av" id="userAv"></span><svg id="userIcon" class="i" aria-hidden="true"><use href="/icons.svg#i-user"/></svg><span class="user-label" id="userLabel">Sign in</span></button>
+      <button class="btn hdr primary" id="enterTop"><svg class="i" id="enterTopIcon" aria-hidden="true"><use href="/icons.svg#i-log-in"/></svg><span id="enterTopText">Enter studio</span></button>
     </div>
   </header>
 
@@ -73,21 +71,21 @@
               </div>
               <button class="btn sm live" id="presStop">Stop</button>
             </div>
-            <button type="button" class="btn sm round on-media cmd-toggle" id="cmdToggle" hidden data-status="idle"><i class="orb"></i><span id="cmdToggleName">Sam</span></button>
-            <div class="cmd-bar glass on-media" id="cmdBar" hidden data-status="idle">
-              <div class="cmd-top"><i class="orb"></i><b id="cmdName">Sam</b><span id="cmdState">Ready</span><button type="button" class="icon-btn sm" id="cmdClose" aria-label="Close"><svg class="i sm" aria-hidden="true"><use href="/icons.svg#i-x"/></svg></button></div>
+            <div class="cmd-bar glass raised" id="cmdBar" hidden data-status="idle" role="dialog" aria-label="Ask your AI">
+              <div class="cmd-top"><i class="orb" aria-hidden="true"></i><b id="cmdName">Sam</b><span id="cmdState">Ready</span><kbd class="cmd-esc">Esc</kbd><button type="button" class="icon-btn sm" id="cmdClose" aria-label="Close"><svg class="i sm" aria-hidden="true"><use href="/icons.svg#i-x"/></svg></button></div>
               <p class="cmd-reply" id="cmdReply" aria-live="polite"></p>
+              <ul class="act-chips" id="cmdActs"></ul>
               <button type="button" class="btn primary sm cmd-show" id="cmdShow" hidden>Open</button>
-              <form class="cmd-row" id="cmdForm" autocomplete="off">
-                <button type="button" class="icon-btn filled cmd-mic" id="cmdMic" aria-label="Talk to your AI"><svg class="i" aria-hidden="true"><use href="/icons.svg#i-mic"/></svg></button>
-                <input class="input" id="cmdInput" maxlength="600" placeholder="Ask Sam…" aria-label="Ask your AI">
-                <button class="btn primary" id="cmdGo">Go</button>
+              <form class="composer-box" id="cmdForm" autocomplete="off">
+                <button type="button" class="icon-btn sm comp-mic cmd-mic" id="cmdMic" aria-label="Talk to your AI" aria-pressed="false"><svg class="i" aria-hidden="true"><use href="/icons.svg#i-mic"/></svg></button>
+                <input id="cmdInput" maxlength="600" placeholder="Ask Sam…" aria-label="Ask your AI">
+                <button class="send-btn" id="cmdGo" aria-label="Send"><svg class="i" aria-hidden="true"><use href="/icons.svg#i-arrow-up"/></svg></button>
               </form>
             </div>
             <div class="stage-empty" id="stageEmpty">
               <div class="cam-badge glass on-media"><svg class="i" aria-hidden="true"><use href="/icons.svg#i-video"/></svg></div>
-              <h1>Good conversations start here.</h1>
-              <p>Bring your people together. Set the scene. <br>Make something worth sharing.</p>
+              <h1>Start a studio.</h1>
+              <p>Up to six people, live scenes, slides and an AI producer. <br>Free, in your browser.</p>
               <button class="btn primary lg" id="enterStage"><svg class="i" aria-hidden="true"><use href="/icons.svg#i-plus"/></svg>Create or join a studio</button>
             </div>
           </div>
@@ -124,12 +122,8 @@
     <aside class="side glass" id="side">
       <!-- Chat -->
       <section class="panel" data-panel="chat">
-        <header class="panel-head"><h2>Studio chat</h2><p>A conversation behind the conversation.</p></header>
+        <header class="panel-head"><h2>Chat</h2><p>Studio chat plus your connected platforms.</p></header>
         <div class="panel-body chat-body">
-          <div class="notice">
-            <strong>Your crew, connected.</strong>
-            <p>Messages are shared with connected studio participants, not a public audience.</p>
-          </div>
           <div class="feat-bar" id="featBar" hidden>
             <span class="feat-label">On stage</span>
             <span class="feat-text" id="featText"></span>
@@ -137,22 +131,22 @@
           </div>
           <div class="chat-empty" id="chatEmpty">
             <svg class="i" aria-hidden="true"><use href="/icons.svg#i-message-square"/></svg>
-            <p id="chatEmptyText">This is where the ideas flow.<br>Enter a studio to say hello.</p>
+            <p id="chatEmptyText">No messages yet.<br>Enter a studio to chat.</p>
           </div>
           <ol class="msgs" id="msgs" aria-live="polite"></ol>
         </div>
         <form class="composer" id="chatForm" autocomplete="off">
-          <label class="caps" for="chatInput">To everyone in the studio</label>
-          <div class="composer-row">
-            <input id="chatInput" maxlength="1000" placeholder="Send a message…">
-            <button class="icon-btn primary send" aria-label="Send message"><svg class="i" aria-hidden="true"><use href="/icons.svg#i-send"/></svg></button>
+          <div class="composer-box">
+            <textarea id="chatInput" rows="1" maxlength="1000" placeholder="Message the studio" aria-label="Message everyone in the studio"></textarea>
+            <button class="send-btn" id="chatSend" aria-label="Send message"><svg class="i" aria-hidden="true"><use href="/icons.svg#i-arrow-up"/></svg></button>
           </div>
+          <p class="composer-hint"><span>Only people in the studio see this</span><span class="keys">Shift + Enter for a new line</span></p>
         </form>
       </section>
 
       <!-- Stream -->
       <section class="panel" data-panel="stream" hidden>
-        <header class="panel-head"><h2>Stream</h2><p>Go live, schedule, and connect your platforms.</p></header>
+        <header class="panel-head"><h2>Stream</h2><p>Go live, schedule and connect platforms.</p></header>
         <div class="panel-body form">
           <div class="go-card">
             <div><b>Start a stream</b><span>Go live now, or schedule one with emailed invites and reminders.</span></div>
@@ -232,49 +226,59 @@
       </section>
 
       <!-- AI -->
-      <section class="panel" data-panel="ai" hidden>
-        <header class="panel-head"><h2>On-air AI</h2><p>Research live and put the answer on screen.</p></header>
-        <div class="panel-body form ai-body">
-          <div class="seg block" role="radiogroup" aria-label="AI provider" id="aiProv">
-            <button type="button" role="radio" data-prov="claude">Claude</button>
-            <button type="button" role="radio" data-prov="openai">ChatGPT</button>
-            <button type="button" role="radio" data-prov="gemini">Gemini</button>
-            <button type="button" role="radio" data-prov="grok">Grok</button>
-          </div>
-          <div class="producer-card">
-            <div class="row2"><label class="fld"><span>Your AI’s name</span><input id="aiName" maxlength="20" placeholder="Sam"></label>
+      <section class="panel ai-panel" data-panel="ai" hidden>
+        <header class="panel-head ai-head" data-status="idle" id="aiHead">
+          <i class="orb" aria-hidden="true"></i>
+          <div class="ai-title"><h2 id="aiTitle">Sam</h2><p id="aiSub">Your producer and researcher</p></div>
+          <button type="button" class="icon-btn sm host-only" id="aiSetupBtn" aria-expanded="false" aria-controls="aiSetup" aria-label="AI settings" data-tip="AI settings"><svg class="i" aria-hidden="true"><use href="/icons.svg#i-sliders-horizontal"/></svg></button>
+        </header>
+        <div class="panel-body ai-body">
+          <div class="ai-setup form host-only" id="aiSetup" hidden>
+            <div class="fld"><span>Provider</span>
+              <div class="seg block" role="radiogroup" aria-label="AI provider" id="aiProv">
+                <button type="button" role="radio" data-prov="claude">Claude</button>
+                <button type="button" role="radio" data-prov="openai">ChatGPT</button>
+                <button type="button" role="radio" data-prov="gemini">Gemini</button>
+                <button type="button" role="radio" data-prov="grok">Grok</button>
+              </div>
+            </div>
+            <label class="fld"><span id="aiKeyLabel">API key</span><input id="aiKey" type="password" autocomplete="off" spellcheck="false" placeholder="Paste your key"></label>
+            <p class="hint"><span id="aiKeyHelp"></span> Kept in this browser only; gather passes it to the provider with each request and never stores it.</p>
+            <details class="more"><summary>Model</summary><label class="fld"><span>Model ID <em>leave blank for the default</em></span><input id="aiModel" spellcheck="false"></label></details>
+            <hr>
+            <div class="row2"><label class="fld"><span>Name</span><input id="aiName" maxlength="20" placeholder="Sam"></label>
               <div class="fld"><span>Voice</span><div class="seg block" id="aiVoiceSeg"><button type="button" data-voice="browser">Me</button><button type="button" data-voice="openai">Stream</button><button type="button" data-voice="off">Off</button></div></div></div>
             <div class="row2" id="aiVoiceNameRow" hidden><label class="fld"><span>Stream voice</span><select id="aiVoiceName"><option value="alloy">Alloy</option><option value="ash">Ash</option><option value="ballad">Ballad</option><option value="coral">Coral</option><option value="echo">Echo</option><option value="fable">Fable</option><option value="nova">Nova</option><option value="onyx">Onyx</option><option value="sage">Sage</option><option value="shimmer">Shimmer</option></select></label></div>
-            <div class="row" id="aiVoiceTestRow"><button type="button" class="btn sm" id="aiVoiceTest">Test voice</button></div>
-            <p class="hint" id="aiVoiceNote" style="margin:0"></p>
-            <label class="toggle-row"><span><b>Wake word</b><small>Say “Hey Sam, pull up…” and it acts. Chrome or Edge.</small></span><input type="checkbox" class="toggle" id="aiWake" role="switch"></label>
-            <p class="hint" style="margin:0">Or type on the stage: click the <b>orb</b> in the stage corner. It can switch scenes, present your library, show banners, start countdowns and find videos or sites for you to put on screen.</p>
+            <div class="row" id="aiVoiceTestRow"><button type="button" class="btn sm" id="aiVoiceTest">Test voice</button><p class="hint" id="aiVoiceNote" style="margin:0"></p></div>
+            <label class="toggle-row"><span><b>Wake word</b><small id="aiWakeHint">Say “Hey Sam, …” and it acts. Chrome or Edge.</small></span><input type="checkbox" class="toggle" id="aiWake" role="switch"></label>
+            <button type="button" class="btn primary block" id="aiSetupDone">Done</button>
           </div>
-          <label class="fld"><span id="aiKeyLabel">API key</span><input id="aiKey" type="password" autocomplete="off" spellcheck="false" placeholder="Paste your key"></label>
-          <p class="hint"><span id="aiKeyHelp"></span> Saved in this browser only. Each question is sent with the key through gather to the provider; gather never stores it.</p>
-          <details class="more"><summary>Model</summary><label class="fld"><span>Model ID <em>leave blank for the default</em></span><input id="aiModel" spellcheck="false"></label></details>
-          <label class="toggle-row">
-            <span><b>AI window on stage</b><small>Switches to a scene with the AI window</small></span>
-            <input type="checkbox" class="toggle" id="aiStage" role="switch">
-          </label>
-          <p class="hint" id="aiHostNote" hidden>The host runs the on-air AI. You'll see answers here as they arrive.</p>
-          <div class="ai-log-wrap">
-            <p class="hint" id="aiEmpty">Ask anything: a fact check, a quick explainer, a stat to cite. Answers stream onto the stage as they are written.</p>
-            <ol class="ai-log" id="aiLog" aria-live="polite"></ol>
+          <p class="hint" id="aiHostNote" hidden>The host talks to the AI. You’ll see its answers here as they arrive.</p>
+          <div class="ai-empty host-only" id="aiEmpty">
+            <p>Ask a question and the answer streams in, ready to put on stage. Or tell it what to do:</p>
+            <div class="ai-sugg" id="aiSugg">
+              <button type="button" class="chip" data-q="Fact-check: ">Fact-check a claim</button>
+              <button type="button" class="chip" data-q="Switch to Solo">Switch to Solo</button>
+              <button type="button" class="chip" data-q="Show a banner: Q&amp;A time">Show a banner</button>
+              <button type="button" class="chip" data-q="Start a 5 minute countdown">5-minute countdown</button>
+              <button type="button" class="chip" data-q="Find a video of ">Find a video</button>
+            </div>
           </div>
+          <ol class="ai-log" id="aiLog" aria-live="polite"></ol>
         </div>
-        <form class="composer" id="aiForm" autocomplete="off">
-          <label class="caps" for="aiInput">Ask your AI <button type="button" class="btn link" id="aiClear">Clear</button></label>
-          <div class="composer-row">
-            <textarea id="aiInput" rows="2" maxlength="4000" placeholder="What did the 2025 World Cup final score…"></textarea>
-            <button class="btn primary" id="aiAsk">Ask</button>
+        <form class="composer host-only" id="aiForm" autocomplete="off">
+          <div class="composer-box">
+            <button type="button" class="icon-btn sm comp-mic" id="aiMic" aria-label="Talk instead of typing" aria-pressed="false"><svg class="i" aria-hidden="true"><use href="/icons.svg#i-mic"/></svg></button>
+            <textarea id="aiInput" rows="1" maxlength="4000" placeholder="Message Sam…" aria-label="Ask your AI"></textarea>
+            <button class="send-btn" id="aiAsk" aria-label="Send"><svg class="i" aria-hidden="true"><use href="/icons.svg#i-arrow-up"/></svg></button>
           </div>
+          <p class="composer-hint"><span id="aiHint">Ask a question or give an instruction · <kbd>/</kbd> opens it over the stage</span><button type="button" class="btn link quiet" id="aiClear">Clear</button></p>
         </form>
       </section>
 
       <!-- Banners -->
       <section class="panel" data-panel="banners" hidden>
-        <header class="panel-head"><h2>Banners</h2><p>Give your conversation a headline.</p></header>
+        <header class="panel-head"><h2>Banners</h2><p>Headlines and a ticker for the stage.</p></header>
         <div class="panel-body form">
           <label class="fld"><span>Banner text</span><textarea id="bannerText" rows="3" maxlength="120">Welcome to the conversation</textarea></label>
           <label class="fld"><span>Second line <em>optional</em></span><input id="bannerSub" maxlength="120" placeholder="Episode 12 · Live from the studio"></label>
@@ -297,7 +301,7 @@
 
       <!-- Layouts -->
       <section class="panel" data-panel="layouts" hidden>
-        <header class="panel-head"><h2>Layouts</h2><p>Build scenes from cameras, slides, chat, AI, text and images.</p></header>
+        <header class="panel-head"><h2>Layouts</h2><p>Arrange what’s on stage and save scenes.</p></header>
         <div class="panel-body form">
           <div class="row"><button type="button" class="btn primary" id="editToggle" aria-pressed="false">Edit on stage</button><button type="button" class="btn" id="resetScene"><svg class="i sm" aria-hidden="true"><use href="/icons.svg#i-rotate-ccw"/></svg>Reset scene</button></div>
           <p class="hint" id="layoutsHint">Drag and resize on the stage. Changes show for everyone and in recordings.</p>
@@ -340,7 +344,7 @@
 
       <!-- Brand -->
       <section class="panel" data-panel="brand" hidden>
-        <header class="panel-head"><h2>Brand</h2><p>The look of your stage. gather’s own interface stays as it is.</p></header>
+        <header class="panel-head"><h2>Brand</h2><p>How your stage looks to viewers.</p></header>
         <div class="panel-body form">
           <div class="fld"><span>Stage accent colour</span>
             <div class="swatches" id="swatches">
@@ -432,7 +436,7 @@
 
       <!-- Settings -->
       <section class="panel" data-panel="settings" hidden>
-        <header class="panel-head"><h2>Settings</h2><p>Your camera, microphone and look. Only you see these.</p></header>
+        <header class="panel-head"><h2>Settings</h2><p>Your camera, microphone and look.</p></header>
         <div class="panel-body form">
           <div class="fld"><span>Appearance</span>
             <div class="seg block" role="radiogroup" aria-label="Appearance" id="themeSeg">
@@ -509,7 +513,7 @@
 
       <!-- Help -->
       <section class="panel" data-panel="help" hidden>
-        <header class="panel-head"><h2>Help</h2><p>Search for a setting and jump straight to it.</p></header>
+        <header class="panel-head"><h2>Help</h2><p>Find a setting and jump to it.</p></header>
         <div class="panel-body form">
           <div class="composer-row help-search"><svg class="i" aria-hidden="true"><use href="/icons.svg#i-search"/></svg><input id="helpSearch" placeholder="Try “echo”, “background”, “captions”…" aria-label="Search help"></div>
           <div id="helpPopWrap"><h3 class="caps">Most searched</h3><ul class="help-list" id="helpPopular"></ul></div>
@@ -553,16 +557,15 @@
           <button class="menu-item" role="menuitem" data-present="video"><svg class="i" aria-hidden="true"><use href="/icons.svg#i-video"/></svg><b>Play a video</b><span>MP4, WebM or MOV from your computer</span></button>
           <button class="menu-item" role="menuitem" data-present="pdf"><svg class="i" aria-hidden="true"><use href="/icons.svg#i-file-text"/></svg><b>Present slides</b><span>A PDF deck, page by page</span></button>
           <button class="menu-item" role="menuitem" data-present="image"><svg class="i" aria-hidden="true"><use href="/icons.svg#i-image"/></svg><b>Show an image</b><span>PNG, JPEG, WebP or GIF</span></button>
-          <button class="menu-item" role="menuitem" data-present="ai"><svg class="i" aria-hidden="true"><use href="/icons.svg#i-sparkles"/></svg><b>On-air AI</b><span>Research live with your own AI</span></button>
+          <button class="menu-item" role="menuitem" data-present="ai"><svg class="i" aria-hidden="true"><use href="/icons.svg#i-sparkles"/></svg><b>AI answer</b><span>Ask your AI and put the answer on stage</span></button>
         </div></div>
       </div>
       <span class="dock-sep" aria-hidden="true"></span>
       <button class="icon-btn stacked rec-tool host-only" id="recBtn"><svg class="i" aria-hidden="true"><use href="/icons.svg#i-circle"/><circle class="rec-dot" cx="12" cy="12" r="4"/></svg><span class="caption" id="recLabel">Record</span></button>
-      <button class="icon-btn stacked" id="inviteDock"><svg class="i" aria-hidden="true"><use href="/icons.svg#i-users"/></svg><span class="caption">Invite</span></button>
-      <button class="icon-btn stacked" id="settingsDock"><svg class="i" aria-hidden="true"><use href="/icons.svg#i-sliders-horizontal"/></svg><span class="caption">Settings</span></button>
+      <button class="icon-btn stacked host-only ai-dock" id="aiDock" aria-expanded="false" aria-controls="cmdBar" data-status="idle" hidden><span class="orb-i" aria-hidden="true"></span><span class="caption" id="aiDockName">Sam</span></button>
     </div>
-    <p class="dock-note" id="dockNote"><svg class="i" aria-hidden="true"><use href="/icons.svg#i-shield-check"/></svg><span id="dockNoteText">Your studio. Your conversation.</span></p>
-    <button class="btn danger" id="leaveBtn" disabled>Leave studio</button>
+    <p class="dock-note" id="dockNote" hidden><svg class="i" aria-hidden="true"><use href="/icons.svg#i-activity"/></svg><span id="dockNoteText"></span></p>
+    <button class="btn danger" id="leaveBtn" disabled aria-label="Leave studio">Leave<span class="wide-only">&nbsp;studio</span></button>
   </footer>
 </div>
 

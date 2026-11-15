@@ -290,3 +290,8 @@ input[type="checkbox"]:not(.toggle), input[type="radio"] { width: var(--icon-sm)
   /* progress indicators keep turning, slowly: they carry meaning */
   .spinner, .btn[aria-busy="true"]::after, .icon-btn[aria-busy="true"]::after, .toggle[aria-busy="true"]::after { animation-duration: 1.6s !important; animation-iteration-count: infinite !important; }
 }
+
+/* Chip: a small rounded suggestion or filter button. */
+.chip { height: 30px; padding: 0 var(--sp-3); border-radius: var(--r-full); border: 1px solid var(--line-2); background: transparent; color: var(--ink-2); font: 500 var(--fs-12) var(--font-ui); cursor: pointer; transition: background-color var(--dur) var(--ease-out), color var(--dur) var(--ease-out), border-color var(--dur) var(--ease-out); }
+.chip:hover { background: var(--fill-hover); color: var(--ink); border-color: var(--accent-line); }
+.chip:focus-visible { box-shadow: var(--ring); outline: none; }

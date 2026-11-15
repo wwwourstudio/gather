@@ -16,6 +16,7 @@ const ICONS = [
   'copy', 'eye', 'eye-off', 'file-text', 'flag', 'image', 'layout-dashboard', 'link', 'lock', 'lock-open', 'log-out', 'message-square', 'mic', 'mic-off',
   'monitor', 'monitor-up', 'palette', 'pause', 'phone', 'play', 'plus', 'qr-code', 'radio', 'repeat', 'rotate-ccw', 'search', 'send', 'shield-check',
   'sliders-horizontal', 'sparkles', 'square', 'trash-2', 'upload', 'user', 'users', 'video', 'video-off', 'x',
+  'activity', 'log-in', 'user-plus', 'monitor-x', 'presentation', 'command',
 ] as const;
 
 function main(): void {

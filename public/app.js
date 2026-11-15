@@ -987,7 +987,7 @@ function drawChrome() {
   const paper = BGS[S.state.brand.bg]?.[4];
   const ink = paper ? 'rgba(17,24,39,' : 'rgba(255,255,255,';
   g.textBaseline = 'middle';
-  if (S.state.title) {
+  if (S.state.title && S.studio) { // a title saved from an earlier studio never shows on the empty home stage
     g.textAlign = 'left'; g.font = `700 14px ${stageFont()}`; g.fillStyle = ink + '.8)';
     const lg = stageElements().find((e) => e.type === 'logo' && !e.hidden);
     const hasLogoTL = assetImg(S.state.brand.logo) && lg && lg.x < .2 && lg.y < .12;
@@ -1632,7 +1632,7 @@ function plainMd(t) {
 }
 function drawAiEl(e) {
   const r = px(e), fs = e.size || 22, pad = 22, lh = fs * 1.38;
-  const items = S.ai.items, a = [...items].reverse().find((i) => i.role === 'assistant');
+  const items = S.ai.items, a = stageAnswer();
   const q = a ? items[items.indexOf(a) - 1] : [...items].reverse().find((i) => i.role === 'user');
   if (a && a.say && !a.text) a.text = a.say;
   g.save();
@@ -1649,7 +1649,7 @@ function drawAiEl(e) {
   const maxW = r.w - pad * 2;
   if (!q) {
     g.fillStyle = 'rgba(255,255,255,.5)'; g.font = `500 ${fs}px Inter, sans-serif`; g.textBaseline = 'alphabetic';
-    g.fillText('Ask a question in the AI panel.', r.x + pad, y + fs);
+    g.fillText('Ready for questions.', r.x + pad, y + fs); // viewers see this: no editor instructions
     g.restore(); return;
   }
   g.font = `700 ${fs}px "Plus Jakarta Sans", Inter, sans-serif`; g.fillStyle = '#ffffff'; g.textBaseline = 'alphabetic';
@@ -2192,7 +2192,9 @@ function renderLayoutsPanel() {
   if (!isHost() && editor.on) setEditing(false);
 }
 
-// ---------------------------------------------------------------- AI research (host's own Claude, ChatGPT, Gemini or Grok key)
+// ---------------------------------------------------------------- AI: one assistant that answers and runs the studio
+// The host's own Claude, ChatGPT, Gemini or Grok key. Answers stream into the AI panel; any answer can be put on
+// stage (the AI window shows the pinned answer, or the latest one). Guests receive the conversation read-only.
 S.ai = { items: [], busy: false };
 S.aiProv = store.get('aiProv', 'claude');
 const AI_DEFAULT_MODEL = { claude: 'claude-opus-5-5', openai: 'gpt-5.5', gemini: 'gemini-2.5-flash', grok: 'grok-4.7' };
@@ -2209,21 +2211,72 @@ function upsertAI(item, local = true) {
   if (item.done) { clearTimeout(aiSync.get(item.id)); send(); }
   else if (!aiSync.has(item.id)) aiSync.set(item.id, setTimeout(send, 450));
 }
+const aiOnStage = () => (S.state.elements || []).some((e) => e.type === 'ai' && !e.hidden);
+/** The answer the AI window shows: the pinned one, else the newest. */
+function stageAnswer() {
+  const answers = S.ai.items.filter((i) => i.role === 'assistant');
+  return answers.find((i) => i.pinned) || answers[answers.length - 1] || null;
+}
+function actLabel(a) {
+  return { open: `Found “${a.label || a.url}”`, scene: `Switched to ${a.name}`, present: `Presenting ${a.name}`, stop: 'Stopped presenting', banner: `Banner: ${a.text}`, hide_banner: 'Banner hidden', countdown: `${a.minutes}-minute countdown` }[a.type] || a.type;
+}
+function actChip(a, withOpen = true) {
+  const li = document.createElement('li'); li.className = 'act-chip';
+  li.textContent = actLabel(a);
+  if (a.type === 'open' && withOpen && isHost()) {
+    const b = document.createElement('button'); b.type = 'button'; b.className = 'btn link'; b.textContent = 'Open';
+    b.onclick = () => offerOpen(a.url, a.label);
+    li.append(b);
+  }
+  return li;
+}
 function renderAILog() {
   const log = $('#aiLog');
   if (!log) return;
+  const host = isHost(), shown = aiOnStage() ? stageAnswer() : null;
   log.replaceChildren(...S.ai.items.map((it) => {
     const li = document.createElement('li'); li.className = 'ai-msg ' + it.role + (it.error ? ' error' : '');
+    li.dataset.id = it.id;
+    if (it.role === 'user') { const t = document.createElement('div'); t.className = 'bubble'; t.textContent = it.text; li.append(t); return li; }
     const who = document.createElement('div'); who.className = 'who';
-    const b = document.createElement('b'); b.textContent = it.role === 'user' ? 'You asked' : AI_NAME[it.provider] || 'AI';
-    if (it.role === 'assistant') b.style.color = AI_COLOR[it.provider];
-    who.append(b);
-    const txt = document.createElement('div'); txt.className = 'txt'; txt.textContent = it.role === 'assistant' ? plainMd(it.text) + (it.done ? '' : ' ▍') : it.text;
+    const nm = document.createElement('b'); nm.textContent = S.aiName;
+    const via = document.createElement('span'); via.textContent = AI_NAME[it.provider] || '';
+    who.append(nm, via);
+    const txt = document.createElement('div'); txt.className = 'txt'; txt.textContent = plainMd(it.text || '') || (it.done ? '' : ' ');
+    if (!it.done) txt.classList.add('streaming');
     li.append(who, txt);
+    if (it.actions?.length) { const ul = document.createElement('ul'); ul.className = 'act-chips'; ul.append(...it.actions.map(actChip)); li.append(ul); }
+    if (host && it.done && !it.error && it.text) {
+      const row = document.createElement('div'); row.className = 'msg-tools';
+      const on = shown?.id === it.id;
+      const st = document.createElement('button'); st.type = 'button'; st.className = 'btn sm' + (on ? ' on' : ''); st.dataset.stage = it.id;
+      st.textContent = on ? 'On stage' : 'Show on stage'; st.setAttribute('aria-pressed', on);
+      st.onclick = () => (on ? takeAnswerOff() : showAnswer(it.id));
+      const cp = document.createElement('button'); cp.type = 'button'; cp.className = 'btn sm ghost'; cp.textContent = 'Copy';
+      cp.onclick = () => navigator.clipboard?.writeText(plainMd(it.text)).then(() => toast('Copied.'), () => toast('Couldn’t copy.', { err: true }));
+      row.append(st, cp); li.append(row);
+    }
     return li;
   }));
   $('#aiEmpty').hidden = !!S.ai.items.length;
-  log.parentElement.scrollTop = log.parentElement.scrollHeight;
+  const body = log.closest('.panel-body'); if (body) body.scrollTop = body.scrollHeight;
+}
+/** Put one answer in the AI window, adding the window to the stage (without changing the scene) if needed. */
+function showAnswer(id) {
+  if (!isHost()) return;
+  for (const it of S.ai.items) if (it.role === 'assistant' && !!it.pinned !== (it.id === id)) upsertAI({ id: it.id, pinned: it.id === id });
+  const els = stageElements(), cur = els.find((e) => e.type === 'ai');
+  if (cur) { if (cur.hidden) patchEl(cur.id, { hidden: false }, 'show'); else renderAILog(); return; }
+  const e = withDefaults({ type: 'ai' });
+  const spot = freeSpot(e, els);
+  if (spot) Object.assign(e, spot); else if (spot === false) e.stack = true;
+  e.home = [e.x, e.y, e.w, e.h];
+  setStage({ elements: [...els, e] });
+  toast(spot === false ? 'The answer is on stage, stacked: there was no free spot. Move it in Layouts.' : 'The answer is on stage.');
+}
+function takeAnswerOff() {
+  if (!isHost()) return;
+  setStage({ elements: elementsCopy().filter((x) => x.type !== 'ai') });
 }
 function renderAIPanel() {
   const host = isHost();
@@ -2234,46 +2287,34 @@ function renderAIPanel() {
   if (document.activeElement !== $('#aiModel')) $('#aiModel').value = store.get('aiModel:' + S.aiProv, '');
   $('#aiKeyLabel').textContent = `${AI_NAME[S.aiProv]} API key`;
   $('#aiKeyHelp').innerHTML = { claude: 'Get one at <b>console.anthropic.com</b>. Includes live web search.', openai: 'Get one at <b>platform.openai.com</b>.', gemini: 'Get one at <b>aistudio.google.com</b>. Includes Google Search.', grok: 'Get one at <b>console.x.ai</b>.' }[S.aiProv];
-  const onStage = (S.state.elements || []).some((e) => e.type === 'ai');
-  $('#aiStage').checked = onStage; $('#aiStage').disabled = !host;
-  $('#aiInput').disabled = !host || S.ai.busy; $('#aiAsk').disabled = !host;
+  // Setup opens by itself until there's a key; after that it folds into the settings button.
+  if (host && !key && !S.aiSetupSeen) { S.aiSetupSeen = true; setAiSetup(true, false); }
+  $('#aiSub').textContent = !host ? 'The host’s producer and researcher' : key ? `${AI_NAME[S.aiProv]} · ${{ idle: 'ready', listening: 'listening…', thinking: 'thinking…', speaking: 'speaking' }[S.aiStatus]}` : `Add a ${AI_NAME[S.aiProv]} key to start`;
+  $('#aiInput').disabled = !host; $('#aiAsk').disabled = !host || S.ai.busy;
   if (S.ai.busy) $('#aiAsk').setAttribute('aria-busy', 'true'); else $('#aiAsk').removeAttribute('aria-busy');
   $('#aiHostNote').hidden = host;
+  renderAILog();
 }
+function setAiSetup(open, focus = true) {
+  $('#aiSetup').hidden = !open; $('#aiSetupBtn').setAttribute('aria-expanded', open); $('#aiSetupBtn').classList.toggle('on', open);
+  if (open && focus) (store.get('aiKey:' + S.aiProv, '') ? $('#aiName') : $('#aiKey')).focus();
+}
+$('#aiSetupBtn').onclick = () => setAiSetup($('#aiSetup').hidden);
+$('#aiSetupDone').onclick = () => { setAiSetup(false); $('#aiInput').focus(); };
 $$('#aiProv button').forEach((b) => b.addEventListener('click', () => { S.aiProv = b.dataset.prov; store.set('aiProv', S.aiProv); renderAIPanel(); }));
-$('#aiKey').addEventListener('change', (e) => { store.set('aiKey:' + S.aiProv, e.target.value.trim()); toast(e.target.value.trim() ? `${AI_NAME[S.aiProv]} key saved in this browser.` : 'Key removed.'); });
+$('#aiKey').addEventListener('change', (e) => { store.set('aiKey:' + S.aiProv, e.target.value.trim()); toast(e.target.value.trim() ? `${AI_NAME[S.aiProv]} key saved in this browser.` : 'Key removed.'); renderAIPanel(); });
 $('#aiModel').addEventListener('change', (e) => store.set('aiModel:' + S.aiProv, e.target.value.trim()));
-$('#aiStage').addEventListener('change', (e) => {
-  if (!isHost()) return;
-  if (!e.target.checked) return setStage({ elements: elementsCopy().filter((x) => x.type !== 'ai') });
-  applyTemplate(isVertical() ? TPL['v-ai'] : S.local.pres || participants().some((p) => p.sharing) ? TPL['screen-ai'] : TPL['p-arena']);
-});
 $('#aiClear').onclick = () => { S.ai.items = []; renderAILog(); if (S.studio && isHost()) wsSend({ type: 'ai', item: { id: 'clear', role: 'system', text: '', done: true } }); };
-$('#aiForm').addEventListener('submit', async (ev) => {
-  ev.preventDefault();
-  const q = $('#aiInput').value.trim();
-  if (!q || S.ai.busy) return;
-  if (!isHost()) return toast('Only the host can use the on-air AI.', { err: true });
-  const key = store.get('aiKey:' + S.aiProv, '');
-  if (!key) { $('#aiKey').focus(); return toast(`Add your ${AI_NAME[S.aiProv]} API key first.`, { err: true }); }
-  const history = S.ai.items.filter((i) => i.done && !i.error && (i.role === 'user' || i.role === 'assistant')).slice(-10).map((i) => ({ role: i.role, text: i.text }));
-  const prov = S.aiProv;
-  const user = { id: uid(), role: 'user', text: q, provider: prov, done: true };
-  const ans = { id: uid(), role: 'assistant', text: '', provider: prov, done: false };
-  $('#aiInput').value = '';
-  S.ai.busy = true; renderAIPanel();
-  upsertAI(user); upsertAI(ans);
-  try {
-    const res = await fetch('/api/ai', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ provider: prov, apiKey: key, model: store.get('aiModel:' + prov, ''), messages: [...history, { role: 'user', text: q }] }) });
-    if (!res.ok) { upsertAI({ ...ans, text: (await res.text()) || `The AI request failed (${res.status}).`, error: true, done: true }); return; }
-    const reader = res.body.getReader(), dec = new TextDecoder();
-    let text = '';
-    for (;;) { const { value, done } = await reader.read(); if (done) break; text += dec.decode(value, { stream: true }); upsertAI({ ...ans, text }); }
-    upsertAI({ ...ans, text: text || '(No answer came back.)', done: true });
-  } catch { upsertAI({ ...ans, text: 'Could not reach the AI. Check your connection and try again.', error: true, done: true }); }
-  finally { S.ai.busy = false; renderAIPanel(); }
-});
-$('#aiInput').addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); $('#aiForm').requestSubmit(); } });
+$$('#aiSugg .chip').forEach((b) => b.addEventListener('click', () => { const t = $('#aiInput'); t.value = b.dataset.q; autoGrow(t); t.focus(); t.setSelectionRange(t.value.length, t.value.length); }));
+$('#aiForm').addEventListener('submit', (ev) => { ev.preventDefault(); const t = $('#aiInput'); const v = t.value; t.value = ''; autoGrow(t); askProducer(v); });
+
+// ---------------------------------------------------------------- composers: auto-growing, Enter sends, Shift+Enter breaks
+function autoGrow(t) { if (t.tagName !== 'TEXTAREA') return; t.style.height = 'auto'; t.style.height = Math.min(t.scrollHeight, 160) + 'px'; }
+for (const [input, form] of [['#chatInput', '#chatForm'], ['#aiInput', '#aiForm']]) {
+  const t = $(input);
+  t.addEventListener('input', () => autoGrow(t));
+  t.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); $(form).requestSubmit(); } });
+}
 
 // ---------------------------------------------------------------- support links (PayPal, Venmo, Cash App, Stripe…)
 const TIP_FIELDS = [
@@ -3124,7 +3165,7 @@ $('#chatForm').addEventListener('submit', (e) => {
   if (!v) return;
   if (!S.studio) return toast('Enter a studio to chat.');
   wsSend({ type: 'chat', text: v });
-  $('#chatInput').value = '';
+  $('#chatInput').value = ''; autoGrow($('#chatInput'));
 });
 
 // ---------------------------------------------------------------- rendering
@@ -3132,13 +3173,17 @@ function setPhase(p) {
   S.phase = p;
   const pill = $('#statusPill');
   pill.dataset.state = p === 'online' ? 'online' : p === 'offline' ? 'offline' : 'connecting';
-  $('#statusText').textContent = { offline: 'Studio offline', connecting: 'Connecting…', online: 'Studio connected', reconnecting: 'Reconnecting…' }[p];
+  $('#statusText').textContent = { offline: 'Offline', connecting: 'Connecting…', online: 'Live in studio', reconnecting: 'Reconnecting…' }[p];
   renderAll();
 }
 function renderAll() { renderHeader(); renderStageUI(); renderCrew(); renderDock(); renderPanels(); renderFeedUI(); renderLayoutsPanel(); renderAIPanel(); renderTips(); renderBrandPanel(); renderStreamPanel(); renderGuestView(); syncTwitch(); syncCaptions(); renderDeck(); renderAds(); renderCallin(); renderProducerUI(); renderGreenRoom(); }
 function renderHeader() {
+  // The studio name belongs to the studio you're in; outside one the header is just the wordmark.
+  const inside = !!S.studio || S.phase === 'reconnecting';
+  $('#topTitle').hidden = !inside;
   $('#studioTitle').textContent = S.state.title || DEFAULT_TITLE;
-  $('#enterTopText').textContent = S.studio ? 'Room details' : 'Enter studio';
+  $('#enterTopText').textContent = S.studio ? 'Invite' : 'Enter studio';
+  $('#enterTopIcon').firstElementChild.setAttribute('href', S.studio ? '/icons.svg#i-user-plus' : '/icons.svg#i-log-in');
 }
 function renderStageUI() {
   $('#stageEmpty').hidden = !!S.studio || previewActive();
@@ -3233,7 +3278,8 @@ function renderDock() {
 }
 function renderDockNote() {
   const el = $('#dockNoteText');
-  if (!S.studio) { el.textContent = S.phase === 'reconnecting' ? 'Reconnecting to your studio…' : 'Your studio. Your conversation.'; return; }
+  $('#dockNote').hidden = !S.studio && S.phase !== 'reconnecting';
+  if (!S.studio) { el.textContent = S.phase === 'reconnecting' ? 'Reconnecting to your studio…' : ''; return; }
   const peers = [...S.peers.values()];
   if (!peers.length) { el.textContent = 'Waiting for guests · share your room code'; return; }
   const up = peers.filter((p) => p.conn === 'connected');
@@ -3255,8 +3301,8 @@ function renderPanels() {
   if (document.activeElement !== $('#titleInput')) $('#titleInput').value = S.state.title || '';
   renderPresets();
   $('#chatInput').disabled = !S.studio;
-  $('#chatInput').placeholder = S.studio ? 'Send a message…' : 'Enter a studio to chat';
-  $('#chatEmptyText').innerHTML = S.studio ? 'Say hello to the studio.<br>Everyone here will see it.' : 'This is where the ideas flow.<br>Enter a studio to say hello.';
+  $('#chatInput').placeholder = S.studio ? 'Message the studio…' : 'Enter a studio to chat';
+  $('#chatEmptyText').innerHTML = S.studio ? 'No messages yet.<br>Everyone in the studio sees what you send.' : 'No messages yet.<br>Enter a studio to chat.';
   $('#chatEmpty').hidden = !!$('#msgs').children.length;
 }
 function renderBannerState() {
@@ -3294,7 +3340,6 @@ function setTab(tab) {
   if (tab !== 'layouts' && editor.on) setEditing(false);
 }
 $$('.rail-btn').forEach((b) => b.addEventListener('click', () => setTab(b.dataset.tab)));
-$('#settingsDock').onclick = () => { setTab('settings'); if (innerWidth <= 900) $('#side').scrollIntoView({ behavior: smooth() }); };
 
 function sceneList() {
   return [...BUILTINS.map((b) => ({ ...b, kind: 'builtin' })), ...(isVertical() ? V_TEMPLATES : TEMPLATES).map((t) => ({ ...t, kind: 'template' })), ...savedLayouts().map((l) => ({ id: 'saved:' + l.name, name: l.name, kind: 'saved', saved: l }))];
@@ -3939,37 +3984,55 @@ function renderLibrary() {
 S.aiName = store.get('aiName', 'Sam');
 S.aiWake = store.get('aiWake', false);
 S.aiStatus = 'idle';
-function setAiStatus(st) { S.aiStatus = st; $('#cmdBar').dataset.status = st; $('#cmdToggle').dataset.status = st; $('#cmdState').textContent = { idle: 'Ready', listening: 'Listening…', thinking: 'Thinking…', speaking: 'Speaking' }[st]; }
+const AI_STATE = { idle: 'Ready', listening: 'Listening…', thinking: 'Thinking…', speaking: 'Speaking' };
+function setAiStatus(st) {
+  S.aiStatus = st;
+  for (const id of ['#cmdBar', '#aiDock', '#aiHead']) $(id).dataset.status = st;
+  $('#cmdState').textContent = AI_STATE[st];
+  $('#aiMic').setAttribute('aria-pressed', st === 'listening'); $('#cmdMic').setAttribute('aria-pressed', st === 'listening');
+  renderAIPanel();
+}
 function renderProducerUI() {
   const host = isHost();
-  $('#cmdInput').placeholder = `Ask ${S.aiName}… “pull up the dog running video on YouTube”`;
-  $('#cmdName').textContent = S.aiName;
-  $('#cmdToggleName').textContent = S.aiName;
-  $('#cmdToggle').hidden = !host;
-  if (!host) $('#cmdBar').hidden = true;
+  $('#cmdInput').placeholder = `Ask ${S.aiName}…`;
+  $('#aiInput').placeholder = `Message ${S.aiName}…`;
+  $('#aiWakeHint').textContent = `Say “Hey ${S.aiName}, …” and it acts. Chrome or Edge.`;
+  for (const id of ['#cmdName', '#aiTitle', '#aiDockName']) $(id).textContent = S.aiName;
+  $('#aiDock').hidden = !host || !S.studio;
+  if (!host || !S.studio) setCmd(false);
   if (document.activeElement !== $('#aiName')) $('#aiName').value = S.aiName;
   $('#aiWake').checked = !!S.aiWake;
   const v = store.get('aiVoice', 'browser');
   $$('#aiVoiceSeg button').forEach((b) => b.classList.toggle('on', b.dataset.voice === v));
   $('#aiVoiceNameRow').hidden = v !== 'openai';
-  $('#aiVoiceTestRow').hidden = v === 'off';
+  $('#aiVoiceTest').hidden = v === 'off';
   $('#aiVoiceName').value = store.get('aiVoiceName', 'alloy');
-  $('#aiVoiceNote').textContent = v === 'openai' ? (store.get('aiKey:openai', '') ? 'Everyone in the stream and the recording hears it.' : 'Needs a ChatGPT (OpenAI) key, saved under ChatGPT above.') : v === 'browser' ? 'Only you hear this voice. Pick “Stream voice” for the audience.' : `${S.aiName} replies on screen without speaking.`;
+  $('#aiVoiceNote').textContent = v === 'openai' ? (store.get('aiKey:openai', '') ? 'Everyone in the stream and the recording hears it.' : 'Needs a ChatGPT (OpenAI) key, saved under ChatGPT above.') : v === 'browser' ? 'Only you hear this voice.' : `${S.aiName} replies without speaking.`;
 }
-$('#aiName').addEventListener('input', (e) => { S.aiName = e.target.value.trim().slice(0, 20) || 'Sam'; store.set('aiName', S.aiName); renderProducerUI(); });
+$('#aiName').addEventListener('input', (e) => { S.aiName = e.target.value.trim().slice(0, 20) || 'Sam'; store.set('aiName', S.aiName); renderProducerUI(); renderAILog(); });
 $('#aiWake').onchange = (e) => { S.aiWake = e.target.checked; store.set('aiWake', S.aiWake); syncCaptions(); toast(S.aiWake ? `Say “Hey ${S.aiName}” and then what you need.` : 'Wake word off.'); };
 $$('#aiVoiceSeg button').forEach((b) => b.addEventListener('click', () => { store.set('aiVoice', b.dataset.voice); renderProducerUI(); }));
 $('#aiVoiceName').onchange = (e) => store.set('aiVoiceName', e.target.value);
 $('#aiVoiceTest').onclick = () => speak(`Hi, I'm ${S.aiName}. Ready when you are.`);
-$('#cmdToggle').onclick = () => { const bar = $('#cmdBar'); bar.hidden = !bar.hidden; if (!bar.hidden) $('#cmdInput').focus(); };
-$('#cmdClose').onclick = () => { $('#cmdBar').hidden = true; };
+// The command bar floats over the stage only while you're using it: open it from the dock or with "/".
+function setCmd(open) {
+  const bar = $('#cmdBar');
+  if (bar.hidden === !open) return;
+  bar.hidden = !open; $('#aiDock').setAttribute('aria-expanded', open);
+  if (open) { $('#cmdInput').focus(); } else if (bar.contains(document.activeElement)) $('#aiDock').focus();
+}
+$('#aiDock').onclick = () => setCmd($('#cmdBar').hidden);
+$('#cmdClose').onclick = () => setCmd(false);
+$('#cmdBar').addEventListener('keydown', (e) => { if (e.key === 'Escape') { e.stopPropagation(); setCmd(false); } });
 $('#cmdForm').addEventListener('submit', (e) => { e.preventDefault(); const v = $('#cmdInput').value; $('#cmdInput').value = ''; askProducer(v); });
-$('#cmdMic').onclick = () => {
+function pushToTalk(target) {
   if (!(window.SpeechRecognition || window.webkitSpeechRecognition)) return toast('Talking to your AI needs Chrome or Edge. You can type instead.', { err: true });
-  speechHub.ptt = !speechHub.ptt;
+  speechHub.ptt = !speechHub.ptt; speechHub.target = target;
   setAiStatus(speechHub.ptt ? 'listening' : 'idle');
   syncCaptions();
-};
+}
+$('#cmdMic').onclick = () => pushToTalk('#cmdInput');
+$('#aiMic').onclick = () => pushToTalk('#aiInput');
 $('#cmdShow').onclick = () => {
   const p = S.pendingOpen;
   if (!p) return;
@@ -3984,7 +4047,7 @@ $('#cmdShow').onclick = () => {
 };
 function offerOpen(url, label) {
   S.pendingOpen = { url, label: label || url, step: 'open' };
-  $('#cmdBar').hidden = false;
+  setCmd(true);
   $('#cmdShow').hidden = false;
   $('#cmdShow').textContent = `Open “${String(label || new URL(url).hostname).slice(0, 40)}”`;
   $('#cmdShow').dataset.tip = url;
@@ -4024,28 +4087,55 @@ async function runActions(actions) {
     } catch (e) { toast(e.message, { err: true }); }
   }
 }
+/** The first sentence or two: what gets read aloud from a longer on-screen answer. */
+function spokenPart(text) {
+  const t = plainMd(text).replace(/\s+/g, ' ').trim();
+  const m = t.match(/^(.{20,260}?[.!?])(\s|$)/);
+  return m ? m[1] : t.slice(0, 260);
+}
 async function askProducer(text) {
   text = String(text || '').trim();
-  if (!text) return;
+  if (!text || S.ai.busy) return;
   if (!isHost()) return toast('Only the host can direct the AI.', { err: true });
   const prov = S.aiProv, key = store.get('aiKey:' + prov, '');
-  if (!key) { setTab('ai'); $('#aiKey').focus(); return toast(`Add your ${AI_NAME[prov]} key so ${S.aiName} can help.`, { err: true }); }
-  setAiStatus('thinking'); busy($('#cmdGo'));
+  if (!key) { setTab('ai'); setAiSetup(true); return toast(`Add your ${AI_NAME[prov]} key so ${S.aiName} can help.`, { err: true }); }
+  const history = S.ai.items.filter((i) => i.done && !i.error && (i.role === 'user' || i.role === 'assistant')).slice(-10).map((i) => ({ role: i.role, text: i.text }));
+  // a fresh answer takes over the AI window, unless the host pins an older one again
+  for (const it of S.ai.items) if (it.pinned) upsertAI({ id: it.id, pinned: false });
+  const ans = { id: uid(), role: 'assistant', text: '', provider: prov, done: false, actions: [] };
   upsertAI({ id: uid(), role: 'user', text, provider: prov, done: true });
-  const history = S.ai.items.filter((i) => i.done && !i.error && (i.role === 'user' || i.role === 'assistant')).slice(-8).map((i) => ({ role: i.role, text: i.say || i.text }));
+  upsertAI(ans);
+  S.ai.busy = true; setAiStatus('thinking');
+  $('#cmdReply').textContent = ''; $('#cmdReply').classList.remove('err'); $('#cmdActs').replaceChildren(); $('#cmdShow').hidden = true;
+  let reply = '';
+  const fail = (msg) => { upsertAI({ ...ans, text: msg, error: true, done: true }); $('#cmdReply').textContent = msg; $('#cmdReply').classList.add('err'); };
   try {
-    const res = await fetch('/api/ai', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mode: 'agent', provider: prov, apiKey: key, model: store.get('aiModel:' + prov, ''), messages: history, ctx: producerCtx() }) });
-    const j = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(j.error || 'The AI request failed.');
-    upsertAI({ id: uid(), role: 'assistant', text: j.show || j.say || 'Done.', say: j.say, provider: prov, done: true });
-    $('#cmdReply').textContent = j.say || ''; $('#cmdReply').classList.remove('err');
-    await runActions(j.actions);
-    if (j.say) await speak(j.say);
+    const res = await fetch('/api/ai', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mode: 'agent', provider: prov, apiKey: key, model: store.get('aiModel:' + prov, ''), messages: [...history, { role: 'user', text }], ctx: producerCtx() }) });
+    if (!res.ok) { const j = await res.json().catch(() => ({})); throw new Error(j.error || `The AI request failed (${res.status}).`); }
+    const reader = res.body.getReader(), dec = new TextDecoder();
+    let buf = '', failed = '';
+    const onEvent = async (ev) => {
+      if (ev.t === 'text') { reply += ev.d; ans.text = reply; upsertAI({ id: ans.id, text: reply }); $('#cmdReply').textContent = plainMd(reply); }
+      else if (ev.t === 'action' && ev.a) { ans.actions = [...ans.actions, ev.a]; upsertAI({ id: ans.id, actions: ans.actions }); $('#cmdActs').append(actChip(ev.a, false)); await runActions([ev.a]); }
+      else if (ev.t === 'error') failed = ev.message || 'The AI request failed.';
+    };
+    for (;;) {
+      const { value, done } = await reader.read();
+      if (value) buf += dec.decode(value, { stream: true });
+      let n;
+      while ((n = buf.indexOf('\n')) >= 0) { const line = buf.slice(0, n).trim(); buf = buf.slice(n + 1); if (line) { try { await onEvent(JSON.parse(line)); } catch (e) { if (!(e instanceof SyntaxError)) throw e; } } }
+      if (done) break;
+    }
+    if (failed) throw new Error(failed);
+    if (!reply.trim()) reply = ans.actions.length ? 'Done.' : '(No answer came back.)';
+    upsertAI({ id: ans.id, text: reply, done: true });
+    $('#cmdReply').textContent = plainMd(reply);
+    S.ai.busy = false;
+    await speak(spokenPart(reply));
   } catch (e) {
-    upsertAI({ id: uid(), role: 'assistant', text: e.message, provider: prov, error: true, done: true });
-    $('#cmdReply').textContent = e.message; $('#cmdReply').classList.add('err');
+    fail(e.message === 'Failed to fetch' ? 'Could not reach the AI. Check your connection and try again.' : e.message);
     toast(e.message, { err: true });
-  } finally { busy($('#cmdGo'), false); if (S.aiStatus !== 'listening') setAiStatus('idle'); }
+  } finally { S.ai.busy = false; if (S.aiStatus === 'thinking') setAiStatus('idle'); else renderAIPanel(); }
 }
 // Voice out: OpenAI voice goes into the stream mix; the browser voice is heard only by the host.
 async function speak(text) {
@@ -4099,7 +4189,7 @@ function drawOrb(cx, cy, r, t) {
 }
 
 // ---------------------------------------------------------------- one speech recogniser for captions and the AI
-const speechHub = { rec: null, lang: '', ptt: false, armed: 0 };
+const speechHub = { rec: null, lang: '', ptt: false, armed: 0, target: '#cmdInput' };
 function speechWanted() {
   const c = S.state.captions || {};
   const caps = !!(S.studio && c.on && S.local.micOn && S.local.audio);
@@ -4125,8 +4215,9 @@ function startSpeech(lang) {
     if (!text) return;
     if (cap.want) { showCaption(S.id, S.name || 'You', text, !!fin); sendCaption(text, !!fin); }
     if (speechHub.ptt) {
-      $('#cmdInput').value = text;
-      if (fin) { speechHub.ptt = false; $('#cmdInput').value = ''; syncCaptions(); askProducer(fin.trim()); }
+      const box = $(speechHub.target || '#cmdInput');
+      box.value = text;
+      if (fin) { speechHub.ptt = false; box.value = ''; autoGrow(box); syncCaptions(); setAiStatus('idle'); askProducer(fin.trim()); }
       return;
     }
     if (S.aiWake && fin) {
@@ -4229,8 +4320,6 @@ function openInvite() {
 }
 $('#copyCode').onclick = () => copy(S.studio, 'Room code copied.');
 $('#copyLink').onclick = () => copy(inviteLink(), 'Invite link copied.');
-$('#inviteTop').onclick = openInvite;
-$('#inviteDock').onclick = openInvite;
 $('#inviteCrew').onclick = openInvite;
 $('#addSlot').onclick = openInvite;
 $('#enterTop').onclick = () => (S.studio ? openInvite() : openEnter('create'));
@@ -4256,7 +4345,7 @@ addEventListener('keydown', (e) => {
     delete: () => { if (editor.on && editor.sel) deleteEl(editor.sel); },
     backspace: () => { if (editor.on && editor.sel) deleteEl(editor.sel); },
     escape: () => editor.on && setEditing(false),
-    '/': () => { setTab('chat'); $('#chatInput').focus(); },
+    '/': () => { if (isHost() && S.studio) setCmd(true); else { setTab('chat'); $('#chatInput').focus(); } },
   }[k];
   if (act) { e.preventDefault(); act(); }
 });

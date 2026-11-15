@@ -205,3 +205,38 @@ The geometric mean across all eight measures is 3.31× (231% better).
   - `npm run fx:live`, now in CI, runs the real app twice. With Chromium's green fake camera, the screen is found and there's no warning. With a room camera that has no screen, the warning shows and "Use Blur" switches to Blur. Blur and Replace never warn.
   - Screenshots: `audit/screens/fx-green-*.png`.
 - **Limit:** fine hair strands thinner than the model can see are still smoothed into the head outline rather than kept strand by strand.
+
+## V3: chrome, one AI assistant, one composer
+See `AUDIT-V3.md` for the findings and plan. Screens: `audit/screens/v3-before` → `audit/screens/v3-after` (1440 / 1024 / 390).
+- **Header:**
+  - Just the wordmark until you're in a studio, so a title saved in an earlier session no longer appears while you're logged out or outside a studio. Inside a studio it shows the title and a plain-text connection status.
+  - One button family: same height, radius and weight. Secondary buttons are quiet outlines. One primary button, which reads "Enter studio" or "Invite"; "Room details" opened the same dialog, so it's gone.
+  - "Studio offline" is no longer shown on the home screen.
+- **Filler copy removed:**
+  - the header tagline
+  - "Your studio. Your conversation."
+  - "Your crew, connected."
+  - the marketing panel subtitles (they're now one functional line each)
+  - The home stage text now says what the product does.
+- **Dock:** the Invite and Settings duplicates are gone (the header and the rail have them). There's a new assistant button, and "Leave" shortens on phones so the dock fits at 390.
+- **AI, one assistant:**
+  - The AI panel is a conversation with your assistant (default name Sam) that both answers questions and runs the studio. It replaces the separate "On-air AI" research box and the stage-only producer.
+  - Setup (provider, key, model, name, voice, wake word) folds behind a settings button. It opens by itself only until a key is saved.
+- **AI streams and acts:** `/api/ai` `mode: 'agent'` streams NDJSON events.
+  - Claude gets real tool definitions (open a page, switch scene, present, stop, banner, hide banner, countdown) plus web search, in a tool loop. Tool input is validated, and non-https links are refused.
+  - ChatGPT, Gemini and Grok reply with a JSON object mapped onto the same events.
+  - Actions run as they arrive and show as chips under the answer.
+  - The old plain-text research endpoint is removed.
+- **On stage only when wanted:**
+  - The permanent "Sam" chip over the program video is gone.
+  - The assistant opens from the dock button or the `/` key in a floating bar that closes with Esc.
+  - Each answer has **Show on stage** / **On stage**, which adds or removes the AI window without changing the scene. Pinning an older answer keeps it there; a new question takes over.
+  - The AI window's empty state no longer shows editor instructions to viewers.
+- **One composer** for chat, the AI panel and the command bar:
+  - a rounded field that grows with the text, with an inline send button
+  - Enter sends and Shift+Enter adds a line (chat is now multi-line)
+  - a mic button for talking to the AI.
+- **Verified:**
+  - `tests/ai.test.js` runs `lib/ai.js` against a local stand-in for the Claude API. It covers the streamed text, tool calls becoming actions, an invalid link refused, tool results sent back with errors flagged, the host key used, and the JSON path.
+  - round and round5 now cover "Show on stage keeps the scene" and "AI hidden until asked for".
+  - All 10 suites, `npm run check`, `npm run ui-kit` and `npm run fx:live` pass.

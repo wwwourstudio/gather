@@ -28,13 +28,19 @@ const SP = process.argv[2];
   await a.waitForTimeout(800);
   await b.screenshot({ path: SP + '/r-guest-slides.png' });
   // AI window (provider call mocked)
-  await a.route('**/api/ai', (r) => r.fulfill({ status: 200, contentType: 'text/plain', body: 'The 1966 World Cup final ended **4–2** to England after extra time.\n\n- Geoff Hurst scored a hat-trick\n- Played at Wembley' }));
+  const nd = (evs) => evs.map((e) => JSON.stringify(e)).join('\n') + '\n';
+  await a.route('**/api/ai', (r) => r.fulfill({ status: 200, contentType: 'application/x-ndjson', body: nd([{ t: 'text', d: 'The 1966 World Cup final ended **4–2** to England after extra time.' }, { t: 'text', d: '\n\n- Geoff Hurst scored a hat-trick\n- Played at Wembley' }, { t: 'done' }]) }));
+  await a.evaluate(() => localStorage.setItem('gather:aiVoice', '"off"'));
   await a.click('[data-tab="ai"]');
-  await a.fill('#aiKey', 'sk-ant-test-key-for-ui'); await a.press('#aiKey', 'Tab');
-  await a.click('#aiStage');
-  await a.fill('#aiInput', 'Who won the 1966 World Cup final and what was the score?'); await a.click('#aiAsk');
+  await a.fill('#aiKey', 'sk-ant-test-key-for-ui'); await a.press('#aiKey', 'Tab'); await a.click('#aiSetupDone');
+  await a.fill('#aiInput', 'Who won the 1966 World Cup final and what was the score?'); await a.press('#aiInput', 'Enter');
   await b.waitForFunction(() => window.__gather.ai.items.some(i => i.role === 'assistant' && i.done && i.text.includes('Hurst')), null, { timeout: 8000 });
-  console.log('3 AI answer synced to guest; scene:', await b.evaluate(() => window.__gather.state.scene));
+  const scene0 = await b.evaluate(() => window.__gather.state.scene);
+  await a.click('.ai-msg.assistant [data-stage]');
+  await b.waitForFunction(() => window.__gather.state.elements.some(e => e.type === 'ai'), null, { timeout: 5000 });
+  const sceneKept = (await b.evaluate(() => window.__gather.state.scene)) === scene0;
+  console.log('3 AI answer synced to guest and put on stage without changing the scene:', sceneKept, '| button now:', await a.textContent('.ai-msg.assistant [data-stage]'));
+  if (!sceneKept) console.log('FAIL showing an answer changed the scene');
   await a.waitForTimeout(600);
   await a.screenshot({ path: SP + '/r-host-ai.png' });
   // support card
