@@ -734,3 +734,67 @@ body.deck-closed .deck { padding-bottom: var(--sp-2); }
 .land-legal { margin: 0; font-size: var(--fs-12); color: var(--ink-3); }
 .land-legal a { color: var(--ink-3); }
 .land-legal a:hover { color: var(--ink); }
+
+/* ================================================================ sign in / create account
+   Two panes: why gather on the left (hidden on phones), the form on the right. Google first, then email. */
+.ac-card { width: 820px; padding: 0; display: grid; grid-template-columns: 300px minmax(0, 1fr); gap: 0; overflow: hidden; }
+.ac-card > form:first-child { position: absolute; inset: 0 0 auto auto; z-index: 3; } /* the close button sits outside the two columns */
+.ac-card.signed { width: 520px; grid-template-columns: 1fr; }
+.ac-card.signed .ac-side { display: none; }
+.ac-side { display: grid; align-content: start; gap: var(--sp-4); padding: var(--sp-8) var(--sp-6); background: radial-gradient(120% 80% at 0% 0%, color-mix(in srgb, var(--accent) 22%, transparent), transparent 60%), var(--surface-2); border-right: 1px solid var(--line); }
+.ac-mark { width: 40px; height: 40px; }
+.ac-side-h { margin: var(--sp-2) 0 0; color: var(--ink); font: 700 var(--fs-20)/1.25 var(--font-display); letter-spacing: -0.02em; }
+.ac-side-list { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--sp-3); }
+.ac-side-list li { display: flex; gap: var(--sp-2); align-items: center; color: var(--ink-2); font-size: var(--fs-13); }
+.ac-side-list .i { color: var(--accent-text); flex: none; }
+.ac-side-note { margin: auto 0 0; padding-top: var(--sp-6); color: var(--ink-3); font-size: var(--fs-12); }
+.ac-main { display: grid; gap: var(--sp-4); align-content: start; padding: var(--sp-8) var(--sp-8) var(--sp-6); min-width: 0; }
+.ac-main h2 { font: 700 var(--fs-24)/1.2 var(--font-display); letter-spacing: -0.02em; margin: 0; padding-right: var(--sp-10); }
+#acOut { display: grid; gap: var(--sp-4); }
+#acOut[hidden] { display: none; }
+/* Google: our own button in Google's style (white, the four-colour G) */
+.g-btn { display: flex; align-items: center; justify-content: center; gap: var(--sp-3); width: 100%; height: var(--h-lg); border-radius: var(--r-md); border: 1px solid #dadce0; background: #fff; color: #1f1f1f; font: 500 var(--fs-14) var(--font-ui); cursor: pointer; transition: background-color var(--dur) var(--ease-out), box-shadow var(--dur) var(--ease-out); }
+.g-btn[hidden] { display: none; }
+.g-btn:hover { background: #f8faff; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25); }
+.g-btn:focus-visible { box-shadow: var(--ring); outline: none; }
+.g-btn[aria-busy="true"] { opacity: 0.7; pointer-events: none; }
+.g-logo { width: 18px; height: 18px; flex: none; }
+.ac-or { display: flex; align-items: center; gap: var(--sp-3); margin: 0; color: var(--ink-3); font-size: var(--fs-12); }
+.ac-or[hidden] { display: none; }
+.ac-or::before, .ac-or::after { content: ""; flex: 1; height: 1px; background: var(--line); }
+.ac-form { gap: var(--sp-3); }
+/* new account: a photo next to the name */
+.ac-up { display: flex; align-items: flex-end; gap: var(--sp-3); }
+.ac-up[hidden] { display: none; }
+.ac-up .grow { flex: 1; min-width: 0; }
+.ac-up-av { position: relative; flex: none; width: 64px; height: 64px; border-radius: 50%; border: 1.5px dashed var(--line-2); background: var(--surface-2); color: var(--ink-3); display: grid; place-items: center; cursor: pointer; padding: 0; transition: border-color var(--dur) var(--ease-out), color var(--dur) var(--ease-out); }
+.ac-up-av:hover { border-color: var(--accent); color: var(--accent-text); }
+.ac-up-av:focus-visible { box-shadow: var(--ring); outline: none; }
+.ac-up-av.has { border-style: solid; border-color: var(--line-2); }
+.ac-up-av img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; border-radius: 50%; }
+.ac-up-av.has #acUpAvatarIni { visibility: hidden; }
+.ac-up-plus { position: absolute; right: -2px; bottom: -2px; width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; background: var(--accent); color: #fff; border: 2px solid var(--surface); }
+.ac-up-plus .i { width: 12px; height: 12px; stroke-width: 2.5; }
+.pass-wrap { position: relative; display: block; }
+.pass-wrap input { width: 100%; padding-right: 40px; }
+.pass-eye { position: absolute; right: 4px; top: 50%; transform: translateY(-50%); }
+.pass-meter { display: flex; align-items: center; gap: 4px; margin-top: calc(-1 * var(--sp-1)); }
+.pass-meter[hidden] { display: none; }
+.pass-meter i { width: 36px; height: 4px; border-radius: 2px; background: var(--line-2); transition: background-color var(--dur) var(--ease-out); }
+.pass-meter span { margin-left: var(--sp-2); font-size: var(--fs-11); color: var(--ink-3); }
+.pass-meter[data-score="0"] i:nth-child(1) { background: var(--danger); }
+.pass-meter[data-score="1"] i:nth-child(-n+1) { background: var(--warn); }
+.pass-meter[data-score="2"] i:nth-child(-n+2) { background: var(--accent); }
+.pass-meter[data-score="3"] i:nth-child(-n+3) { background: var(--ok); }
+.ac-agree { display: flex; align-items: flex-start; gap: var(--sp-2); font-size: var(--fs-13); color: var(--ink-2); line-height: 1.5; cursor: pointer; }
+.ac-agree[hidden] { display: none; }
+.ac-agree input { flex: none; width: 18px; height: 18px; margin: 1px 0 0; accent-color: var(--accent); cursor: pointer; }
+.ac-agree a, .ac-fine a { color: var(--accent-text); }
+.ac-fine { margin: 0; font-size: var(--fs-12); color: var(--ink-3); text-align: center; }
+.ac-fine[hidden] { display: none; }
+.ac-forgot { justify-self: center; }
+@media (max-width: 760px) {
+  .ac-card { width: 480px; grid-template-columns: 1fr; }
+  .ac-side { display: none; }
+  .ac-main { padding: var(--sp-6) var(--sp-5); }
+}

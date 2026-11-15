@@ -1,6 +1,6 @@
 import { createAudioChain, createVideoFx, needsProcessing } from './fx.js';
 import { icon, busy, togglePopover } from './ui.js';
-import { configureGoogle, googleConfigured, googleSignedIn, googleToken, googleSignOut, saveToDrive, findLiveChat, pollLiveChat, ytModerate, renderGoogleButton } from './google.js';
+import { configureGoogle, googleConfigured, googleSignedIn, googleToken, googleSignOut, saveToDrive, findLiveChat, pollLiveChat, ytModerate, googleSignInToken } from './google.js';
 import { TIERS, tierOf, drawOrder, isSystem, ensureSystem, blockerFor, overlaps, snapMove, snapResize, resolve, SAFE, GRID, PRESETS, materialize } from './layout.js';
 // gather — client. Full-mesh WebRTC studio with a canvas-composited stage.
 // The stage canvas is the single source of truth for what you see AND what gets recorded.
@@ -2537,9 +2537,24 @@ function renderAcctDlg() {
   $('#acGo').textContent = acView === 'up' ? 'Create account' : 'Sign in';
   $('#acPass').autocomplete = acView === 'up' ? 'new-password' : 'current-password';
   $('#acWhy').hidden = !!u || !S.afterSignIn;
-  $('#acAlt').hidden = !!u || !googleConfigured() || acView === 'forgot' || acView === 'reset';
-  if (!$('#acAlt').hidden && !$('#acGoogle').childElementCount) renderGoogleButton($('#acGoogle'), googleCredential).catch(() => { $('#acAlt').hidden = true; });
-  $('#acH').textContent = u ? 'Your account' : acView === 'forgot' ? 'Reset your password' : acView === 'reset' ? 'Choose a new password' : acView === 'up' ? 'Create your gather account' : 'Welcome back.';
+  const outView = !u && acView !== 'forgot' && acView !== 'reset', up = acView === 'up';
+  $('#acGoogleBtn').hidden = $('#acOr').hidden = !outView || !googleConfigured();
+  $('#acGoogleText').textContent = up ? 'Sign up with Google' : 'Continue with Google';
+  $('#acAgreeRow').hidden = !up; $('#acMeter').hidden = !up; $('#acForgot').hidden = up;
+  $('#acFine').hidden = !outView || up;
+  $('#acPass').placeholder = up ? 'At least 8 characters' : 'Your password';
+  const av = store.get('avatar', '');
+  $('#acUpAvatarImg').hidden = !av; if (av) $('#acUpAvatarImg').src = av;
+  $('#acUpAvatar').classList.toggle('has', !!av);
+  $('#acUpAvatar').setAttribute('aria-label', av ? 'Change your profile photo' : 'Add a profile photo');
+  document.querySelector('#acctDlg .ac-card').classList.toggle('signed', !!u);
+  $('#acH').textContent = u ? 'Your account' : acView === 'forgot' ? 'Reset your password' : acView === 'reset' ? 'Choose a new password' : acView === 'up' ? 'Create your account' : 'Welcome back';
+  if (u) {
+    // accounts made with Google have no password: no change-password form, and deleting asks for the email
+    $('#acPwDetails').hidden = !u.hasPassword;
+    $('#acDelLabel').textContent = u.hasPassword ? 'Password' : 'Type your email to confirm';
+    $('#acDelPass').type = u.hasPassword ? 'password' : 'email';
+  }
   if (u) {
     if (document.activeElement !== $('#acNick')) $('#acNick').value = u.name;
     $('#acEmailShow').textContent = u.email;
@@ -2558,11 +2573,44 @@ async function finishSignIn(r, isNew, local = collectSettings()) {
   const next = S.afterSignIn; S.afterSignIn = null;
   if (next) { $('#acctDlg').close(); next(); }
 }
-async function googleCredential(credential) {
+async function googleSignIn() {
   acErr('#acErr', '');
-  try { const r = await acctApi('google', { credential }); await finishSignIn(r, !!r.created); }
-  catch (err) { acErr('#acErr', err.message); }
+  if (acView === 'up' && !$('#acAgree').checked) { acErr('#acErr', 'Tick the box to agree to the Terms and Privacy policy first.'); return $('#acAgree').focus(); }
+  busy($('#acGoogleBtn'));
+  try {
+    const accessToken = await googleSignInToken();
+    // Signing in from the "Sign in" tab is covered by the notice under the form, so agreeing goes with it.
+    const r = await acctApi('google', { accessToken, agree: true });
+    await finishSignIn(r, !!r.created);
+  } catch (err) { acErr('#acErr', err.message); }
+  finally { busy($('#acGoogleBtn'), false); }
 }
+$('#acGoogleBtn').onclick = googleSignIn;
+// sign-up extras: a profile photo, show/hide password, a strength hint
+$('#acUpAvatar').onclick = () => $('#acUpAvatarFile').click();
+$('#acUpAvatarFile').onchange = async (e) => {
+  const f = e.target.files[0]; e.target.value = '';
+  if (!f) return;
+  try { store.set('avatar', await squareThumb(f)); renderAcctDlg(); renderPreview(); } catch (err) { acErr('#acErr', err.message); }
+};
+$('#acPassEye').onclick = () => {
+  const show = $('#acPass').type === 'password';
+  $('#acPass').type = show ? 'text' : 'password';
+  $('#acPassEye').setAttribute('aria-pressed', String(show));
+  $('#acPassEye').setAttribute('aria-label', show ? 'Hide password' : 'Show password');
+  $('#acPassEye use').setAttribute('href', show ? '/icons.svg#i-eye-off' : '/icons.svg#i-eye');
+};
+function passScore(p) {
+  if (p.length < 8) return 0;
+  const kinds = [/[a-z]/, /[A-Z]/, /\d/, /[^\w\s]/].filter((r) => r.test(p)).length;
+  return p.length >= 14 || (p.length >= 10 && kinds >= 3) ? 3 : kinds >= 2 || p.length >= 10 ? 2 : 1;
+}
+$('#acPass').addEventListener('input', () => {
+  if (acView !== 'up') return;
+  const p = $('#acPass').value, sc = passScore(p);
+  $('#acMeter').dataset.score = p ? sc : '';
+  $('#acMeterText').textContent = !p ? '' : sc === 0 ? `${8 - p.length} more character${8 - p.length === 1 ? '' : 's'}` : ['', 'Okay', 'Good', 'Strong'][sc];
+});
 /** Starting a studio needs an account (guests don't): sign in first, then carry on to the green room. */
 function needAccountThen(fn) {
   if (!S.requireAccount || acct.user) return fn();
@@ -2586,7 +2634,8 @@ $('#acForm').addEventListener('submit', async (e) => {
     const body = { email: $('#acEmail').value, password: $('#acPass').value };
     const local = collectSettings();
     let r;
-    if (acView === 'up') r = await acctApi('signup', { ...body, name: $('#acName').value || S.name });
+    if (acView === 'up' && !$('#acAgree').checked) { acErr('#acErr', 'Tick the box to agree to the Terms and Privacy policy.'); $('#acAgree').focus(); return; }
+    if (acView === 'up') r = await acctApi('signup', { ...body, agree: true, name: $('#acName').value || S.name });
     else r = await acctApi('login', body);
     $('#acPass').value = '';
     await finishSignIn(r, acView === 'up', local);

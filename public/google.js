@@ -27,16 +27,18 @@ function loadGis() {
   return gis;
 }
 
-/** "Sign in with Google": renders Google's own button into `el`; `onCredential` gets the ID token to check on the server. */
-export async function renderGoogleButton(el, onCredential) {
-  if (!clientId || !el) return false;
-  await loadGis();
-  const id = window.google?.accounts?.id;
-  if (!id) return false;
-  id.initialize({ client_id: clientId, callback: (r) => r?.credential && onCredential(r.credential), ux_mode: 'popup', auto_select: false });
-  el.replaceChildren();
-  id.renderButton(el, { theme: 'filled_black', size: 'large', shape: 'rectangular', text: 'continue_with', width: Math.min(400, el.clientWidth || 360) });
-  return true;
+/** "Continue with Google" from gather's own button: Google's account picker opens in a popup and hands back a
+ *  short-lived access token for the basic profile, which the server checks with Google before signing you in. */
+export async function googleSignInToken() {
+  const oauth2 = await loadGis();
+  return new Promise((res, rej) => {
+    const c = oauth2.initTokenClient({
+      client_id: clientId, scope: 'openid email profile', prompt: 'select_account',
+      callback: (r) => (r?.access_token ? res(r.access_token) : rej(new Error(r?.error_description || 'Google sign-in didn’t finish.'))),
+      error_callback: (e) => rej(new Error(e?.type === 'popup_closed' ? 'Google sign-in was closed before it finished.' : e?.type === 'popup_failed_to_open' ? 'Your browser blocked the Google window. Allow pop-ups for this site and try again.' : 'Google sign-in didn’t finish.')),
+    });
+    c.requestAccessToken();
+  });
 }
 
 /** An access token covering `keys` (e.g. ['drive']). Opens Google's consent popup when needed, so call from a click. */

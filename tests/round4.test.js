@@ -12,7 +12,7 @@ const fakeSR = () => {
   // 1 account: sign up, profile, settings sync
   await a.goto((process.env.GATHER_URL || 'http://localhost:8080') + '/');
   await a.click('#userBtn'); await a.click('#acTabs [data-ac="up"]');
-  await a.fill('#acName', 'Alex Morgan'); await a.fill('#acEmail', email); await a.fill('#acPass', 'correct horse'); await a.click('#acGo');
+  await a.fill('#acName', 'Alex Morgan'); await a.fill('#acEmail', email); await a.fill('#acPass', 'correct horse'); await a.check('#acAgree'); await a.click('#acGo');
   await a.waitForFunction(() => window.__acct.user, null, { timeout: 8000 });
   console.log('1 signed up as', await a.evaluate(() => window.__acct.user.name), '| header shows:', await a.textContent('#userLabel'));
   await a.click('#acctDlg .modal-close');
