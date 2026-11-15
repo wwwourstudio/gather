@@ -1,0 +1,14 @@
+/* Privacy and terms pages: one readable column on the app's tokens. */
+body { min-height: 100vh; background: var(--bg); }
+.legal { max-width: 720px; margin: 0 auto; padding: var(--sp-8) var(--sp-5) var(--sp-12); color: var(--ink-2); font-size: var(--fs-14); line-height: 1.7; }
+.legal-logo { display: inline-block; margin-bottom: var(--sp-8); color: var(--ink); text-decoration: none; font: 800 var(--fs-24)/1 var(--font-display); letter-spacing: -0.045em; }
+.legal-logo i { color: var(--accent); font-style: normal; }
+.legal h1 { margin: 0; color: var(--ink); font: 700 var(--fs-32)/1.15 var(--font-display); letter-spacing: -0.03em; }
+.legal-date { margin: var(--sp-2) 0 var(--sp-6); color: var(--ink-3); font-size: var(--fs-13); }
+.legal h2 { margin: var(--sp-8) 0 var(--sp-2); color: var(--ink); font-size: var(--fs-16); font-weight: 600; }
+.legal ul { padding-left: var(--sp-5); }
+.legal li { margin: var(--sp-2) 0; }
+.legal b { color: var(--ink); font-weight: 600; }
+.legal a { color: var(--accent-text); }
+.legal code { font-size: var(--fs-12); background: var(--surface-2); padding: 1px 6px; border-radius: 4px; }
+.legal-links { margin-top: var(--sp-10); padding-top: var(--sp-5); border-top: 1px solid var(--line); }

@@ -731,3 +731,6 @@ body.deck-closed .deck { padding-bottom: var(--sp-2); }
 .tour-text { margin: 0; color: var(--ink-2); font-size: var(--fs-13); line-height: 1.55; }
 .tour-nav { display: flex; align-items: center; gap: var(--sp-2); margin-top: var(--sp-2); }
 @media (max-width: 900px) { .deck-head { position: relative; padding-right: 36px; } .deck-toggle { position: absolute; right: 0; top: 0; } }
+.land-legal { margin: 0; font-size: var(--fs-12); color: var(--ink-3); }
+.land-legal a { color: var(--ink-3); }
+.land-legal a:hover { color: var(--ink); }

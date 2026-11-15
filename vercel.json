@@ -7,7 +7,9 @@
   "rewrites": [
     { "source": "/s/:code", "destination": "/index.html" },
     { "source": "/c/:code", "destination": "/index.html" },
-    { "source": "/w/:code", "destination": "/watch.html" }
+    { "source": "/w/:code", "destination": "/watch.html" },
+    { "source": "/privacy", "destination": "/privacy.html" },
+    { "source": "/terms", "destination": "/terms.html" }
   ],
   "headers": [
     {
