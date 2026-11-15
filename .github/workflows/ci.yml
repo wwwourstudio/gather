@@ -25,7 +25,7 @@ jobs:
         run: npm test
       - name: Design-system contract
         run: |
-          PORT=8080 node server.js &
+          PORT=8080 ALLOW_ANON_STUDIOS=1 node server.js &
           npx --yes wait-on@8.0.1 http://localhost:8080/ui-kit.html
           npm run ui-kit
       - name: Camera effects in the app (green-screen detection)

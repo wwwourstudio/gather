@@ -27,6 +27,18 @@ function loadGis() {
   return gis;
 }
 
+/** "Sign in with Google": renders Google's own button into `el`; `onCredential` gets the ID token to check on the server. */
+export async function renderGoogleButton(el, onCredential) {
+  if (!clientId || !el) return false;
+  await loadGis();
+  const id = window.google?.accounts?.id;
+  if (!id) return false;
+  id.initialize({ client_id: clientId, callback: (r) => r?.credential && onCredential(r.credential), ux_mode: 'popup', auto_select: false });
+  el.replaceChildren();
+  id.renderButton(el, { theme: 'filled_black', size: 'large', shape: 'rectangular', text: 'continue_with', width: Math.min(400, el.clientWidth || 360) });
+  return true;
+}
+
 /** An access token covering `keys` (e.g. ['drive']). Opens Google's consent popup when needed, so call from a click. */
 export async function googleToken(keys) {
   if (!clientId) throw new Error('Google sign-in isn’t set up on this server yet (GOOGLE_CLIENT_ID).');

@@ -19,7 +19,7 @@ const wait = (port) => new Promise((res, rej) => { const until = Date.now() + 10
 
 cf.listen(0, async () => {
   const port = 8097;
-  const env = { ...process.env, PORT: String(port), CF_TURN_KEY_ID: 'key-123', CF_TURN_API_TOKEN: 'secret-token-456', CF_TURN_API: `http://127.0.0.1:${cf.address().port}` };
+  const env = { ...process.env, PORT: String(port), ALLOW_ANON_STUDIOS: '1', CF_TURN_KEY_ID: 'key-123', CF_TURN_API_TOKEN: 'secret-token-456', CF_TURN_API: `http://127.0.0.1:${cf.address().port}` };
   for (const k of ['REDIS_URL', 'KV_REST_API_URL', 'KV_REST_API_TOKEN', 'UPSTASH_REDIS_REST_URL', 'UPSTASH_REDIS_REST_TOKEN']) delete env[k];
   const srv = spawn(process.execPath, ['server.js'], { cwd: path.resolve(__dirname, '..'), env, stdio: 'ignore' });
   let ok = true;

@@ -321,3 +321,22 @@ Five reviewers (flow, visual, layout, interaction/accessibility, simplification)
   - Single-key shortcuts don't fire while a control has focus, and can be turned off in Help.
 - **Copy:** panel subtitles, "Scroll to switch", the X/TikTok "soon" rows and the extra Invite buttons are gone. One verb per action. "Live" means only broadcasting.
 - **Verified:** all 12 suites (updated for the new structure), `npm run check` and `npm run ui-kit` (with the contract updated to the V4 spec) pass.
+
+## Sign-in to host, Google sign-in, backstage, quick invite, folding deck, host tour
+- **Starting a studio needs an account.** Guests joining never need one. This is enforced on the server (`ALLOW_ANON_STUDIOS=1` turns it off, which the test servers use). The landing page and the green room ask you to sign in first, then carry on to the green room.
+- **Google sign-in.** "Continue with Google" appears in the account dialog when `GOOGLE_CLIENT_ID` is set.
+  - The ID token is checked with Google's tokeninfo endpoint, and must be for this site (audience), from Google (issuer), unexpired and with a verified email.
+  - Sign-in finds the account by Google ID, otherwise links an existing account with the same email, otherwise creates one.
+  - Google-only accounts confirm deletion by typing their email.
+  - Tests: `tests/acct.test.js`.
+- **Backstage.**
+  - New guests wait off stage. The host gets a toast with "Put on stage", and can click anyone's picture to bring them on or send them back.
+  - People cards say On stage or Backstage.
+  - Show → "Guests go straight on stage" restores the old behaviour.
+- **Quick invite.** The footer shows Copy link and the studio code (click to copy) next to "Waiting for guests".
+- **Folding deck.** A chevron hides or shows Scenes / In the studio and the choice is remembered. Clicking a deck tab opens it again.
+- **Host walk-through.**
+  - Ten steps, each lighting up one part of the studio: stage, scenes, backstage, present, record, Show, Look, AI producer, invite, go live.
+  - It runs once, the first time you host (not under browser automation), and any time from Help → "Take the studio tour".
+  - Esc or arrow keys work, and steps whose part isn't on screen are skipped.
+- **Verified:** all 13 suites pass, including the new acct test and the backstage, deck and tour checks in `feat`.

@@ -24,7 +24,7 @@ const check = (name, cond, detail = '') => { console.log(`${cond ? 'ok  ' : 'FAI
   const sinks = RTMP.map((port, i) => ({ port, key: `key-${i ? 'twitch' : 'youtube'}-${crypto.randomBytes(4).toString('hex')}`, file: path.join(TMP, `out${i}.flv`) }));
   for (const s of sinks) s.proc = start('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y', '-listen', '1', '-i', `rtmp://127.0.0.1:${s.port}/live/${s.key}`, '-c', 'copy', s.file]);
   const relay = start(process.execPath, ['relay/server.js'], { PORT: String(RELAY), RELAY_SECRET: SECRET });
-  const env = { PORT: String(GATHER), RELAY_URL: `http://127.0.0.1:${RELAY}`, RELAY_SECRET: SECRET };
+  const env = { PORT: String(GATHER), ALLOW_ANON_STUDIOS: '1', RELAY_URL: `http://127.0.0.1:${RELAY}`, RELAY_SECRET: SECRET };
   for (const k of ['REDIS_URL', 'KV_REST_API_URL', 'KV_REST_API_TOKEN', 'UPSTASH_REDIS_REST_URL', 'UPSTASH_REDIS_REST_TOKEN']) env[k] = '';
   const gather = start(process.execPath, ['server.js'], env);
   await up(`http://127.0.0.1:${RELAY}/health`); await up(`http://127.0.0.1:${GATHER}/`);

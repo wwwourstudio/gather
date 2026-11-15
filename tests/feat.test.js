@@ -8,6 +8,17 @@ const SP = process.argv[2];
   await a.waitForSelector('#inviteDlg[open]'); const code = await a.textContent('#inviteCode'); await a.click('#inviteDlg .modal-close');
   await b.goto((process.env.GATHER_URL || 'http://localhost:8080') + '/s/' + code); await b.waitForSelector('#enterDlg[open]'); await b.fill('#enterName', 'Jordan Lee'); await b.click('#enterGo');
   await b.waitForFunction(() => [...window.__gather.peers.values()].some(p => p.conn === 'connected'), null, { timeout: 15000 });
+  // 0. backstage: the guest waits off stage until the host clicks their picture; the deck folds away and back
+  const bid = await b.evaluate(() => window.__gather.id);
+  const offFirst = await a.evaluate((id) => !window.__gather.state.stage.includes(id), bid);
+  await a.click('[data-deck="people"]'); await a.click(`#card-${bid} .crew-thumb`);
+  await b.waitForFunction((id) => window.__gather.state.stage.includes(id), bid, { timeout: 5000 });
+  console.log('0 guest arrived backstage:', offFirst, '| clicked onto stage:', true, '| quick invite in footer:', await a.isVisible('#noteLink') || await a.isVisible('#guide'));
+  if (!offFirst) console.log('FAIL the guest went straight on stage');
+  await a.click('#deckToggle'); const folded = await a.isHidden('#deckBody'); await a.click('#deckToggle');
+  console.log('  deck folds away and back:', folded && await a.isVisible('#deckBody'));
+  if (!folded) console.log('FAIL the deck did not fold');
+  await a.click('[data-deck="scenes"]');
   // 1. template
   await a.click('[data-tab="look"]'); await a.click('.look-seg:visible [data-look="layouts"]'); await a.click('.tpl:has-text("Chat-led show")');
   await b.waitForFunction(() => window.__gather.state.layout === 'custom' && window.__gather.state.scene === 'p-chat' && window.__gather.state.elements.some(e => e.type === 'chat'), null, { timeout: 5000 });
@@ -52,6 +63,13 @@ const SP = process.argv[2];
   console.log('guest sees host-only controls:', JSON.stringify({ layouts: await b.isVisible('[data-tab="look"]'), stream: await b.isVisible('#liveTop'), brand: await b.isVisible('[data-tab="show"]'), scenes: await b.isVisible('#sceneStrip'), record: await b.isVisible('#recBtn'), chat: await b.isVisible('[data-tab="chat"]'), settings: await b.isVisible('[data-tab="settings"]') })); await b.screenshot({ path: SP + '/f-guest.png' });
   // edit mode screenshot
   await a.click('[data-tab="look"]'); await a.click('.look-seg:visible [data-look="layouts"]'); await a.click('#editToggle'); await a.waitForTimeout(300); await a.screenshot({ path: SP + '/f-edit.png' });
+  // the host walk-through, from Help
+  await a.keyboard.press('Escape').catch(() => {});
+  await a.click('#helpTop'); await a.click('#tourStart');
+  const steps = Number((await a.textContent('#tourStep')).split(' of ')[1]);
+  for (let i = 0; i < steps; i++) await a.click('#tourNext');
+  console.log('9 walk-through:', steps, 'steps, closed at the end:', await a.isHidden('#tour'));
+  if (steps < 8 || !(await a.isHidden('#tour'))) console.log('FAIL the walk-through did not run through');
   console.log('errors A', a.errs, 'B', b.errs);
   await browser.close();
 })().catch(e => { console.error('FAIL', e.message); process.exit(1); });

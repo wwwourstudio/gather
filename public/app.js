@@ -1,6 +1,6 @@
 import { createAudioChain, createVideoFx, needsProcessing } from './fx.js';
 import { icon, busy, togglePopover } from './ui.js';
-import { configureGoogle, googleConfigured, googleSignedIn, googleToken, googleSignOut, saveToDrive, findLiveChat, pollLiveChat, ytModerate } from './google.js';
+import { configureGoogle, googleConfigured, googleSignedIn, googleToken, googleSignOut, saveToDrive, findLiveChat, pollLiveChat, ytModerate, renderGoogleButton } from './google.js';
 import { TIERS, tierOf, drawOrder, isSystem, ensureSystem, blockerFor, overlaps, snapMove, snapResize, resolve, SAFE, GRID, PRESETS, materialize } from './layout.js';
 // gather — client. Full-mesh WebRTC studio with a canvas-composited stage.
 // The stage canvas is the single source of truth for what you see AND what gets recorded.
@@ -610,7 +610,11 @@ async function onServer(m) {
       sysMsg(`${p.name} joined the studio`);
       toast(`${p.name} joined`);
       chime();
-      if (isHost() && !S.state.stage.includes(p.id) && S.state.stage.length < MAX) setStage({ stage: [...S.state.stage, p.id] });
+      if (isHost() && !S.state.stage.includes(p.id) && S.state.stage.length < MAX) {
+        // Guests wait backstage until the host brings them on (or straight on, if the host chose that).
+        if (store.get('autoStage', false)) setStage({ stage: [...S.state.stage, p.id] });
+        else { toast(`${p.name} is backstage`, { action: ['Put on stage', () => toggleStage(p.id)], ms: 10000 }); }
+      }
       renderAll();
       break;
     }
@@ -1284,6 +1288,7 @@ api('config').then((c) => {
   configureGoogle(c.googleClientId); renderGoogle();
   S.houseAI = c.houseAI || null; renderAIPanel();
   S.relayOn = !!c.relay; renderLive();
+  S.requireAccount = !!c.requireAccount;
   if (c.builtInTurn) $('#turnHint').textContent = 'gather’s built-in relay already connects guests on strict corporate and mobile networks. Add your own only if you need to.';
 }).catch(() => renderGoogle());
 
@@ -2531,6 +2536,9 @@ function renderAcctDlg() {
   $('#acNameRow').hidden = acView !== 'up';
   $('#acGo').textContent = acView === 'up' ? 'Create account' : 'Sign in';
   $('#acPass').autocomplete = acView === 'up' ? 'new-password' : 'current-password';
+  $('#acWhy').hidden = !!u || !S.afterSignIn;
+  $('#acAlt').hidden = !!u || !googleConfigured() || acView === 'forgot' || acView === 'reset';
+  if (!$('#acAlt').hidden && !$('#acGoogle').childElementCount) renderGoogleButton($('#acGoogle'), googleCredential).catch(() => { $('#acAlt').hidden = true; });
   $('#acH').textContent = u ? 'Your account' : acView === 'forgot' ? 'Reset your password' : acView === 'reset' ? 'Choose a new password' : acView === 'up' ? 'Create your gather account' : 'Welcome back.';
   if (u) {
     if (document.activeElement !== $('#acNick')) $('#acNick').value = u.name;
@@ -2539,6 +2547,27 @@ function renderAcctDlg() {
     $('#acAvatarIni').textContent = u.avatar ? '' : initials(u.name);
     renderSyncNote('Brand, scenes, support links and device preferences follow you.');
   }
+}
+async function finishSignIn(r, isNew, local = collectSettings()) {
+  setUser(r.user, r.token);
+  // Bring this browser's setup into a new account; an existing account's settings win on a new device.
+  if (isNew || !Object.keys(r.user.settings || {}).length) { const av = store.get('avatar', ''); await acctApi('update', { settings: local, ...(av && !r.user.avatar ? { avatar: av } : {}) }).then((x) => setUser(x.user)).catch(() => {}); }
+  else applySettings(r.user.settings);
+  acView = 'in'; renderAcctDlg();
+  toast(`Signed in as ${r.user.name}.`);
+  const next = S.afterSignIn; S.afterSignIn = null;
+  if (next) { $('#acctDlg').close(); next(); }
+}
+async function googleCredential(credential) {
+  acErr('#acErr', '');
+  try { const r = await acctApi('google', { credential }); await finishSignIn(r, !!r.created); }
+  catch (err) { acErr('#acErr', err.message); }
+}
+/** Starting a studio needs an account (guests don't): sign in first, then carry on to the green room. */
+function needAccountThen(fn) {
+  if (!S.requireAccount || acct.user) return fn();
+  S.afterSignIn = fn;
+  openAccount('in');
 }
 function openAccount(view) {
   acView = view || (acct.user ? 'in' : 'in');
@@ -2559,13 +2588,8 @@ $('#acForm').addEventListener('submit', async (e) => {
     let r;
     if (acView === 'up') r = await acctApi('signup', { ...body, name: $('#acName').value || S.name });
     else r = await acctApi('login', body);
-    setUser(r.user, r.token);
     $('#acPass').value = '';
-    // Bring this browser's setup into a new account; an existing account's settings win on a new device.
-    if (acView === 'up' || !Object.keys(r.user.settings || {}).length) { const av = store.get('avatar', ''); await acctApi('update', { settings: local, ...(av && !r.user.avatar ? { avatar: av } : {}) }).then((x) => setUser(x.user)).catch(() => {}); }
-    else applySettings(r.user.settings);
-    acView = 'in'; renderAcctDlg();
-    toast(`Signed in as ${r.user.name}.`);
+    await finishSignIn(r, acView === 'up', local);
   } catch (err) { acErr('#acErr', err.message); }
   finally { busy($('#acGo'), false); }
 });
@@ -3392,6 +3416,8 @@ function renderCrew() {
       if (p.me) { v.muted = true; const ov = outVideo(); if (ov) v.srcObject = new MediaStream([ov]); v.classList.toggle('mirror', !!S.videoFx.mirror); }
       else if (p.peer.stream.getTracks().length) { v.srcObject = p.peer.stream; playEl(v); }
       $('.ct-stage', li).addEventListener('click', () => toggleStage(p.id));
+      // the host clicks someone's picture to bring them on stage or send them backstage
+      $('.crew-thumb', li).addEventListener('click', (ev) => { if (isHost() && !ev.target.closest('.crew-tools')) toggleStage(p.id); });
       $('.ct-mute', li).addEventListener('click', () => { wsSend({ type: 'mute', id: p.id }); toast(`Muted ${p.name}.`); });
       $('.ct-kick', li).addEventListener('click', () => {
         const btn = $('.ct-kick', li);
@@ -3414,7 +3440,9 @@ function renderCrew() {
     const tags = $('.tagrow', li); tags.replaceChildren();
     const on = S.state.stage.includes(p.id);
     if (p.id === S.host) tags.insertAdjacentHTML('beforeend', '<span class="pill caps on-media">Host</span>');
-    if (on) tags.insertAdjacentHTML('beforeend', '<span class="pill caps accent">On stage</span>'); // "Live" only ever means broadcasting
+    tags.insertAdjacentHTML('beforeend', on ? '<span class="pill caps accent">On stage</span>' : '<span class="pill caps on-media">Backstage</span>'); // "Live" only ever means broadcasting
+    $('.crew-thumb', li).classList.toggle('pickable', host);
+    $('.crew-thumb', li).title = host ? (on ? `Click to send ${p.me ? 'yourself' : p.name} backstage` : `Click to put ${p.me ? 'yourself' : p.name} on stage`) : '';
     if (p.sharing) tags.insertAdjacentHTML('beforeend', '<span class="pill caps on-media">Presenting</span>');
     li.classList.toggle('on-stage', on);
     $('.crew-tools', li).hidden = !host;
@@ -3489,9 +3517,11 @@ function guideMark(k) { if (S.guide[k] || S.guide.finished) return; S.guide[k] =
 function renderDockNote() {
   const el = $('#dockNoteText');
   $('#dockNote').hidden = (!S.studio && S.phase !== 'reconnecting') || renderGuide();
+  $('#noteInvite').hidden = !S.studio;
   if (!S.studio) { el.textContent = S.phase === 'reconnecting' ? 'Reconnecting to your studio…' : ''; return; }
   const peers = [...S.peers.values()];
-  if (!peers.length) { el.textContent = 'Waiting for guests · share your room code'; return; }
+  $('#noteInvite').hidden = false; $('#noteCodeText').textContent = S.studio;
+  if (!peers.length) { el.textContent = 'Waiting for guests'; return; }
   const up = peers.filter((p) => p.conn === 'connected');
   const rtts = up.map((p) => p.rtt).filter((x) => x != null);
   const avg = rtts.length ? ` · ${Math.round(rtts.reduce((a, b) => a + b, 0) / rtts.length)} ms avg` : '';
@@ -4029,7 +4059,17 @@ function setDeck(name) {
   });
   $$('.deck-tabs button').forEach((b) => { const on = b.dataset.deck === name; b.classList.toggle('on', on); b.setAttribute('aria-selected', on); });
 }
-$$('.deck-tabs button').forEach((b) => b.addEventListener('click', () => setDeck(b.dataset.deck)));
+$$('.deck-tabs button').forEach((b) => b.addEventListener('click', () => { setDeck(b.dataset.deck); openDeck(); }));
+function setDeckClosed(closed) {
+  document.body.classList.toggle('deck-closed', closed);
+  $('#deckToggle').setAttribute('aria-expanded', String(!closed));
+  $('#deckToggle').setAttribute('aria-label', closed ? 'Show scenes and people' : 'Hide scenes and people');
+  $('#deckToggle').dataset.tip = closed ? 'Show' : 'Hide';
+  store.set('deckClosed', closed);
+}
+function openDeck() { if (document.body.classList.contains('deck-closed')) setDeckClosed(false); }
+$('#deckToggle').onclick = () => setDeckClosed(!document.body.classList.contains('deck-closed'));
+setDeckClosed(store.get('deckClosed', false));
 (() => {
   let lock = 0;
   const onWheel = (e) => {
@@ -4563,6 +4603,7 @@ $('#enterForm').addEventListener('submit', async (e) => {
   e.preventDefault();
   const name = $('#enterName').value.trim();
   if (!name) { $('#enterErr').textContent = 'Add your name so people know who you are.'; $('#enterErr').hidden = false; return $('#enterName').focus(); }
+  if (enterMode !== 'join' && !S.pendingStream && S.requireAccount && !acct.user) { $('#enterDlg').close(); return needAccountThen(() => openEnter('create')); }
   let code = enterMode === 'join' ? parseCode($('#enterCode').value) : (S.pendingStream?.code || newCode());
   if (!code) { $('#enterErr').textContent = 'Paste the studio code your host sent you.'; $('#enterErr').hidden = false; return $('#enterCode').focus(); }
   S.name = name; store.set('name', name); $('#nameInput').value = name;
@@ -4583,12 +4624,16 @@ function openInvite() {
   $('#inviteFine').textContent = `Anyone with this code can join. ${n} of ${MAX} seats taken.${isHost() ? ' Keep this tab open while hosting.' : ''}`;
   $('#inviteDlg').showModal();
 }
+$('#autoStage').checked = store.get('autoStage', false);
+$('#autoStage').onchange = (e) => store.set('autoStage', e.target.checked);
+$('#noteLink').onclick = () => { copy(inviteLink(), 'Invite link copied.'); guideMark('invited'); };
+$('#noteCode').onclick = () => { copy(S.studio, 'Studio code copied.'); guideMark('invited'); };
 $('#copyCode').onclick = () => { copy(S.studio, 'Room code copied.'); guideMark('invited'); };
 $('#copyLink').onclick = () => { copy(inviteLink(), 'Invite link copied.'); guideMark('invited'); };
 $('#addSlot').onclick = openInvite;
 $('#enterTop').onclick = openInvite;
 $('#heroSchedule').onclick = () => openWizard();
-$('#enterStage').onclick = () => openEnter('create');
+$('#enterStage').onclick = () => needAccountThen(() => openEnter('create'));
 $('#landJoin').addEventListener('submit', (e) => {
   e.preventDefault();
   const code = parseCode($('#landCode').value);
@@ -4631,6 +4676,65 @@ function chime() {
     o.connect(gn).connect(ctx.destination); o.start(); o.stop(ctx.currentTime + .4);
   } catch {}
 }
+
+// ---------------------------------------------------------------- host walk-through
+// A short tour for hosts: each step lights up one part of the studio and says what it's for. It runs once,
+// the first time you host, and any time from Help → "Take the studio tour". Steps whose part isn't on screen
+// (say, a panel that's folded away) are skipped.
+const TOUR = [
+  ['#stage', 'Your show', 'What you see here is exactly what viewers see and what gets recorded.'],
+  ['#sceneStrip', 'Scenes', 'Switch layouts in one click, or press 1–9. Save your own from Look → Layout.'],
+  ['.deck-tabs [data-deck="people"]', 'Guests and backstage', 'New guests wait backstage. Click someone’s picture to put them on stage, or back off it.'],
+  ['#shareBtn', 'Present', 'Share your screen, slides, a video or an image.'],
+  ['#recBtn', 'Record', 'Record the show in this browser, then download it or save it to Google Drive.'],
+  ['.rail-btn[data-tab="show"]', 'Show', 'Banners, a scrolling ticker, live captions, the chat overlay and the call-in card.'],
+  ['.rail-btn[data-tab="look"]', 'Look', 'Arrange the stage and set your brand: colours, logo, backgrounds and fonts.'],
+  ['#aiDock', 'Your AI producer', 'Ask it anything on air, or tell it to switch scenes, show a banner or find a video. Press / any time.'],
+  ['#enterTop', 'Invite', 'Send guests the link. They don’t need an account. The footer has a copy button too.'],
+  ['#liveTop', 'Go live', 'Stream to YouTube, Twitch and more at once, and get a watch page for viewers.'],
+];
+const tour = { i: 0, steps: [] };
+const visible = (el) => !!el && el.getClientRects().length > 0 && getComputedStyle(el).visibility !== 'hidden';
+function startTour() {
+  if ($('#helpDlg').open) $('#helpDlg').close();
+  tour.steps = TOUR.filter(([sel]) => visible($(sel)));
+  if (!tour.steps.length) return;
+  tour.i = 0; $('#tour').hidden = false; showTourStep();
+  $('#tourNext').focus();
+}
+function endTour() { $('#tour').hidden = true; store.set('tourDone', true); }
+function showTourStep() {
+  const [sel, title, text] = tour.steps[tour.i], el = $(sel);
+  if (!visible(el)) return tour.i < tour.steps.length - 1 ? (tour.i++, showTourStep()) : endTour();
+  el.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+  $('#tourStep').textContent = `${tour.i + 1} of ${tour.steps.length}`;
+  $('#tourH').textContent = title; $('#tourText').textContent = text;
+  $('#tourBack').disabled = tour.i === 0;
+  $('#tourNext').textContent = tour.i === tour.steps.length - 1 ? 'Done' : 'Next';
+  placeTour();
+}
+function placeTour() {
+  if ($('#tour').hidden) return;
+  const el = $(tour.steps[tour.i][0]), r = el.getBoundingClientRect(), pad = 6;
+  Object.assign($('#tourSpot').style, { left: r.left - pad + 'px', top: r.top - pad + 'px', width: r.width + pad * 2 + 'px', height: r.height + pad * 2 + 'px' });
+  const card = $('#tourCard'), cw = card.offsetWidth, ch = card.offsetHeight, gap = 14, vw = innerWidth, vh = innerHeight;
+  let top = r.bottom + gap;
+  if (top + ch > vh - 8) top = r.top - gap - ch;          // no room below: above
+  if (top < 8) top = Math.min(vh - ch - 8, Math.max(8, r.top + r.height / 2 - ch / 2)); // tall targets: beside
+  let left = r.left + r.width / 2 - cw / 2;
+  if (r.height > vh * 0.5 && r.right + gap + cw < vw) left = r.right + gap; // a big area (the stage): put the card next to it
+  left = Math.max(8, Math.min(vw - cw - 8, left));
+  Object.assign(card.style, { left: left + 'px', top: top + 'px' });
+}
+$('#tourNext').onclick = () => { if (tour.i >= tour.steps.length - 1) return endTour(); tour.i++; showTourStep(); };
+$('#tourBack').onclick = () => { if (tour.i > 0) { tour.i--; showTourStep(); } };
+$('#tourSkip').onclick = endTour;
+$('#tourStart').onclick = () => startTour();
+$('#tour').addEventListener('keydown', (e) => { if (e.key === 'Escape') { e.stopPropagation(); endTour(); } else if (e.key === 'ArrowRight') $('#tourNext').click(); else if (e.key === 'ArrowLeft') $('#tourBack').click(); });
+addEventListener('resize', placeTour);
+// First time you host: once the invite dialog closes. Not under browser automation, where it would sit over the
+// controls a script is driving (the tour itself is tested by opening it from Help).
+$('#inviteDlg').addEventListener('close', () => { if (isHost() && S.studio && !store.get('tourDone', false) && !navigator.webdriver) setTimeout(startTour, 300); });
 
 // ---------------------------------------------------------------- selection state for assistive tech, in one place
 // Segmented controls, look tabs and the rail mark the chosen option with .on. Mirror that into aria-checked /

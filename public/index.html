@@ -126,8 +126,9 @@
           <span class="host-note" id="hostNote" hidden>The host switches scenes</span>
           <label class="toggle-inline lock" id="lockWrap" hidden data-tip="New guests knock and wait for you"><input type="checkbox" class="toggle sm" id="lockSwitch" role="switch"> Lock</label>
           <span class="crew-count caps num" id="crewCount">0 / 6</span>
+          <button type="button" class="icon-btn sm deck-toggle" id="deckToggle" aria-expanded="true" aria-controls="deckBody" aria-label="Hide scenes and people" data-tip="Hide"><svg class="i sm" aria-hidden="true"><use href="/icons.svg#i-chevron-down"/></svg></button>
         </div>
-        <div class="deck-body">
+        <div class="deck-body" id="deckBody">
           <div class="deck-layer" data-layer="scenes"><div class="scenes" id="sceneStrip" role="group" aria-label="Scenes"></div></div>
           <div class="deck-layer" data-layer="people">
             <ul class="crew-list" id="crewList">
@@ -270,6 +271,8 @@
               <div class="row"><button type="button" class="btn sm" id="callinCopy" disabled>Copy call-in link</button><button type="button" class="btn primary sm" id="callinCard" disabled>Show call-in card on stage</button></div>
             </div>
           </div>
+          <hr>
+          <label class="toggle-row"><span><b>Guests go straight on stage</b><small>Off: new guests wait backstage until you click their picture</small></span><input type="checkbox" class="toggle" id="autoStage" role="switch"></label>
         </div>
       </section>
 
@@ -444,7 +447,9 @@
       <button type="button" class="btn sm primary" id="guideGo">Show me</button>
       <button type="button" class="icon-btn sm" id="guideSkip" aria-label="Hide the setup guide" data-tip="Hide the guide"><svg class="i sm" aria-hidden="true"><use href="/icons.svg#i-x"/></svg></button>
     </div>
-    <p class="dock-note" id="dockNote" hidden><svg class="i" aria-hidden="true"><use href="/icons.svg#i-activity"/></svg><span id="dockNoteText"></span></p>
+    <p class="dock-note" id="dockNote" hidden><svg class="i" aria-hidden="true"><use href="/icons.svg#i-activity"/></svg><span id="dockNoteText"></span>
+      <span class="note-invite" id="noteInvite" hidden><button type="button" class="btn sm ghost" id="noteLink" data-tip="Copy the invite link"><svg class="i sm" aria-hidden="true"><use href="/icons.svg#i-link"/></svg>Copy link</button><button type="button" class="btn sm ghost note-code" id="noteCode" data-tip="Copy the studio code"><svg class="i sm" aria-hidden="true"><use href="/icons.svg#i-copy"/></svg><span id="noteCodeText"></span></button></span>
+    </p>
     <button class="btn danger" id="leaveBtn" disabled aria-label="Leave studio">Leave<span class="wide-only">&nbsp;studio</span></button>
   </footer>
 </div>
@@ -611,6 +616,7 @@
           <div id="helpPopWrap"><h3 class="caps">Most searched</h3><ul class="help-list" id="helpPopular"></ul></div>
           <ul class="help-list" id="helpResults"></ul>
           <p class="hint" id="helpNone" hidden>Nothing matches. Try another word, like “mic” or “layout”.</p>
+          <button type="button" class="btn block" id="tourStart"><svg class="i" aria-hidden="true"><use href="/icons.svg#i-play"/></svg>Take the studio tour</button>
           <h3 class="caps">Shortcuts</h3>
           <label class="toggle-row"><span><b>Single-key shortcuts</b><small>Off if you use voice control or a screen reader</small></span><input type="checkbox" class="toggle" id="keysChk" role="switch"></label>
           <dl class="keys">
@@ -680,6 +686,7 @@
   <div class="modal-card glass raised">
     <form method="dialog"><button class="icon-btn sm modal-close" aria-label="Close"><svg class="i sm" aria-hidden="true"><use href="/icons.svg#i-x"/></svg></button></form>
     <h2 id="acH">Welcome back.</h2>
+    <p class="sub" id="acWhy" hidden>Sign in or create a free account to start a studio. Guests joining yours don’t need one.</p>
     <div id="acOut">
       <div class="seg block" role="tablist" id="acTabs"><button type="button" role="tab" data-ac="in">Sign in</button><button type="button" role="tab" data-ac="up">Create account</button></div>
       <form id="acForm" class="form" autocomplete="on" style="margin-top:14px">
@@ -690,6 +697,7 @@
         <button class="btn primary lg block" id="acGo">Sign in</button>
         <button type="button" class="btn link" id="acForgot">Forgot your password?</button>
       </form>
+      <div class="ac-alt" id="acAlt" hidden><span class="ac-or">or</span><div id="acGoogle" class="ac-google"></div></div>
     </div>
     <div id="acForgotView" class="form" hidden>
       <p class="sub">We’ll email you a link to choose a new password.</p>
@@ -818,6 +826,17 @@
     <p class="fine" id="inviteFine">Anyone with this code can join. Maximum six participants. Keep this tab open while hosting.</p>
   </form>
 </dialog>
+
+<!-- ================= HOST WALK-THROUGH ================= -->
+<div class="tour" id="tour" hidden role="dialog" aria-modal="false" aria-labelledby="tourH">
+  <div class="tour-spot" id="tourSpot" aria-hidden="true"></div>
+  <div class="tour-card glass raised" id="tourCard">
+    <p class="tour-step" id="tourStep"></p>
+    <h3 id="tourH"></h3>
+    <p class="tour-text" id="tourText"></p>
+    <div class="tour-nav"><button type="button" class="btn ghost sm" id="tourSkip">Skip tour</button><span class="grow"></span><button type="button" class="btn sm" id="tourBack">Back</button><button type="button" class="btn primary sm" id="tourNext">Next</button></div>
+  </div>
+</div>
 
 <!-- ================= LEAVE ================= -->
 <dialog class="modal" id="leaveDlg" aria-labelledby="leaveH">
