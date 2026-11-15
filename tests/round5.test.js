@@ -53,6 +53,10 @@ const SP = process.argv[2];
   await a.evaluate((id) => { const btn = document.querySelector(`#card-${id} .ct-kick`); btn.click(); btn.click(); }, cid);
   await c.waitForFunction(() => !window.__gather.studio, null, { timeout: 10000 });
   console.log('5 removed caller is out:', true, '| host peers:', await a.evaluate(() => window.__gather.peers.size));
+  // the same browser can't walk back in through the link
+  const back = await c.evaluate(async (code) => { const r = await fetch('/api/studio?action=join', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ studio: code, name: 'Caller again', dev: JSON.parse(localStorage.getItem('gather:dev')) }) }); return r.status; }, await a.evaluate(() => window.__gather.studio));
+  console.log('  removed caller rejoining with the link:', back);
+  if (back !== 403) console.log('FAIL a removed person got back in');
   // 6 call-in card + sponsors + glass panel
   await a.click('[data-tab="show"]'); await a.click('#callinCard');
   await a.click('[data-tab="look"]'); await a.click('.look-seg:visible [data-look="brand"]'); await a.setInputFiles('#adFile', SP + '/logo.png');

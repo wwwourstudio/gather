@@ -601,7 +601,9 @@ hr { border: 0; border-top: 1px solid var(--line); margin: var(--sp-1) 0; width:
 .panel-body { padding: var(--sp-4); }
 .rail { border-width: 0; padding: var(--sp-2) 0; gap: 2px; }
 .rail-btn.icon-btn.stacked { width: 52px; padding: var(--sp-2) 0 6px; font-size: 10px; }
-.rail-btn.on { background: var(--surface-3); box-shadow: inset 2px 0 0 var(--accent); }
+.rail-btn.on { background: var(--surface-3); box-shadow: none; }
+.rail-btn { position: relative; }
+.rail-btn.on::before { content: ""; position: absolute; left: -4px; top: 50%; width: 3px; height: 22px; margin-top: -11px; border-radius: 0 3px 3px 0; background: var(--accent); } /* a straight bar at the rail edge, not a curve hugging the button */
 .rail-btn.on .i, :root[data-theme="light"] .rail-btn.on .i { color: var(--accent-text); }
 .dock { border-width: 1px 0 0; padding: 4px var(--sp-3); }
 .dock .icon-btn.stacked.active { color: var(--accent-text); }
@@ -619,7 +621,7 @@ body.pre .stage { width: min(100%, calc((100vh - 140px) * 16 / 9)); }
   .main, body.panel-closed .main { grid-template-columns: minmax(0, 1fr); }
   .rail { flex-direction: row; justify-content: space-around; border-width: 1px 0; }
   .rail-btn.icon-btn.stacked { flex: 1; width: auto; min-height: 48px; }
-  .rail-btn.on { box-shadow: inset 0 -2px 0 var(--accent); }
+  .rail-btn.on::before { left: 50%; top: auto; bottom: -1px; width: 24px; height: 3px; margin: 0 0 0 -12px; border-radius: 3px 3px 0 0; }
   .side { height: auto; min-height: 60vh; border-width: 0; }
   .panel { height: auto; min-height: 60vh; }
   .panel-body { overflow: visible; }

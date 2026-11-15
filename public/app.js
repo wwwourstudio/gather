@@ -472,6 +472,12 @@ async function api(action, body) {
   return data;
 }
 const creds = () => ({ studio: S.studio, id: S.id, tok: S.tok });
+/** A random id this browser keeps (local only, never synced or shown), so a removed guest can't walk back in. */
+function deviceId() {
+  let d = store.get('dev', '');
+  if (!/^[a-f0-9]{24}$/.test(d)) { d = [...crypto.getRandomValues(new Uint8Array(12))].map((b) => b.toString(16).padStart(2, '0')).join(''); store.set('dev', d); }
+  return d;
+}
 // Outgoing messages are batched: a burst of ICE candidates becomes one request.
 let outbox = [], flushT = null, flushing = false;
 function wsSend(m) {
@@ -554,7 +560,7 @@ async function join(code, opts = {}) {
   audioCtx();
   const pass = opts.pass || S.joinPass?.[code];
   let r;
-  try { r = await api('join', { studio: code, name: S.name || 'Guest', mic: S.local.micOn, cam: S.local.camOn, acct: acct.token || undefined, pass, callin: opts.callin || undefined }); }
+  try { r = await api('join', { studio: code, dev: deviceId(), name: S.name || 'Guest', mic: S.local.micOn, cam: S.local.camOn, acct: acct.token || undefined, pass, callin: opts.callin || undefined }); }
   catch (e) {
     if (e.status === 423 && $('#enterDlg').open) { setPhase('offline'); startKnock(code, opts.callin); return; }
     if (e.status === 403) { setPhase('offline'); }
@@ -4084,7 +4090,7 @@ async function startKnock(code, callin) {
   $('#enterFields').hidden = true; $('#knockWait').hidden = false;
   $('#knockMsg').textContent = callin ? 'You’re in the call-in queue. The host will bring you in shortly.' : 'This studio is locked. The host has been told you’re here.';
   try {
-    const r = await api('knock', { studio: code, name: S.name || 'Caller', callin: !!callin, note: $('#knockNote')?.value || '' });
+    const r = await api('knock', { studio: code, dev: deviceId(), name: S.name || 'Caller', callin: !!callin, note: $('#knockNote')?.value || '' });
     S.knock = { code, ...r };
     for (;;) {
       await new Promise((res) => setTimeout(res, 2000));

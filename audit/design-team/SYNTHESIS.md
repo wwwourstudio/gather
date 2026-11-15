@@ -22,7 +22,7 @@ Sources: `flow.md`, `visual.md`, `layout.md`, `simplify.md` and `interaction.md`
 | Before entering | The landing page is just the stage hero. The rail, panel, deck and dock are hidden. |
 | Dock | Mic · Camera · Present · Record · Sam · … · Leave. Leave asks first when you're recording, live or hosting guests. |
 | Visual | Flat, docked regions with 1 px hairlines and no floating cards or blobs. The surfaces are a deep blue-graphite, which keeps the owner's blues. Glass is used only for controls over video and for overlays. Red is reserved for live and recording; selection uses the accent. The accent is darkened to pass AA contrast; the light grey text and lines are raised to pass too; and radii and control heights are smaller. |
-| Layout | The side panel can be collapsed: click the active tab again and the stage takes the width. The scene strip is compact. On phones the bottom bar is fixed and short and the panel no longer scrolls inside the page. |
+| Layout | The side panel can be hidden with a button at the bottom of the rail, giving the stage the width. The scene strip is compact. On phones the bottom bar is fixed and short and the panel no longer scrolls inside the page. |
 | Copy | Panel subtitles, "Scroll to switch", the X/TikTok "soon" rows and the jargon in hints are gone. One name per thing: Schedule, link, Go live. The invite dialog's primary button copies the link. |
 | Live state | "Live" means only broadcasting. People cards say "On stage". |
 

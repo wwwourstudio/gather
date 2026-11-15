@@ -43,7 +43,7 @@ async function run(camera: string | null, label: string, expectWarning: boolean)
   await page.goto(`${BASE}/`);
   await page.click('#enterStage'); await page.fill('#enterName', 'Host'); await page.click('#enterGo');
   await page.waitForSelector('#inviteDlg[open]'); await page.keyboard.press('Escape');
-  await page.click('.rail-btn[data-tab="settings"]');
+  await page.click('#settingsTop');
   let ok = true;
   for (const fx of ['blur', 'image', 'green']) {
     await page.click(`#bgFxSeg button[data-fx="${fx}"]`);
