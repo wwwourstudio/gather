@@ -6,7 +6,8 @@
   "cleanUrls": false,
   "rewrites": [
     { "source": "/s/:code", "destination": "/index.html" },
-    { "source": "/c/:code", "destination": "/index.html" }
+    { "source": "/c/:code", "destination": "/index.html" },
+    { "source": "/w/:code", "destination": "/watch.html" }
   ],
   "headers": [
     {

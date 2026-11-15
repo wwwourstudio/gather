@@ -34,6 +34,7 @@
       <span class="status" id="statusPill" data-state="offline"><i class="dot"></i><span id="statusText">Offline</span></span>
     </div>
     <div class="top-actions">
+      <span class="rec-chip live-chip" id="livePill" hidden><i class="dot"></i><span id="livePillText">Live</span></span>
       <span class="rec-chip" id="recPill" hidden><i class="dot"></i><span id="recPillText">Recording</span></span>
       <button class="btn hdr user-btn" id="userBtn" aria-label="Your account"><span class="user-av" id="userAv"></span><svg id="userIcon" class="i" aria-hidden="true"><use href="/icons.svg#i-user"/></svg><span class="user-label" id="userLabel">Sign in</span></button>
       <button class="btn hdr primary" id="enterTop"><svg class="i" id="enterTopIcon" aria-hidden="true"><use href="/icons.svg#i-log-in"/></svg><span id="enterTopText">Enter studio</span></button>
@@ -148,9 +149,20 @@
       <section class="panel" data-panel="stream" hidden>
         <header class="panel-head"><h2>Stream</h2><p>Go live, schedule and connect platforms.</p></header>
         <div class="panel-body form">
+          <div class="fld live-sec" id="liveSec"><span>Go live <em>to several platforms at once</em></span>
+            <ul class="dest-list" id="destList"></ul>
+            <div class="row">
+              <select id="destAdd" aria-label="Add a destination"><option value="">+ Add a destination</option><option value="youtube">YouTube</option><option value="twitch">Twitch</option><option value="kick">Kick</option><option value="facebook">Facebook</option><option value="x">X</option><option value="rumble">Rumble</option><option value="custom">Other (RTMP)</option></select>
+            </div>
+            <p class="hint" id="liveNote">Stream keys stay in this browser. Copy each one from the platform’s live dashboard.</p>
+            <button type="button" class="btn live block" id="liveBtn">Go live</button>
+            <p class="hint live-stats" id="liveStats" hidden></p>
+            <div class="row" id="watchRow" hidden><button type="button" class="btn sm" id="watchCopy">Copy watch page link</button><span class="hint" style="margin:0">One page for viewers, with the live player and links to every platform.</span></div>
+            <div class="soft-card" id="liveOff" hidden><p>Going live needs the gather relay, a small server that passes your show to the platforms. Whoever runs this site sets it up once: see <b>relay/README.md</b>.</p></div>
+          </div>
           <div class="go-card">
-            <div><b>Start a stream</b><span>Go live now, or schedule one with emailed invites and reminders.</span></div>
-            <button class="btn primary" id="wizOpen">Start a stream</button>
+            <div><b>Plan a stream</b><span>Schedule a show with emailed invites, reminders and a thumbnail.</span></div>
+            <button class="btn" id="wizOpen">Plan a stream</button>
           </div>
           <div class="fld"><span>Upcoming</span>
             <div id="upSignin" class="soft-card"><p>Sign in to schedule streams, email invites and keep them here.</p><button type="button" class="btn sm" id="upSigninBtn">Create an account or sign in</button></div>
@@ -244,6 +256,7 @@
             </div>
             <label class="fld"><span id="aiKeyLabel">API key</span><input id="aiKey" type="password" autocomplete="off" spellcheck="false" placeholder="Paste your key"></label>
             <p class="hint"><span id="aiKeyHelp"></span> Kept in this browser only; gather passes it to the provider with each request and never stores it.</p>
+            <p class="hint" id="aiHouseNote" hidden></p>
             <details class="more"><summary>Model</summary><label class="fld"><span>Model ID <em>leave blank for the default</em></span><input id="aiModel" spellcheck="false"></label></details>
             <hr>
             <div class="row2"><label class="fld"><span>Name</span><input id="aiName" maxlength="20" placeholder="Sam"></label>
@@ -504,7 +517,7 @@
 
           <h3 class="caps">Network</h3>
           <label class="fld"><span>TURN server URL <em>optional</em></span><input id="turnUrl" placeholder="turn:your-server.com:3478" spellcheck="false"></label>
-          <p class="hint">A TURN relay helps guests on strict corporate and mobile networks.</p>
+          <p class="hint" id="turnHint">A TURN relay helps guests on strict corporate and mobile networks.</p>
           <label class="fld"><span>TURN username</span><input id="turnUser" spellcheck="false" autocomplete="off"></label>
           <label class="fld"><span>TURN credential</span><input id="turnPass" type="password" autocomplete="off"></label>
           <p class="hint">Use short-lived credentials. Kept in this browser session only.</p>
@@ -561,8 +574,15 @@
         </div></div>
       </div>
       <span class="dock-sep" aria-hidden="true"></span>
+      <button class="icon-btn stacked live-tool host-only" id="liveDock" hidden><svg class="i" aria-hidden="true"><use href="/icons.svg#i-radio"/></svg><span class="caption" id="liveDockLabel">Go live</span></button>
       <button class="icon-btn stacked rec-tool host-only" id="recBtn"><svg class="i" aria-hidden="true"><use href="/icons.svg#i-circle"/><circle class="rec-dot" cx="12" cy="12" r="4"/></svg><span class="caption" id="recLabel">Record</span></button>
       <button class="icon-btn stacked host-only ai-dock" id="aiDock" aria-expanded="false" aria-controls="cmdBar" data-status="idle" hidden><span class="orb-i" aria-hidden="true"></span><span class="caption" id="aiDockName">Sam</span></button>
+    </div>
+    <div class="guide host-only" id="guide" hidden role="status" aria-label="Getting started">
+      <span class="guide-dots" id="guideDots" aria-hidden="true"></span>
+      <span class="guide-text"><span class="guide-prog" id="guideProg">1 of 5</span><b id="guideStep">Name your show</b></span>
+      <button type="button" class="btn sm primary" id="guideGo">Show me</button>
+      <button type="button" class="icon-btn sm" id="guideSkip" aria-label="Hide the setup guide" data-tip="Hide the guide"><svg class="i sm" aria-hidden="true"><use href="/icons.svg#i-x"/></svg></button>
     </div>
     <p class="dock-note" id="dockNote" hidden><svg class="i" aria-hidden="true"><use href="/icons.svg#i-activity"/></svg><span id="dockNoteText"></span></p>
     <button class="btn danger" id="leaveBtn" disabled aria-label="Leave studio">Leave<span class="wide-only">&nbsp;studio</span></button>
@@ -736,7 +756,7 @@
             <label><input type="checkbox" value="x"> X</label><label><input type="checkbox" value="instagram"> Instagram</label>
             <label><input type="checkbox" value="tiktok"> TikTok</label><label><input type="checkbox" value="rumble"> Rumble</label>
           </div>
-          <p class="hint" style="margin-top:0">Sending the stream out to platforms arrives with the relay. Until then, record here and share the studio link.</p>
+          <p class="hint" style="margin-top:0">On the day, add each platform’s stream key under Stream → Go live.</p>
         </div>
       </div>
       <p class="err" id="wErr" hidden></p>
@@ -759,7 +779,7 @@
 <dialog class="modal" id="inviteDlg" aria-labelledby="inviteH">
   <form method="dialog" class="modal-card glass raised">
     <button class="icon-btn sm modal-close" value="cancel" aria-label="Close"><svg class="i sm" aria-hidden="true"><use href="/icons.svg#i-x"/></svg></button>
-    <h2 id="inviteH">Better together.</h2>
+    <h2 id="inviteH">Invite guests</h2>
     <p class="sub">Send this code to your guests. They open gather, choose Join studio, and paste it in. Or send the link and they land right in the green room.</p>
     <output class="code" id="inviteCode">—</output>
     <button type="button" class="btn primary lg block" id="copyCode">Copy room code</button>

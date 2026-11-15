@@ -12,7 +12,7 @@ const path = require('node:path');
 
 const ROOT = path.resolve(__dirname, '..');
 const OUT = path.join(__dirname, 'out');
-const ALL = ['ai', 'e2e', 'feat', 'mod', 'twitch', 'round', 'round4', 'round5', 'round6', 'google'];
+const ALL = ['ai', 'turn', 'live', 'e2e', 'feat', 'mod', 'twitch', 'round', 'round4', 'round5', 'round6', 'google'];
 const NOISE = /irc-ws\.chat\.twitch\.tv|tunnel via proxy|ERR_TUNNEL|ERR_PROXY/;
 const pick = process.argv.slice(2).filter((a) => ALL.includes(a));
 const suites = pick.length ? pick : ALL;

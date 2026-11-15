@@ -1274,7 +1274,12 @@ function renderGoogle() {
   if (!yt.liveChatId) setYtStatus('off');
   renderDriveButton();
 }
-api('config').then((c) => { configureGoogle(c.googleClientId); renderGoogle(); }).catch(() => renderGoogle());
+api('config').then((c) => {
+  configureGoogle(c.googleClientId); renderGoogle();
+  S.houseAI = c.houseAI || null; renderAIPanel();
+  S.relayOn = !!c.relay; renderLive();
+  if (c.builtInTurn) $('#turnHint').textContent = 'gather’s built-in relay already connects guests on strict corporate and mobile networks. Add your own only if you need to.';
+}).catch(() => renderGoogle());
 
 // Rumble: the host's personal Live Stream API URL (contains a key) stays in the host's browser.
 // The host polls it through our proxy and relays new messages to the studio.
@@ -2287,9 +2292,13 @@ function renderAIPanel() {
   if (document.activeElement !== $('#aiModel')) $('#aiModel').value = store.get('aiModel:' + S.aiProv, '');
   $('#aiKeyLabel').textContent = `${AI_NAME[S.aiProv]} API key`;
   $('#aiKeyHelp').innerHTML = { claude: 'Get one at <b>console.anthropic.com</b>. Includes live web search.', openai: 'Get one at <b>platform.openai.com</b>.', gemini: 'Get one at <b>aistudio.google.com</b>. Includes Google Search.', grok: 'Get one at <b>console.x.ai</b>.' }[S.aiProv];
-  // Setup opens by itself until there's a key; after that it folds into the settings button.
-  if (host && !key && !S.aiSetupSeen) { S.aiSetupSeen = true; setAiSetup(true, false); }
-  $('#aiSub').textContent = !host ? 'The host’s producer and researcher' : key ? `${AI_NAME[S.aiProv]} · ${{ idle: 'ready', listening: 'listening…', thinking: 'thinking…', speaking: 'speaking' }[S.aiStatus]}` : `Add a ${AI_NAME[S.aiProv]} key to start`;
+  // Setup opens by itself until there's a key (or a free allowance); after that it folds into the settings button.
+  const house = !key && S.houseAI;
+  if (host && !key && !house && !S.aiSetupSeen) { S.aiSetupSeen = true; setAiSetup(true, false); }
+  const state = { idle: 'ready', listening: 'listening…', thinking: 'thinking…', speaking: 'speaking' }[S.aiStatus];
+  $('#aiSub').textContent = !host ? 'The host’s producer and researcher' : key ? `${AI_NAME[S.aiProv]} · ${state}` : house ? `Free allowance · ${S.houseLeft ?? S.houseAI.daily} left today · ${state}` : `Add a ${AI_NAME[S.aiProv]} key to start`;
+  $('#aiHouseNote').hidden = !S.houseAI;
+  if (S.houseAI) $('#aiHouseNote').textContent = `No key? You get ${S.houseAI.daily} free requests a day per studio. Your own key has no limit.`;
   $('#aiInput').disabled = !host; $('#aiAsk').disabled = !host || S.ai.busy;
   if (S.ai.busy) $('#aiAsk').setAttribute('aria-busy', 'true'); else $('#aiAsk').removeAttribute('aria-busy');
   $('#aiHostNote').hidden = host;
@@ -3047,6 +3056,154 @@ $('#helpSearch').addEventListener('input', renderHelp);
 $('#helpSearch').addEventListener('keydown', (e) => { if (e.key === 'Enter') { const first = $('#helpResults .help-item'); first?.click(); } });
 
 // ---------------------------------------------------------------- recording
+// ---------------------------------------------------------------- go live: program → relay → YouTube, Twitch, …
+// The finished program (the same canvas and mix as a recording) goes over a WebSocket to the gather relay, which
+// hands it to FFmpeg and on to every destination at once. H.264 from the browser is passed through untouched.
+const PLATFORMS = {
+  youtube: { name: 'YouTube', url: 'rtmp://a.rtmp.youtube.com/live2', hint: 'YouTube Studio → Go live → Stream key' },
+  twitch: { name: 'Twitch', url: 'rtmp://live.twitch.tv/app', hint: 'Twitch → Creator Dashboard → Settings → Stream → Primary stream key' },
+  kick: { name: 'Kick', url: '', hint: 'Kick → Settings → Stream URL and Stream key' },
+  facebook: { name: 'Facebook', url: 'rtmps://live-api-s.facebook.com:443/rtmp', hint: 'Facebook → Live Producer → Streaming software → Stream key' },
+  x: { name: 'X', url: '', hint: 'X Media Studio → Producer → RTMP URL and Stream key' },
+  rumble: { name: 'Rumble', url: '', hint: 'Rumble → Go Live → Stream URL and Stream key' },
+  custom: { name: 'Other', url: '', hint: 'Any RTMP or RTMPS server URL and key' },
+};
+S.relayOn = false;
+S.live = null;
+const liveDests = () => store.get('liveDests', []); // local only: never synced, never sent to gather's server
+function saveDests(list) { store.set('liveDests', list); renderLive(); }
+function pickLiveMime() {
+  const opts = [['video/webm;codecs=h264,opus', 'h264'], ['video/webm;codecs=avc1,opus', 'h264'], ['video/mp4;codecs=avc1,opus', 'h264'], ['video/webm;codecs=vp8,opus', 'vp8'], ['video/webm;codecs=vp9,opus', 'vp9']];
+  const hit = opts.find(([m]) => window.MediaRecorder?.isTypeSupported?.(m));
+  return hit ? { mimeType: hit[0], video: hit[1] } : null;
+}
+function renderDests() {
+  const list = liveDests(), live = !!S.live;
+  $('#destList').replaceChildren(...list.map((d, i) => {
+    const p = PLATFORMS[d.kind] || PLATFORMS.custom;
+    const li = document.createElement('li'); li.className = 'dest' + (d.on ? '' : ' off');
+    li.innerHTML = `<div class="dest-top"><span class="pill caps src-${d.kind}"></span><label class="toggle-inline"><input type="checkbox" class="toggle sm" data-k="on"><span>Send</span></label><button type="button" class="icon-btn sm" data-del aria-label="Remove"><svg class="i sm" aria-hidden="true"><use href="/icons.svg#i-trash-2"/></svg></button></div>
+      <input data-k="url" spellcheck="false" aria-label="Server URL" placeholder="rtmps://…">
+      <input data-k="key" type="password" autocomplete="off" spellcheck="false" aria-label="Stream key" placeholder="Stream key">
+      <input data-k="watch" spellcheck="false" aria-label="Public watch link" placeholder="Watch link for viewers (optional)">
+      <p class="hint"></p>`;
+    li.querySelector('.pill').textContent = p.name;
+    li.querySelector('.hint').textContent = p.hint;
+    li.querySelector('[data-k="on"]').checked = !!d.on;
+    li.querySelector('[data-k="url"]').value = d.url || '';
+    li.querySelector('[data-k="key"]').value = d.key || '';
+    li.querySelector('[data-k="watch"]').value = d.watch || '';
+    li.querySelectorAll('input').forEach((inp) => { inp.disabled = live; inp.addEventListener('change', () => { const all = liveDests(); all[i] = { ...all[i], [inp.dataset.k]: inp.type === 'checkbox' ? inp.checked : inp.value.trim() }; saveDests(all); }); });
+    li.querySelector('[data-del]').disabled = live;
+    li.querySelector('[data-del]').onclick = () => { const all = liveDests(); all.splice(i, 1); saveDests(all); };
+    return li;
+  }));
+}
+$('#destAdd').onchange = (e) => {
+  const kind = e.target.value; e.target.value = '';
+  if (!kind) return;
+  saveDests([...liveDests(), { kind, url: PLATFORMS[kind].url, key: '', on: true }]);
+  $('#destList li:last-child [data-k="' + (PLATFORMS[kind].url ? 'key' : 'url') + '"]')?.focus();
+};
+const readyDests = () => liveDests().filter((d) => d.on && /^rtmps?:\/\//i.test(d.url || '') && (d.key || d.kind === 'custom'));
+/** The public page viewers can watch a destination on, as the host typed it (optional). */
+function watchUrl(d) {
+  let w = String(d.watch || '').trim();
+  if (w && !/^https?:\/\//i.test(w)) w = 'https://' + w;
+  return /^https:\/\//i.test(w) ? w : '';
+}
+const watchLink = () => `${location.origin}/w/${S.studio}`;
+$('#watchCopy').onclick = () => copy(watchLink(), 'Watch page link copied.');
+function fmtClock(ms) { const s = Math.floor(ms / 1000); return [Math.floor(s / 3600), Math.floor(s / 60) % 60, s % 60].map((n, i) => (i ? String(n).padStart(2, '0') : n)).join(':').replace(/^0:/, ''); }
+function renderLive() {
+  const host = isHost(), L = S.live, on = L?.phase === 'live';
+  $('#liveOff').hidden = S.relayOn;
+  for (const id of ['#destList', '#destAdd', '#liveNote', '#liveBtn']) $(id).hidden = !S.relayOn;
+  $('#destAdd').parentElement.hidden = !S.relayOn;
+  $('#liveDock').hidden = !host || !S.relayOn || !S.studio;
+  renderDests();
+  const n = readyDests().length;
+  const label = !L ? (n ? `Go live on ${n} platform${n === 1 ? '' : 's'}` : 'Go live') : L.phase === 'live' ? 'End the stream' : L.phase === 'stopping' ? 'Ending…' : 'Connecting…';
+  $('#liveBtn').textContent = label;
+  $('#liveBtn').disabled = !host || !S.studio || (!L && !n) || L?.phase === 'stopping';
+  $('#liveBtn').classList.toggle('ending', on);
+  $('#liveDock').classList.toggle('on-air', !!L);
+  $('#liveDockLabel').textContent = on ? fmtClock(Date.now() - L.t0) : L ? 'Starting…' : 'Go live';
+  $('#livePill').hidden = !on;
+  if (on) $('#livePillText').textContent = 'Live ' + fmtClock(Date.now() - L.t0);
+  $('#liveStats').hidden = !L;
+  $('#watchRow').hidden = !S.relayOn || !S.studio;
+  if (L) $('#liveStats').textContent = on && L.stats ? [`Live on ${L.names.join(', ')}`, L.stats.kbps != null && `${Math.round(L.stats.kbps).toLocaleString()} kbps`, L.stats.fps && `${Math.round(L.stats.fps)} fps`, L.slow && 'your upload is struggling'].filter(Boolean).join(' · ') : L.phase === 'connecting' ? 'Connecting to the relay…' : L.phase === 'live' ? `Live on ${L.names.join(', ')}` : '';
+}
+async function goLive() {
+  if (S.live) return stopLive();
+  if (!isHost() || !S.studio) return;
+  const dests = readyDests();
+  if (!dests.length) { setTab('stream'); return toast('Add a destination and its stream key first.', { err: true }); }
+  const mime = pickLiveMime();
+  if (!mime || !canvas.captureStream) return toast('This browser can’t stream. Use Chrome or Edge.', { err: true });
+  S.live = { phase: 'connecting', names: dests.map((d) => (PLATFORMS[d.kind] || PLATFORMS.custom).name), warned: new Set() };
+  renderLive();
+  let url;
+  try { ({ url } = await api('relay', creds())); }
+  catch (e) { S.live = null; renderLive(); return toast(e.message, { err: true }); }
+  audioCtx();
+  const L = S.live;
+  const ws = new WebSocket(url); ws.binaryType = 'arraybuffer'; L.ws = ws;
+  ws.onopen = () => ws.send(JSON.stringify({ type: 'start', video: mime.video, dests: dests.map((d) => ({ url: d.url, key: d.key })) }));
+  ws.onmessage = (ev) => {
+    let m; try { m = JSON.parse(ev.data); } catch { return; }
+    if (m.t === 'ready') startFeed(L, mime);
+    else if (m.t === 'live' && L.phase === 'connecting') {
+      L.phase = 'live'; L.t0 = Date.now(); L.timer = setInterval(renderLive, 1000); toast(`You’re live on ${L.names.join(' and ')}.`); renderDock();
+      setStage({ live: { on: true, since: L.t0, links: dests.map((d) => ({ kind: d.kind, url: watchUrl(d) })).filter((x) => x.url) } });
+    }
+    else if (m.t === 'stats') { L.stats = m; renderLive(); }
+    else if (m.t === 'warn' && !L.warned.has(m.message)) { L.warned.add(m.message); toast('Relay: ' + m.message, { err: true }); }
+    else if (m.t === 'error') toast(m.message, { err: true });
+  };
+  ws.onclose = (ev) => {
+    if (S.live !== L) return;
+    const expected = L.phase === 'stopping';
+    endLive(L);
+    if (!expected) toast(ev.code === 1006 ? 'The stream stopped: lost the connection to the relay.' : 'The stream stopped.', { err: true });
+    else toast('Stream ended.');
+  };
+}
+function startFeed(L, mime) {
+  const vs = canvas.captureStream(30);
+  const stream = new MediaStream([...vs.getVideoTracks(), ...recDest.stream.getAudioTracks()]);
+  let rec;
+  try { rec = new MediaRecorder(stream, { mimeType: mime.mimeType, videoBitsPerSecond: 4_500_000, audioBitsPerSecond: 160_000, videoKeyFrameIntervalDuration: 2000 }); }
+  catch (e) { toast('Could not start the stream: ' + e.message, { err: true }); L.ws.close(1000); return; }
+  rec.ondataavailable = async (e) => {
+    if (!e.data.size || L.ws.readyState !== 1) return;
+    L.ws.send(await e.data.arrayBuffer());
+    const behind = L.ws.bufferedAmount;
+    L.slow = behind > 4_000_000;
+    if (behind > 40_000_000) { toast('Your upload can’t keep up, so the stream was stopped. Try a wired connection.', { err: true }); stopLive(); }
+  };
+  rec.start(250);
+  Object.assign(L, { rec, vs });
+}
+function stopLive() {
+  const L = S.live;
+  if (!L || L.phase === 'stopping') return;
+  L.phase = 'stopping'; renderLive();
+  try { L.rec?.state !== 'inactive' && L.rec?.stop(); } catch {}
+  setTimeout(() => { try { L.ws?.close(1000); } catch {} }, 600);
+  setTimeout(() => { if (S.live === L) endLive(L); }, 4000);
+}
+function endLive(L) {
+  clearInterval(L.timer);
+  if (L.phase === 'live' || L.t0) setStage({ live: null });
+  try { L.rec?.state !== 'inactive' && L.rec?.stop(); } catch {}
+  L.vs?.getTracks().forEach((t) => t.stop());
+  S.live = null; renderLive(); renderDock();
+}
+$('#liveBtn').onclick = goLive;
+$('#liveDock').onclick = () => (S.live ? stopLive() : readyDests().length ? goLive() : (setTab('stream'), revealSide(), toast('Add a destination and its stream key, then Go live.')));
+
 function pickMime() {
   const opts = ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm', 'video/mp4;codecs=avc1,mp4a', 'video/mp4'];
   return opts.find((m) => window.MediaRecorder?.isTypeSupported?.(m)) || '';
@@ -3176,7 +3333,7 @@ function setPhase(p) {
   $('#statusText').textContent = { offline: 'Offline', connecting: 'Connecting…', online: 'Live in studio', reconnecting: 'Reconnecting…' }[p];
   renderAll();
 }
-function renderAll() { renderHeader(); renderStageUI(); renderCrew(); renderDock(); renderPanels(); renderFeedUI(); renderLayoutsPanel(); renderAIPanel(); renderTips(); renderBrandPanel(); renderStreamPanel(); renderGuestView(); syncTwitch(); syncCaptions(); renderDeck(); renderAds(); renderCallin(); renderProducerUI(); renderGreenRoom(); }
+function renderAll() { renderHeader(); renderStageUI(); renderCrew(); renderDock(); renderPanels(); renderFeedUI(); renderLayoutsPanel(); renderAIPanel(); renderTips(); renderBrandPanel(); renderStreamPanel(); renderGuestView(); syncTwitch(); syncCaptions(); renderDeck(); renderAds(); renderCallin(); renderProducerUI(); renderGreenRoom(); renderLive(); }
 function renderHeader() {
   // The studio name belongs to the studio you're in; outside one the header is just the wordmark.
   const inside = !!S.studio || S.phase === 'reconnecting';
@@ -3276,9 +3433,40 @@ function renderDock() {
   $('#leaveBtn').disabled = !S.studio;
   renderDockNote();
 }
+// ---------------------------------------------------------------- first-run guide: one next step at a time, in the dock
+// Five steps for a new host. Each ticks itself off from what actually happened (a title set, camera and mic on,
+// a guest invited, a scene picked, recording or live), so it never asks you to confirm anything. Shown once.
+const GUIDE = [
+  { id: 'name', label: 'Name your show', done: () => !!S.state.title && S.state.title !== DEFAULT_TITLE, go: () => { setTab('brand'); revealSide(); $('#titleInput').focus(); } },
+  { id: 'av', label: 'Turn on camera and mic', done: () => !!(S.local.camOn && S.local.micOn && S.local.audio), go: () => { setTab('settings'); revealSide(); } },
+  { id: 'invite', label: 'Invite a guest', done: () => S.guide.invited || S.peers.size > 0, go: () => openInvite() },
+  { id: 'scene', label: 'Pick a scene', done: () => S.guide.scened, go: () => { $('#deck')?.scrollIntoView({ behavior: smooth(), block: 'center' }); $('#sceneStrip .scene:not(.on)')?.focus(); } },
+  { id: 'show', label: 'Record or go live', done: () => !!(S.rec || S.live?.phase === 'live'), go: () => { setTab('stream'); revealSide(); } },
+];
+S.guide = { ...{ dismissed: false, finished: false, invited: false, scened: false }, ...store.get('guide', {}) };
+function saveGuide() { store.set('guide', { dismissed: S.guide.dismissed, finished: S.guide.finished, invited: S.guide.invited, scened: S.guide.scened }); }
+function revealSide() { if (innerWidth <= 900) $('#side')?.scrollIntoView({ behavior: smooth() }); }
+function renderGuide() {
+  const el = $('#guide');
+  const active = isHost() && !!S.studio && !S.guide.dismissed && !S.guide.finished;
+  if (!active) { el.hidden = true; return false; }
+  const states = GUIDE.map((g) => !!g.done());
+  const next = GUIDE.findIndex((g, i) => !states[i]);
+  if (next < 0) { S.guide.finished = true; saveGuide(); el.hidden = true; toast('Your studio is ready. Have a great show.'); return false; }
+  el.hidden = false;
+  $('#guideProg').textContent = `Getting started · ${states.filter(Boolean).length} of ${GUIDE.length} done`;
+  $('#guideStep').textContent = GUIDE[next].label;
+  $('#guideGo').dataset.step = GUIDE[next].id;
+  $('#guideDots').replaceChildren(...GUIDE.map((g, i) => { const d = document.createElement('i'); d.className = states[i] ? 'done' : i === next ? 'now' : ''; return d; }));
+  return true;
+}
+$('#guideGo').onclick = () => GUIDE.find((g) => g.id === $('#guideGo').dataset.step)?.go();
+$('#guideSkip').onclick = () => { S.guide.dismissed = true; saveGuide(); renderDock(); toast('Guide hidden. Help has everything it covered.'); };
+function guideMark(k) { if (S.guide[k] || S.guide.finished) return; S.guide[k] = true; saveGuide(); renderDock(); }
+
 function renderDockNote() {
   const el = $('#dockNoteText');
-  $('#dockNote').hidden = !S.studio && S.phase !== 'reconnecting';
+  $('#dockNote').hidden = (!S.studio && S.phase !== 'reconnecting') || renderGuide();
   if (!S.studio) { el.textContent = S.phase === 'reconnecting' ? 'Reconnecting to your studio…' : ''; return; }
   const peers = [...S.peers.values()];
   if (!peers.length) { el.textContent = 'Waiting for guests · share your room code'; return; }
@@ -3349,6 +3537,7 @@ function activeSceneId() {
   return S.state.scene || '';
 }
 function applyScene(sc) {
+  if (isHost()) guideMark('scened');
   if (sc.kind === 'builtin') return setStage({ layout: sc.layout, scene: sc.id, elements: sceneElements(sc.id, []) });
   if (sc.kind === 'template') return applyTemplate(sc);
   return loadLayout(sc.saved);
@@ -3568,6 +3757,7 @@ $('#leaveBtn').onclick = leave;
 function leave() {
   if (!S.studio) return;
   if (S.rec) S.rec.recorder.stop();
+  if (S.live) stopLive();
   beaconLeave();
   outbox = [];
   teardownPeers();
@@ -4097,8 +4287,9 @@ async function askProducer(text) {
   text = String(text || '').trim();
   if (!text || S.ai.busy) return;
   if (!isHost()) return toast('Only the host can direct the AI.', { err: true });
-  const prov = S.aiProv, key = store.get('aiKey:' + prov, '');
-  if (!key) { setTab('ai'); setAiSetup(true); return toast(`Add your ${AI_NAME[prov]} key so ${S.aiName} can help.`, { err: true }); }
+  const own = store.get('aiKey:' + S.aiProv, ''), house = !own && !!S.houseAI && !!S.studio;
+  const prov = house ? S.houseAI.provider : S.aiProv, key = own;
+  if (!key && !house) { setTab('ai'); setAiSetup(true); return toast(`Add your ${AI_NAME[prov]} key so ${S.aiName} can help.`, { err: true }); }
   const history = S.ai.items.filter((i) => i.done && !i.error && (i.role === 'user' || i.role === 'assistant')).slice(-10).map((i) => ({ role: i.role, text: i.text }));
   // a fresh answer takes over the AI window, unless the host pins an older one again
   for (const it of S.ai.items) if (it.pinned) upsertAI({ id: it.id, pinned: false });
@@ -4110,7 +4301,8 @@ async function askProducer(text) {
   let reply = '';
   const fail = (msg) => { upsertAI({ ...ans, text: msg, error: true, done: true }); $('#cmdReply').textContent = msg; $('#cmdReply').classList.add('err'); };
   try {
-    const res = await fetch('/api/ai', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mode: 'agent', provider: prov, apiKey: key, model: store.get('aiModel:' + prov, ''), messages: [...history, { role: 'user', text }], ctx: producerCtx() }) });
+    const res = await fetch('/api/ai', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(house ? { mode: 'agent', house: true, studio: S.studio, messages: [...history, { role: 'user', text }], ctx: producerCtx() } : { mode: 'agent', provider: prov, apiKey: key, model: store.get('aiModel:' + prov, ''), messages: [...history, { role: 'user', text }], ctx: producerCtx() }) });
+    if (res.headers.get('X-AI-Left') != null) { S.houseLeft = Number(res.headers.get('X-AI-Left')); renderAIPanel(); }
     if (!res.ok) { const j = await res.json().catch(() => ({})); throw new Error(j.error || `The AI request failed (${res.status}).`); }
     const reader = res.body.getReader(), dec = new TextDecoder();
     let buf = '', failed = '';
@@ -4318,8 +4510,8 @@ function openInvite() {
   $('#inviteFine').textContent = `Anyone with this code can join. ${n} of ${MAX} seats taken.${isHost() ? ' Keep this tab open while hosting.' : ''}`;
   $('#inviteDlg').showModal();
 }
-$('#copyCode').onclick = () => copy(S.studio, 'Room code copied.');
-$('#copyLink').onclick = () => copy(inviteLink(), 'Invite link copied.');
+$('#copyCode').onclick = () => { copy(S.studio, 'Room code copied.'); guideMark('invited'); };
+$('#copyLink').onclick = () => { copy(inviteLink(), 'Invite link copied.'); guideMark('invited'); };
 $('#inviteCrew').onclick = openInvite;
 $('#addSlot').onclick = openInvite;
 $('#enterTop').onclick = () => (S.studio ? openInvite() : openEnter('create'));

@@ -43,6 +43,7 @@ http.createServer((req, res) => {
   }
   let p = decodeURIComponent(u.pathname);
   if (p === '/' || p.startsWith('/s/') || p.startsWith('/c/')) p = '/index.html';
+  else if (p.startsWith('/w/')) p = '/watch.html';
   const file = path.normalize(path.join(PUBLIC, p));
   if (!file.startsWith(PUBLIC)) { res.writeHead(403); return res.end(); }
   fs.readFile(file, (err, data) => {

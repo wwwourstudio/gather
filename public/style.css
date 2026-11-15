@@ -283,6 +283,20 @@ hr { border: 0; border-top: 1px solid var(--line); margin: var(--sp-1) 0; width:
 .src-tiktok { --pill-bg: #fe2c55; --pill-ink: #fff; }
 .src-kick { --pill-bg: #53fc18; --pill-ink: #0b1a05; }
 .src-studio { --pill-bg: var(--accent); --pill-ink: #fff; }
+.src-facebook { --pill-bg: #0866ff; --pill-ink: #fff; }
+.src-custom { --pill-bg: var(--fill-active); --pill-ink: var(--ink); }
+/* go live */
+.dest-list { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--sp-2); }
+.dest-list:empty { display: none; }
+.dest { display: grid; gap: var(--sp-2); padding: var(--sp-3); border-radius: var(--r-md); background: var(--fill); border: 1px solid var(--glass-border); }
+.dest.off { opacity: 0.6; }
+.dest-top { display: flex; align-items: center; gap: var(--sp-2); }
+.dest-top .toggle-inline { margin-left: auto; }
+.dest .hint { margin: 0; font-size: var(--fs-11); }
+#liveBtn.ending { --btn-bg: var(--danger-soft); --btn-ink: var(--danger); --btn-line: color-mix(in srgb, var(--danger) 40%, transparent); }
+.live-stats { margin: 0; font-variant-numeric: tabular-nums; }
+.live-tool.on-air.icon-btn.stacked { --ib-bg: var(--live); --ib-bg-hover: var(--live); color: #fff; font-variant-numeric: tabular-nums; }
+.live-tool.on-air .i { animation: blink 1.2s infinite; }
 .callin { display: grid; gap: var(--sp-3); }
 .callin .num { margin: 0; font-size: var(--fs-12); word-break: break-all; color: var(--ink-2); }
 
@@ -428,6 +442,16 @@ hr { border: 0; border-top: 1px solid var(--line); margin: var(--sp-1) 0; width:
 
 /* ---------------------------------------------------------------- dock */
 #leaveBtn { gap: 0; }
+/* first-run guide: the next step, in the dock, until the studio is set up */
+.guide { flex: 1; min-width: 0; display: flex; align-items: center; justify-content: center; gap: var(--sp-3); }
+.guide[hidden] { display: none; }
+.guide-dots { display: flex; gap: 4px; }
+.guide-dots i { width: 6px; height: 6px; border-radius: 50%; background: var(--line-2); }
+.guide-dots i.done { background: var(--ok); }
+.guide-dots i.now { background: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.guide-text { display: grid; line-height: 1.25; min-width: 0; }
+.guide-text b { font-size: var(--fs-13); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.guide-prog { font-size: var(--fs-11); color: var(--ink-3); }
 .dock { display: flex; align-items: center; gap: var(--sp-4); padding: 6px var(--sp-3); border-radius: var(--r-lg); }
 .dock-tools { display: flex; align-items: center; gap: 2px; min-width: 0; }
 .dock-sep { width: 1px; height: var(--h-sm); background: var(--line-2); margin: 0 6px; }
@@ -535,6 +559,9 @@ hr { border: 0; border-top: 1px solid var(--line); margin: var(--sp-1) 0; width:
   .dock-tools { flex: 1; overflow-x: auto; }
   .dock .icon-btn.stacked { min-width: 56px; padding: 6px var(--sp-1); font-size: 10px; }
   .dock .wide-only { display: none; }
+  .dock { flex-wrap: wrap; }
+  .guide { order: -1; flex-basis: 100%; justify-content: flex-start; padding: var(--sp-1) var(--sp-2) 0; }
+  .guide .btn { margin-left: auto; }
   #leaveBtn { padding: 0 var(--sp-3); flex: none; }
   .dock .icon-btn.stacked { min-width: 50px; }
   .green-room, #enterDlg .green-room { grid-template-columns: 1fr; padding: var(--sp-4) var(--sp-5) var(--sp-5); }

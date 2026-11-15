@@ -34,7 +34,8 @@ const server = http.createServer((req, res) => {
 
 server.listen(0, async () => {
   process.env.ANTHROPIC_BASE_URL = `http://127.0.0.1:${server.address().port}`;
-  const { agentStream, parseJsonReply } = require('../lib/ai');
+  Object.assign(process.env, { HOUSE_AI_PROVIDER: 'claude', HOUSE_AI_KEY: 'sk-ant-house-0123456789', HOUSE_AI_DAILY: '2' });
+  const { agentStream, parseJsonReply, handleAI, houseInfo } = require('../lib/ai');
   const events = [];
   let ok = true;
   const check = (name, cond, detail = '') => { console.log(`${cond ? 'ok  ' : 'FAIL'} ${name}${detail ? ' — ' + detail : ''}`); if (!cond) ok = false; };
@@ -55,6 +56,16 @@ server.listen(0, async () => {
   check('the prompt lists the scenes', /Scenes: Solo, Interview/.test(first.system || ''));
   const j = parseJsonReply('Sure! {"reply":"Switching now.","actions":[{"type":"scene","name":"Solo"},{"type":"open","url":"http://x.com"},{"type":"countdown","minutes":500},{"type":"nope"}]}');
   check('JSON replies (ChatGPT, Gemini, Grok) keep only valid actions', j.reply === 'Switching now.' && JSON.stringify(j.actions) === '[{"type":"scene","name":"Solo"}]', JSON.stringify(j));
+  // house allowance: hosts without a key get a daily allowance on the owner's key, then a clear message
+  const fakeRes = () => { const r = { statusCode: 0, headers: {}, body: '' }; r.setHeader = (k, v) => { r.headers[k.toLowerCase()] = v; }; r.write = (d) => { r.body += d; }; r.end = (d) => { if (d) r.body += d; r.done = true; }; return r; };
+  const req = { headers: { 'x-forwarded-for': '203.0.113.9' }, socket: {} };
+  const ask = async () => { const r = fakeRes(); await handleAI(req, r, { mode: 'agent', house: true, studio: 'gather-house1', messages: [{ role: 'user', text: 'Switch to solo' }], ctx: { name: 'Sam', scenes: ['Solo'] } }); return r; };
+  check('config exposes the allowance, never the key', JSON.stringify(houseInfo()) === '{"provider":"claude","daily":2}');
+  const before = calls.length;
+  const h1 = await ask(), h2 = await ask(), h3 = await ask();
+  check('house requests stream with the owner key and count down', h1.statusCode === 200 && h1.headers['x-ai-left'] === '1' && h2.headers['x-ai-left'] === '0' && /"t":"done"/.test(h1.body), JSON.stringify([h1.statusCode, h1.headers['x-ai-left'], h2.headers['x-ai-left']]));
+  check('the owner key is the one sent', calls.slice(before).every((c) => /sk-ant-house-0123456789/.test(c.key || '')));
+  check('over the allowance: 429 with a readable message', h3.statusCode === 429 && /allowance/.test(h3.body), h3.statusCode + ' ' + h3.body.slice(0, 80));
   console.log(ok ? 'all AI checks passed' : 'FAIL an AI check did not hold');
   console.log('errors A', [], 'B', []);
   server.close();

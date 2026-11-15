@@ -1,0 +1,117 @@
+{
+  "samples": 20000,
+  "rows": [
+    {
+      "id": "turn-cloudflare",
+      "service": "Cloudflare Realtime TURN",
+      "wins": 0.79145,
+      "inPlan": 0.78455,
+      "meanScore": 1.1838582025444124,
+      "order": 3.688738767446307
+    },
+    {
+      "id": "turn-metered",
+      "service": "Metered.ca TURN",
+      "wins": 0.1943,
+      "inPlan": 0.19155,
+      "meanScore": 0.5402307418010057,
+      "order": 3.813625685199687
+    },
+    {
+      "id": "turn-self",
+      "service": "Self-hosted coturn (VM)",
+      "wins": 0.01425,
+      "inPlan": 0.0087,
+      "meanScore": 0.20945622495981514,
+      "order": 4.517241379310345
+    },
+    {
+      "id": "live-ws-ffmpeg",
+      "service": "gather relay: WebSocket + FFmpeg on Fly.io",
+      "wins": 0.7239,
+      "inPlan": 0.71945,
+      "meanScore": 1.7366325008347143,
+      "order": 2.5022586698172216
+    },
+    {
+      "id": "live-mediamtx",
+      "service": "MediaMTX (WHIP in, RTMP out) on Fly.io",
+      "wins": 0.1925,
+      "inPlan": 0.1915,
+      "meanScore": 1.047875266953872,
+      "order": 2.784595300261097
+    },
+    {
+      "id": "live-livekit",
+      "service": "LiveKit Cloud (egress to RTMP)",
+      "wins": 0.03905,
+      "inPlan": 0.0029,
+      "meanScore": 0.3727149099743352,
+      "order": 3.293103448275862
+    },
+    {
+      "id": "live-cf-stream",
+      "service": "Cloudflare Stream (WHIP in, simulcast out)",
+      "wins": 0.04455,
+      "inPlan": 0.0437,
+      "meanScore": 0.20089822725905582,
+      "order": 2.305491990846682
+    },
+    {
+      "id": "sfu-cloudflare",
+      "service": "Cloudflare Realtime SFU",
+      "wins": 0.6864,
+      "inPlan": 0.0006,
+      "meanScore": 0.14550350186413177,
+      "order": 3.8333333333333335
+    },
+    {
+      "id": "sfu-livekit",
+      "service": "LiveKit Cloud SFU",
+      "wins": 0.3136,
+      "inPlan": 0.0004,
+      "meanScore": 0.059858866271768126,
+      "order": 4
+    },
+    {
+      "id": "onboarding",
+      "service": "In-app",
+      "wins": 1,
+      "inPlan": 0.9849,
+      "meanScore": 3.788299564826791,
+      "order": 1.355721393034826
+    },
+    {
+      "id": "ai-house",
+      "service": "House key on the server (Gemini or Claude), rate-limited",
+      "wins": 1,
+      "inPlan": 0.87315,
+      "meanScore": 2.0024563886348017,
+      "order": 2.3808051308480787
+    },
+    {
+      "id": "iso-tracks",
+      "service": "In-browser recording + Google Drive",
+      "wins": 1,
+      "inPlan": 0.06215,
+      "meanScore": 0.29021652689563304,
+      "order": 4.631536604987932
+    },
+    {
+      "id": "realtime-signal",
+      "service": "Cloudflare Durable Objects WebSockets",
+      "wins": 1,
+      "inPlan": 0.12905,
+      "meanScore": 0.4076652544076569,
+      "order": 4.401007361487795
+    },
+    {
+      "id": "watch-page",
+      "service": "Embed of the YouTube/Twitch stream",
+      "wins": 1,
+      "inPlan": 0.8384,
+      "meanScore": 0.824840793665922,
+      "order": 4.522900763358779
+    }
+  ]
+}

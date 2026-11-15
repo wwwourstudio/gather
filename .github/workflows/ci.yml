@@ -15,6 +15,10 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npx playwright install --with-deps chromium
+      - name: Relay dependencies and FFmpeg (go-live test)
+        run: |
+          npm ci --prefix relay
+          sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg
       - name: Syntax and typecheck
         run: npm run check
       - name: Browser suites (local server, in-memory store)

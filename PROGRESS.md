@@ -240,3 +240,49 @@ See `AUDIT-V3.md` for the findings and plan. Screens: `audit/screens/v3-before` 
   - `tests/ai.test.js` runs `lib/ai.js` against a local stand-in for the Claude API. It covers the streamed text, tool calls becoming actions, an invalid link refused, tool results sent back with errors flagged, the host key used, and the JSON path.
   - round and round5 now cover "Show on stage keeps the scene" and "AI hidden until asked for".
   - All 10 suites, `npm run check`, `npm run ui-kit` and `npm run fx:live` pass.
+
+## Monte Carlo roadmap, executed
+`node scripts/roadmap-mc.ts` simulates 20,000 futures for 14 options: uncertain reach, impact, chance of working, build days and monthly cost, with sources and ranges listed in `ROADMAP-MC.md`. Group winners:
+
+| Job | Winner | Wins its job |
+|---|---|---|
+| Go live | gather relay (WebSocket + FFmpeg) on Fly.io | 72% |
+| TURN | Cloudflare Realtime TURN | 79% |
+| Bigger studios | Cloudflare Realtime SFU | 69% |
+
+- Cloudflare Stream was ruled out: its docs say browser (WHIP) inputs can't be restreamed.
+- The SFU won its group but is too large for a 10-day plan.
+- The 10-day plan was: first-run guide → AI allowance → go live → built-in TURN → watch page. All five shipped:
+
+- **Built-in TURN** (`lib/studio.js`):
+  - Each join gets 24-hour Cloudflare TURN credentials, minted on the server (the API token never reaches a browser) and cached for an hour.
+  - Port-53 URLs are dropped. A Cloudflare outage falls back to STUN.
+  - Env: `CF_TURN_KEY_ID`, `CF_TURN_API_TOKEN`.
+  - `tests/turn.test.js`.
+- **First-run guide:** one next step at a time in the dock (name your show, camera and mic, invite, pick a scene, record or go live). Each step ticks itself off from what actually happened. You can hide it, and it's shown once.
+- **AI allowance:**
+  - With `HOUSE_AI_PROVIDER` + `HOUSE_AI_KEY` set, hosts without a key get `HOUSE_AI_DAILY` (default 25) assistant requests per studio per day. Each network address gets three studios' worth.
+  - The panel shows how many are left. Over the limit, a clear message suggests adding your own key.
+  - Tests are in `tests/ai.test.js`.
+- **Go live:**
+  - `relay/` is a Node + FFmpeg service (Dockerfile, fly.toml, README). The host's browser streams the program over WSS with a two-minute HMAC token, which gather issues to the host only.
+  - H.264 is passed through; VP8 from other browsers is re-encoded. Output goes to up to 6 RTMP(S) destinations at once.
+  - The Stream tab has destinations (YouTube, Twitch, Kick, Facebook, X, Rumble, other). Stream keys stay in the browser and are never synced.
+  - There's a **Go live** button in the dock, a Live timer in the header, and live stats.
+  - Env: `RELAY_URL`, `RELAY_SECRET`.
+- **Watch page** (`/w/<studio>`):
+  - Shows the live YouTube, Twitch or Kick player with a tab for each platform, plus links out to the others.
+  - Says "not live" before and after the show and checks again every 15 seconds.
+  - Public data only (title, live state, the watch links the host chose).
+- **Verified:**
+  - `tests/live.test.js` runs a real browser → relay → two local RTMP servers. Both receive 1280×720 H.264 + AAC.
+  - Forged and missing tokens are refused, and guests can't get a token.
+  - Stream keys never reach gather's server or the relay log.
+  - The watch page goes from not live → playing → not live.
+  - The VP8 re-encode path was checked separately.
+  - All 12 suites, check, ui-kit and fx:live pass.
+
+### To switch these on (owner)
+1. **TURN:** Cloudflare dashboard → Realtime → TURN → create a key. In Vercel, set `CF_TURN_KEY_ID` and `CF_TURN_API_TOKEN`.
+2. **Go live:** deploy `relay/` (see `relay/README.md`, about $2–5/month on Fly.io). In Vercel, set `RELAY_URL` and `RELAY_SECRET`.
+3. **AI allowance (optional):** in Vercel, set `HOUSE_AI_PROVIDER` (e.g. `gemini`), `HOUSE_AI_KEY` and, optionally, `HOUSE_AI_DAILY`.

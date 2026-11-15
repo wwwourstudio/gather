@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Watch live · gather</title>
+<meta name="description" content="Watch the show live.">
+<meta name="theme-color" content="#070c1a">
+<link rel="icon" href="/icon.png" type="image/png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap">
+<link rel="stylesheet" href="/tokens.css">
+<link rel="stylesheet" href="/ui.css">
+<style>
+  body { min-height: 100vh; background: radial-gradient(120% 90% at 50% 0%, var(--bg-2), var(--bg) 70%); }
+  .w { max-width: 1080px; margin: 0 auto; padding: var(--sp-5) var(--sp-4) var(--sp-8); display: grid; gap: var(--sp-4); }
+  .w-top { display: flex; align-items: center; gap: var(--sp-4); }
+  .w-logo { font: 800 var(--fs-24)/1 var(--font-display); letter-spacing: -0.055em; color: var(--ink); text-decoration: none; }
+  .w-logo i { color: var(--accent); font-style: normal; }
+  .w-title { display: flex; align-items: center; gap: var(--sp-3); flex-wrap: wrap; }
+  .w-title h1 { margin: 0; font: 700 var(--fs-24)/1.2 var(--font-display); letter-spacing: -0.02em; }
+  .w-player { position: relative; aspect-ratio: 16 / 9; border-radius: var(--r-lg); overflow: hidden; background: #000; border: 1px solid var(--glass-border); }
+  .w-player iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
+  .w-empty { aspect-ratio: 16 / 9; border-radius: var(--r-lg); display: grid; place-content: center; text-align: center; gap: var(--sp-2); padding: var(--sp-5); }
+  .w-empty b { font: 700 var(--fs-20) var(--font-display); }
+  .w-empty span { color: var(--ink-2); font-size: var(--fs-14); }
+  .w-links { display: flex; flex-wrap: wrap; gap: var(--sp-2); }
+  .w-tabs { display: flex; flex-wrap: wrap; gap: var(--sp-2); }
+  .w-foot { color: var(--ink-3); font-size: var(--fs-12); }
+  .w-foot a { color: var(--ink-2); }
+</style>
+</head>
+<body>
+<main class="w">
+  <header class="w-top"><a class="w-logo" href="/">gather<i>.</i></a></header>
+  <div class="w-title"><h1 id="wTitle">Loading…</h1><span class="pill live caps" id="wLive" hidden><i class="dot"></i><span id="wLiveText">Live</span></span></div>
+  <div class="w-player" id="wPlayer" hidden></div>
+  <div class="w-empty glass" id="wEmpty"><b id="wEmptyH">Checking the show…</b><span id="wEmptyP"></span></div>
+  <div class="w-tabs" id="wTabs" hidden></div>
+  <div class="w-links" id="wLinks"></div>
+  <p class="w-foot">Made in a free browser studio. <a href="/">Start your own</a>.</p>
+</main>
+<script type="module" src="/watch.js"></script>
+</body>
+</html>
