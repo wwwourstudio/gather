@@ -1,0 +1,17 @@
+# One-click deploy of the gather go-live relay on Render (Dashboard → New → Blueprint → this repo).
+# Vercel can't run it: the relay keeps a WebSocket open for the whole show and runs FFmpeg.
+# RELAY_SECRET is asked for when you create the Blueprint; use the same value as RELAY_SECRET in Vercel.
+services:
+  - type: web
+    name: gather-relay
+    runtime: docker
+    rootDir: relay
+    dockerfilePath: ./Dockerfile
+    plan: free
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: RELAY_SECRET
+        sync: false
+      - key: RELAY_MAX_STREAMS
+        value: "2"

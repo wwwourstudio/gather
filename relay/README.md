@@ -10,6 +10,15 @@ is passed through untouched, so the smallest machine is enough. Other browsers s
 - Stream keys go from the host's browser straight to this relay and on to the platform. They are never stored,
   never sent to gather's server and never logged (`[relay]` log lines redact them).
 
+## Deploy on Render (free, one click)
+
+`render.yaml` at the repo root describes the relay. In Render: **New → Blueprint**, pick this repository and paste the
+`RELAY_SECRET` it asks for (the same value as `RELAY_SECRET` in Vercel), then **Apply**. When it's live, set
+`RELAY_URL` in Vercel to the service's `https://….onrender.com` address and redeploy gather.
+
+The free plan sleeps after 15 minutes without traffic and takes up to a minute to wake, so open the Go live dialog a
+minute before you start. It has little CPU: fine for Chrome and Edge (video is passed through), too slow for re-encoding.
+
 ## Deploy on Fly.io (about $2–5 a month; the machine sleeps when nobody is live)
 
 1. Install `flyctl` and sign in (`fly auth login`).
