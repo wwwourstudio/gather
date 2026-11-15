@@ -3344,9 +3344,6 @@ function renderHeader() {
 }
 function renderStageUI() {
   $('#stageEmpty').hidden = !!S.studio || previewActive();
-  $('#stageMeta').classList.toggle('live', !!S.studio);
-  const fmt = S.state.aspect === '9:16' ? '9:16 vertical' : '16:9';
-  $('#stageMeta').lastChild.textContent = S.studio ? `${S.state.stage.length} on stage · ${fmt}` : `Stage preview · ${fmt}`;
   renderScenes();
   $('#hostNote').hidden = isHost();
 }

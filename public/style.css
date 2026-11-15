@@ -53,14 +53,7 @@ hr { border: 0; border-top: 1px solid var(--line); margin: var(--sp-1) 0; width:
 .main { display: grid; grid-template-columns: minmax(0, 1fr) 360px 76px; gap: var(--sp-3); min-height: 0; }
 .studio { overflow: auto; display: flex; flex-direction: column; gap: var(--sp-3); min-width: 0; scrollbar-width: none; }
 .studio::-webkit-scrollbar { display: none; }
-.stage-card { padding: var(--sp-3) var(--sp-4) var(--sp-4); display: flex; flex-direction: column; gap: var(--sp-3); }
-.studio-head { display: flex; justify-content: space-between; align-items: center; }
-.studio-head .caps { display: inline-flex; align-items: center; gap: var(--sp-2); }
-.tally { width: 8px; height: 8px; border-radius: 50%; background: var(--ink-3); box-shadow: 0 0 0 3px color-mix(in srgb, var(--ink-3) 20%, transparent); }
-.meta { font-size: var(--fs-12); color: var(--ink-3); display: inline-flex; align-items: center; gap: var(--sp-2); font-variant-numeric: tabular-nums; }
-.meta i { width: 6px; height: 6px; border-radius: 50%; background: var(--ink-3); }
-.meta.live i { background: var(--ok); }
-.stage-card:has(.meta.live) .tally { background: var(--live); box-shadow: 0 0 0 3px var(--live-soft), 0 0 14px color-mix(in srgb, var(--live) 60%, transparent); }
+.stage-card { padding: var(--sp-4); display: flex; flex-direction: column; gap: var(--sp-3); }
 
 /* ---------------------------------------------------------------- stage */
 .stage-wrap { display: flex; justify-content: center; container-type: inline-size; }
