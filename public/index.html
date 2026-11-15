@@ -46,6 +46,36 @@
   <!-- ================= MAIN ================= -->
   <main class="main">
     <section class="studio" aria-label="Your studio">
+      <!-- Landing: what you see before you're in a studio -->
+      <div class="landing" id="landing">
+        <div class="land-copy">
+          <img class="land-mark" src="/icon.png" alt="" width="56" height="56">
+          <h1>Your show, live from the browser.</h1>
+          <p class="land-sub">Bring up to five guests, switch scenes, put slides on screen and stream to YouTube, Twitch and more at once. Nothing to install, nothing to pay.</p>
+          <div class="land-cta">
+            <button class="btn primary lg" id="enterStage">Create a studio</button>
+            <form class="land-join" id="landJoin" autocomplete="off">
+              <input class="input" id="landCode" placeholder="Paste an invite link or code" aria-label="Invite link or studio code" spellcheck="false">
+              <button class="btn lg" id="landJoinGo">Join</button>
+            </form>
+          </div>
+          <button class="btn link" id="heroSchedule">Schedule a show for later</button>
+          <ul class="land-points">
+            <li><svg class="i" aria-hidden="true"><use href="/icons.svg#i-layout-dashboard"/></svg><span><b>Scenes and layouts</b>Cameras, slides, banners and your brand, one click apart.</span></li>
+            <li><svg class="i" aria-hidden="true"><use href="/icons.svg#i-sparkles"/></svg><span><b>An AI producer</b>Ask it anything on air, or tell it to switch scenes and pull things up.</span></li>
+            <li><svg class="i" aria-hidden="true"><use href="/icons.svg#i-radio"/></svg><span><b>Go live everywhere</b>Several platforms at once, plus recording to Google Drive.</span></li>
+          </ul>
+        </div>
+        <div class="land-art" aria-hidden="true">
+          <div class="la-stage">
+            <div class="la-tile t1"><i></i><span>Maya</span></div>
+            <div class="la-tile t2"><i></i><span>Jordan</span></div>
+            <div class="la-banner"><b>Building in public</b><span>Episode 12</span></div>
+            <span class="la-live"><i></i>Live</span>
+          </div>
+          <div class="la-bar"><i></i><i></i><i></i><i class="rec"></i><i class="ai"></i></div>
+        </div>
+      </div>
       <div class="stage-card glass">
 
         <div class="stage-wrap">
@@ -80,13 +110,6 @@
                 <input id="cmdInput" maxlength="600" placeholder="Ask Sam…" aria-label="Ask your AI">
                 <button class="send-btn" id="cmdGo" aria-label="Send"><svg class="i" aria-hidden="true"><use href="/icons.svg#i-arrow-up"/></svg></button>
               </form>
-            </div>
-            <div class="stage-empty" id="stageEmpty">
-              <div class="cam-badge glass on-media"><svg class="i" aria-hidden="true"><use href="/icons.svg#i-video"/></svg></div>
-              <h1>Start a studio.</h1>
-              <p>Up to six people, live scenes, slides and an AI producer. <br>Free, in your browser.</p>
-              <button class="btn primary lg" id="enterStage"><svg class="i" aria-hidden="true"><use href="/icons.svg#i-plus"/></svg>Create or join a studio</button>
-              <button class="btn link" id="heroSchedule">or schedule one for later</button>
             </div>
           </div>
         </div>

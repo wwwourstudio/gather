@@ -34,6 +34,9 @@ const SP = process.argv[2];
   const onGrid = (v, n) => Math.abs(v * n / 8 - Math.round(v * n / 8)) < 1e-6;
   console.log('3 position on 8px grid:', onGrid(after.x, 1280) && onGrid(after.y, 720));
   // 4 Alt-drag stacks deliberately
+  // layers that paint nothing yet (no logo set, no banner shown) appear on the stage once picked in Layers
+  const pick = async (type) => { await a.click(`#elList .el-row[data-id="${(await el(type)).id}"] .el-pick`); await a.waitForTimeout(150); };
+  await pick('logo');
   const logoBox = await (await box('logo')).boundingBox();
   const cam = await (await box('slot', 1)).boundingBox();
   await a.mouse.move(logoBox.x + logoBox.width / 2, logoBox.y + logoBox.height / 2); await a.mouse.down(); await a.keyboard.down("Alt");
@@ -42,6 +45,7 @@ const SP = process.argv[2];
   console.log('4 Alt-drag logo onto camera → stacked:', !!logo.stack, '| overlaps:', overl(logo, await el('slot', 1)));
   // 5 lock: dragging does nothing
   await a.click(`#elList .el-row[data-id="${(await el('banner')).id}"] .layer-toggle[aria-label^="Lock"]`); await a.waitForTimeout(200);
+  await pick('banner');
   const ban = await el('banner'), bb = await (await box('banner')).boundingBox();
   await a.mouse.move(bb.x + bb.width / 2, bb.y + bb.height / 2); await a.mouse.down(); await a.mouse.move(bb.x + 300, bb.y - 200, { steps: 6 }); await a.mouse.up();
   const ban2 = await el('banner');

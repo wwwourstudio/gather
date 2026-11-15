@@ -1799,6 +1799,18 @@ function elName(e) {
   if (e.type === 'slot' && e.pip) return `Camera ${e.index + 1} (PiP)`;
   return ELABEL[e.type];
 }
+/** Whether a layer currently paints something on the program. */
+function inUse(e) {
+  switch (e.type) {
+    case 'banner': return !!S.state.banner;
+    case 'ticker': return !!S.state.ticker;
+    case 'logo': return !!S.state.brand?.logo;
+    case 'ads': return !!(S.state.ads?.on && S.state.ads.items?.length);
+    case 'featured': return !!S.state.featured;
+    case 'captions': return !!S.state.captions?.on;
+    default: return true;
+  }
+}
 function editableEls() {
   const custom = S.state.layout === 'custom';
   return (S.state.elements || []).filter((e) => custom || !['slot', 'media'].includes(e.type));
@@ -1810,7 +1822,9 @@ function renderEditor() {
   // Boxes on the stage, painted in the same order as the program
   const layer = $('#editLayer');
   if (editor.on) {
-    const boxes = drawOrder(editableEls()).map((e) => {
+    // Only what's on the picture: empty reserved spots (no banner, captions off, no sponsor…) stay out of the way
+    // unless you pick them in the Layers list. Hidden layers show only when selected.
+    const boxes = drawOrder(editableEls().filter((e) => e.id === editor.sel || (inUse(e) && !e.hidden))).map((e) => {
       const d = document.createElement('div');
       d.className = 'ebox' + (e.id === editor.sel ? ' sel' : '') + (e.locked ? ' locked' : '') + (e.hidden ? ' ghost' : '') + (e.stack ? ' stacked' : '');
       d.dataset.id = e.id; d.dataset.tier = tierOf(e);
@@ -1844,7 +1858,7 @@ function renderLayers() {
     rows.push(head);
     for (const e of inTier) {
       const li = document.createElement('li');
-      li.className = 'el-row' + (e.id === editor.sel ? ' sel' : '') + (e.hidden ? ' dim' : '');
+      li.className = 'el-row' + (e.id === editor.sel ? ' sel' : '') + (e.hidden || !inUse(e) ? ' dim' : '');
       li.dataset.id = e.id;
       const eye = toggleBtn(e.hidden ? 'eye-off' : 'eye', e.hidden ? `Show ${elName(e)}` : `Hide ${elName(e)}`, !e.hidden, () => patchEl(e.id, { hidden: !e.hidden }, e.hidden ? 'show' : 'hide'));
       const b = document.createElement('button'); b.type = 'button'; b.className = 'menu-item compact el-pick'; b.textContent = elName(e);
@@ -1853,7 +1867,9 @@ function renderLayers() {
       const reset = mkBtn('rotate-ccw', `Reset ${elName(e)}`, () => resetEl(e.id));
       reset.disabled = !host || !e.home;
       const tags = [];
-      if (e.stack) { const t = document.createElement('span'); t.className = 'pill caps'; t.textContent = 'Stacked'; t.dataset.tip = 'Allowed to overlap other layers'; tags.push(t); }
+      // system layers (banner, ticker, captions…) are meant to sit over the picture, so they carry no tag
+      if (e.stack && tierOf(e) !== 'system' && !['banner', 'ticker', 'logo', 'ads', 'featured', 'captions'].includes(e.type)) { const t = document.createElement('span'); t.className = 'pill caps'; t.textContent = 'Overlaps'; t.dataset.tip = 'Allowed to overlap other layers'; tags.push(t); }
+      else if (!inUse(e)) { const t = document.createElement('span'); t.className = 'el-idle'; t.textContent = 'not in use'; tags.push(t); }
       li.append(eye, b, ...tags, lock, reset);
       rows.push(li);
     }
@@ -3349,11 +3365,10 @@ function renderHeader() {
   $('#liveTop').hidden = !S.studio || !isHost();
   document.body.classList.toggle('pre', !S.studio && S.phase !== 'reconnecting'); // landing: just the stage hero
   // Scheduled shows: on the landing page they sit under the hero (that's where you start one); inside a studio, in Go live.
-  const upHome = document.body.classList.contains('pre') ? $('#stageEmpty') : $('#liveDlg .live-body');
+  const upHome = document.body.classList.contains('pre') ? $('#landing .land-copy') : $('#liveDlg .live-body');
   if ($('#upBlock').parentElement !== upHome) upHome.append($('#upBlock'));
 }
 function renderStageUI() {
-  $('#stageEmpty').hidden = !!S.studio || previewActive();
   renderScenes();
   $('#hostNote').hidden = isHost();
 }
@@ -4574,6 +4589,12 @@ $('#addSlot').onclick = openInvite;
 $('#enterTop').onclick = openInvite;
 $('#heroSchedule').onclick = () => openWizard();
 $('#enterStage').onclick = () => openEnter('create');
+$('#landJoin').addEventListener('submit', (e) => {
+  e.preventDefault();
+  const code = parseCode($('#landCode').value);
+  if (!code) { $('#landCode').focus(); return toast('Paste the invite link or code you were sent.', { err: true }); }
+  openEnter('join', code);
+});
 $('#recDlg').addEventListener('close', () => { $('#recVideo').pause(); });
 
 // ---------------------------------------------------------------- keyboard
