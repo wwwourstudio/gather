@@ -84,12 +84,14 @@ function render(info) {
   $('#wViewers').hidden = !info.found;
   $('#wViewers').textContent = info.viewers ? `${info.viewers} watching` : '';
   const w = info.watch || {};
-  $('#wSuperBtn').hidden = !w.supers;
+  $('#wSuperBtn').hidden = !w.supers || w.chat === false;
   $('#wJoin').hidden = !w.join; $('#wJoin').href = '/c/' + code;
   $('#wChatState').textContent = !info.found ? '' : w.chat === false ? 'Chat is off' : w.slow ? `Slow mode · ${w.slow}s` : '';
   $('#wCompose').hidden = !info.found || w.chat === false;
   renderChat(info.chat || []);
   renderTops(info.chat || []);
+  renderAbout(info);
+  renderCaps(info);
   renderSources(info);
   floatReacts(info.reacts);
 }
@@ -186,7 +188,7 @@ async function startDirect() {
   const stream = new MediaStream(); video.srcObject = stream;
   pc.ontrack = (e) => { stream.addTrack(e.track); video.play().catch(() => {}); };
   // Switch from "Connecting…" to the picture only when a real frame has arrived, so viewers never see a black box.
-  video.addEventListener('loadeddata', () => { if (gen !== D.gen) return; D.state = 'live'; D.video = video; render(W.info); setMuted(video.muted); }, { once: true });
+  video.addEventListener('loadeddata', () => { if (gen !== D.gen) return; D.state = 'live'; D.video = video; render(W.info); setMuted(video.muted); if (W.q !== 'auto') setQuality(W.q); }, { once: true });
   pc.onicecandidate = (e) => { if (e.candidate) api('wrtcSignal', { ...creds(), data: { candidate: e.candidate } }).catch(() => {}); };
   pc.onconnectionstatechange = () => {
     if (pc.connectionState === 'connected' && D.state !== 'live') D.state = 'connecting'; // "live" once a frame shows
@@ -227,7 +229,15 @@ $('#wMute').onclick = () => setMuted(!W.direct.video?.muted);
 $('#wVol').oninput = (e) => { const v = W.direct.video; if (!v) return; v.volume = Number(e.target.value); setMuted(v.volume === 0); };
 $('#wPip').hidden = !document.pictureInPictureEnabled;
 $('#wPip').onclick = async () => { try { if (document.pictureInPictureElement) await document.exitPictureInPicture(); else await W.direct.video?.requestPictureInPicture(); } catch {} };
-$('#wFull').onclick = () => { const el = $('#wPlayerWrap'); if (document.fullscreenElement) document.exitFullscreen(); else el.requestFullscreen?.().catch(() => {}); };
+// Full-screen watch: the whole page goes full screen, the video fills it and the chat floats over it (C hides it).
+$('#wFull').onclick = () => {
+  if (document.fullscreenElement) return document.exitFullscreen();
+  $('#wv').classList.add('theater');
+  const go = $('#wv').requestFullscreen?.(); if (!go) return; // iPhone Safari has no page fullscreen: keep the overlay layout anyway
+  go.catch(() => {});
+};
+document.addEventListener('fullscreenchange', () => { if (!document.fullscreenElement) $('#wv').classList.remove('theater'); if (document.fullscreenElement && innerHeight > innerWidth) setFill(true); });
+addEventListener('keydown', (e) => { if (e.key === 'Escape' && $('#wv').classList.contains('theater') && !document.fullscreenElement) $('#wv').classList.remove('theater'); });
 function toggleChat() { const off = $('#wv').classList.toggle('no-chat'); $('#wChatToggle').setAttribute('aria-pressed', String(off)); $('#wChatToggle').setAttribute('aria-label', off ? 'Show chat (C)' : 'Hide chat (C)'); store.set('noChat', off); }
 $('#wChatToggle').onclick = toggleChat;
 if (store.get('noChat', false) && innerWidth > 900) toggleChat();
@@ -386,3 +396,58 @@ $('#wShare').onclick = async () => {
 renderMe();
 if (code) { poll(); startDirect(); setInterval(() => { if (W.info?.live?.on) $('#wLiveText').textContent = 'Live · ' + clockText(W.info.live.since); }, 1000); setInterval(() => { if (sess) api('wping', creds()).catch(() => {}); if ($('#wLive').hidden === false && W.info?.live?.since) $('#wLiveText').textContent = 'Live · ' + clockText(W.info.live.since); }, 30000); }
 else render({ found: false });
+
+
+// ---------------------------------------------------------------- revision 3: About, captions, quality, fill
+function renderAbout(info) {
+  const w = info.watch || {};
+  $('#wAboutTitle').textContent = info.title || 'Live show';
+  const bits = [info.live?.on ? `Live for ${clockText(info.live.since)}` : W.direct.state === 'live' ? 'On air now' : 'Not on air', info.viewers ? `${info.viewers} watching` : ''].filter(Boolean);
+  $('#wAboutMeta').textContent = bits.join(' · ');
+  $('#wAboutText').textContent = w.about || 'The host hasn’t written a description yet.';
+  const links = [...(w.links || []), ...((info.live?.on && info.live.links) || []).map((l) => ({ label: 'Also live on ' + nameOf(l), url: l.url }))];
+  const key = JSON.stringify(links);
+  if (W.aboutKey === key) return;
+  W.aboutKey = key;
+  $('#wAboutLinks').replaceChildren(...links.map((l) => {
+    const li = document.createElement('li'), a = document.createElement('a');
+    a.href = l.url; a.target = '_blank'; a.rel = 'noopener nofollow'; a.textContent = l.label;
+    const host = document.createElement('span'); try { host.textContent = new URL(l.url).hostname.replace(/^www\./, ''); } catch {}
+    a.append(host); li.append(a); return li;
+  }));
+}
+function setTab(about) {
+  $('#wChat').classList.toggle('about', about); $('#wAbout').hidden = !about;
+  $('#wTabChat').setAttribute('aria-selected', String(!about)); $('#wTabAbout').setAttribute('aria-selected', String(about));
+}
+$('#wTabChat').onclick = () => setTab(false);
+$('#wTabAbout').onclick = () => setTab(true);
+$('#wAboutShare').onclick = () => $('#wShare').click();
+
+// Captions: lines from the studio's live captions. If the host already shows captions on screen, CC is redundant.
+W.cc = store.get('cc', false);
+function renderCaps(info) {
+  const onStage = !!info.capsOnStage, b = $('#wCC');
+  b.disabled = onStage; b.setAttribute('aria-pressed', String(W.cc && !onStage));
+  b.dataset.tip = onStage ? 'Captions are already on screen' : 'Captions';
+  const line = (info.caps || []).slice(-1)[0];
+  const show = W.cc && !onStage && line && Date.now() - line.ts < 9000;
+  $('#wCaps').hidden = !show;
+  if (show) { $('#wCaps').replaceChildren(Object.assign(document.createElement('b'), { textContent: line.name }), document.createTextNode(line.text)); }
+}
+$('#wCC').onclick = () => { W.cc = !W.cc; store.set('cc', W.cc); if (W.info) renderCaps(W.info); if (W.cc && !(W.info?.caps || []).length) toast('Captions show here when the host turns on live captions.'); };
+
+// Quality: Auto lets WebRTC adapt; picking one asks the host to send this viewer a smaller stream (saves data).
+const QUALS = ['auto', '720', '480', '360'];
+W.q = store.get('quality', 'auto');
+function setQuality(q) {
+  W.q = q; store.set('quality', q);
+  $('#wQual').textContent = q === 'auto' ? 'Auto' : q + 'p';
+  if (sess && W.direct.state === 'live') api('wrtcSignal', { ...creds(), data: { quality: q === 'auto' ? '720' : q } }).catch(() => {});
+}
+$('#wQual').onclick = () => setQuality(QUALS[(QUALS.indexOf(W.q) + 1) % QUALS.length]);
+setQuality(W.q);
+
+// Fill: crop the 16:9 picture to fill a tall screen (phones held upright, full screen).
+function setFill(on) { $('#wPlayerWrap').classList.toggle('fill', on); $('#wFill').setAttribute('aria-pressed', String(on)); }
+$('#wFill').onclick = () => setFill(!$('#wPlayerWrap').classList.contains('fill'));

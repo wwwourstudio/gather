@@ -229,6 +229,8 @@
             <div class="row between"><b>Your watch page</b><span class="hint" id="wpCount" style="margin:0"></span></div>
             <p class="hint" style="margin:0">Send viewers here instead of YouTube: the show straight from your studio, live chat, super chats paid to you, and a button to ask to join.</p>
             <code class="wp-url" id="wpUrl"></code>
+            <label class="fld"><span>About this show <em>shown under the video</em></span><textarea id="wpAbout" rows="3" maxlength="600" placeholder="What the show is about, the schedule, who’s on today"></textarea></label>
+            <label class="fld"><span>Links <em>one per line: Label | https://…</em></span><textarea id="wpLinks" rows="3" maxlength="1200" spellcheck="false" placeholder="Merch | https://shop.example.com&#10;Discord | https://discord.gg/…"></textarea></label>
             <div class="row"><button type="button" class="btn sm primary" id="wpCopy">Copy link</button><button type="button" class="btn sm" id="wpCard">Put link + QR on stage</button><button type="button" class="btn sm ghost" id="wpOpen">Open</button></div>
             <label class="toggle-row"><span><b>Direct video</b><small>Viewers watch from your browser with under a second of delay.</small></span><input type="checkbox" class="toggle" id="wpDirect" role="switch"></label>
             <label class="fld"><span>Direct viewers at once <em>each one uses up to 2.5 Mbps of your upload</em></span><select id="wpCap"><option value="3">3</option><option value="6">6</option><option value="10">10</option><option value="15">15</option><option value="20">20</option></select></label>
@@ -454,6 +456,7 @@
         <button class="icon-btn stacked" id="shareBtn" aria-haspopup="menu" aria-expanded="false" aria-controls="presentMenu"><svg class="i" aria-hidden="true"><use href="/icons.svg#i-monitor-up"/></svg><span class="caption" id="shareLabel">Present</span></button>
         <div class="popover glass raised present-menu" id="presentMenu" popover role="menu" aria-label="Present"><div class="menu">
           <button class="menu-item" role="menuitem" data-present="screen"><svg class="i" aria-hidden="true"><use href="/icons.svg#i-monitor-up"/></svg><b>Share screen</b><span>A window, tab or full screen, with sound</span></button>
+          <button class="menu-item" role="menuitem" data-present="game"><svg class="i" aria-hidden="true"><use href="/icons.svg#i-play"/></svg><b>Share a game</b><span>60 fps, tuned for fast motion, with game sound</span></button>
           <button class="menu-item" role="menuitem" data-present="video"><svg class="i" aria-hidden="true"><use href="/icons.svg#i-video"/></svg><b>Play a video</b><span>MP4, WebM or MOV from your computer</span></button>
           <button class="menu-item" role="menuitem" data-present="pdf"><svg class="i" aria-hidden="true"><use href="/icons.svg#i-file-text"/></svg><b>Present slides</b><span>A PDF deck, page by page</span></button>
           <button class="menu-item" role="menuitem" data-present="image"><svg class="i" aria-hidden="true"><use href="/icons.svg#i-image"/></svg><b>Show an image</b><span>PNG, JPEG, WebP or GIF</span></button>
