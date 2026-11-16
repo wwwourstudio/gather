@@ -1,0 +1,149 @@
+/* The public watch page. Revision 2: everything fits on one screen with no page scroll. The video takes all the
+   room it can at 16:9, a single control strip sits under it, and the chat scrolls inside its own panel. */
+html, body { height: 100%; overflow: hidden; }
+body { background: #05070d; }
+.wv { display: grid; grid-template-rows: 52px minmax(0, 1fr); height: 100vh; height: 100dvh; }
+
+/* header */
+.wv-top { display: flex; align-items: center; gap: var(--sp-3); padding: 0 var(--sp-4); border-bottom: 1px solid var(--line); background: var(--surface); min-width: 0; }
+.wv-logo { font: 800 21px/1 var(--font-display); letter-spacing: -0.055em; color: var(--ink); text-decoration: none; flex: none; }
+.wv-logo i { color: var(--accent); font-style: normal; }
+.wv-title { display: flex; align-items: center; gap: var(--sp-2); min-width: 0; flex: 1; }
+.wv-title h1 { font: 700 15px/1.2 var(--font-display); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.wv-meta { color: var(--ink-3); font-size: 12px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.wv-own { color: var(--ink-3); font-size: 12px; text-decoration: none; white-space: nowrap; }
+.wv-own:hover { color: var(--ink); }
+
+/* main: video column + chat column, both exactly the remaining height */
+.wv-main { display: grid; grid-template-columns: minmax(0, 1fr) 340px; min-height: 0; }
+.wv.no-chat .wv-main { grid-template-columns: minmax(0, 1fr) 0; }
+.wv.no-chat .wv-chat { display: none; }
+.wv-stagecol { display: grid; grid-template-rows: minmax(0, 1fr); grid-template-columns: minmax(0, 1fr); min-height: 0; min-width: 0; }
+/* The box is a size container, so the player can be the largest 16:9 rectangle that fits it. */
+.wv-stagebox { container-type: size; min-height: 0; display: grid; align-content: center; justify-items: center; gap: var(--sp-3); padding: var(--sp-3); }
+/* The player is the largest 16:9 that leaves room for the strip under it; the strip matches its width. */
+.wv-stagebox { --pw: min(100cqw, (100cqh - 56px) * 16 / 9); }
+.wv-player { position: relative; width: var(--pw); aspect-ratio: 16 / 9; border-radius: var(--r-md); overflow: hidden; background: #000; outline: none; }
+.wv-video { position: absolute; inset: 0; }
+.wv-video iframe, .wv-video video { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; object-fit: contain; background: #000; }
+
+/* waiting state */
+.wv-empty { position: absolute; inset: 0; display: grid; place-content: center; justify-items: center; text-align: center; gap: var(--sp-2); padding: var(--sp-5); background: radial-gradient(80% 80% at 50% 40%, #121a30, #05070d); }
+.wv-empty b { font: 700 19px var(--font-display); }
+.wv-empty span { color: var(--ink-2); font-size: 14px; max-width: 44ch; }
+.wv-orb { position: relative; width: 44px; height: 44px; margin-bottom: var(--sp-2); }
+.wv-orb i { position: absolute; inset: 0; border-radius: 50%; border: 2px solid var(--accent); opacity: 0; animation: wv-ping 2s var(--ease-out) infinite; }
+.wv-orb i + i { animation-delay: 1s; }
+@keyframes wv-ping { from { transform: scale(0.3); opacity: 0.9; } to { transform: scale(1.4); opacity: 0; } }
+
+.wv-unmute { position: absolute; left: 50%; top: var(--sp-4); transform: translateX(-50%); display: inline-flex; align-items: center; gap: var(--sp-2); padding: var(--sp-2) var(--sp-4); border-radius: 999px; background: var(--accent); color: #fff; font-weight: 700; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4); z-index: 3; }
+
+/* player controls: fade in on hover / tap / focus */
+.wv-ctrls { position: absolute; left: 0; right: 0; bottom: 0; min-width: 0; display: flex; align-items: center; gap: 4px; padding: 28px var(--sp-3) var(--sp-2); background: linear-gradient(transparent, rgba(0, 0, 0, 0.7)); opacity: 0; transition: opacity var(--dur) var(--ease-out); z-index: 2; }
+.wv-player:hover .wv-ctrls, .wv-player:focus-within .wv-ctrls, .wv-player.show-ctrls .wv-ctrls { opacity: 1; }
+.wv-c { width: 40px; height: 40px; display: grid; place-items: center; border-radius: var(--r-sm); color: #fff; }
+.wv-c:hover { background: rgba(255, 255, 255, 0.14); }
+.wv-c[aria-pressed="true"] { background: rgba(255, 255, 255, 0.2); }
+.wv-ctrls input.wv-vol { flex: none; width: 84px; accent-color: #fff; }
+.wv-sp { flex: 1; }
+.wv-badge { white-space: nowrap; flex: none; font: 600 11px var(--font-ui); color: #fff; padding: 3px 8px; border-radius: 999px; background: rgba(22, 163, 74, 0.85); font-variant-numeric: tabular-nums; }
+.wv-badge.slow { background: rgba(217, 119, 6, 0.9); }
+.wv-player:fullscreen { width: 100vw; height: 100vh; border-radius: 0; aspect-ratio: auto; }
+
+/* reactions */
+.wv-floats { position: absolute; inset: 0; pointer-events: none; overflow: hidden; z-index: 1; }
+.wv-floats span { position: absolute; bottom: 12%; font-size: 30px; animation: wv-float 2.4s var(--ease-out) forwards; }
+@keyframes wv-float { from { transform: translateY(0) scale(0.6); opacity: 0; } 15% { opacity: 1; transform: translateY(-20px) scale(1.15); } to { transform: translateY(-260px) scale(1); opacity: 0; } }
+.wv-combo { position: absolute; right: var(--sp-4); bottom: 64px; font: 800 22px var(--font-display); color: #fff; text-shadow: 0 2px 10px rgba(0, 0, 0, 0.6); z-index: 2; animation: wv-pop 0.25s var(--ease-out); }
+@keyframes wv-pop { from { transform: scale(1.5); } to { transform: none; } }
+@media (prefers-reduced-motion: reduce) { .wv-floats span { animation-duration: 0.8s; } .wv-orb i { animation: none; opacity: 0.6; } }
+
+/* the one control strip under the video */
+.wv-strip { display: flex; align-items: center; gap: var(--sp-2); width: var(--pw); min-width: 0; }
+.wv-unmute .short { display: none; }
+.wv-sc-ic { display: inline-grid; place-items: center; width: 18px; height: 18px; border-radius: 50%; background: rgba(255, 255, 255, 0.25); font-weight: 800; font-size: 12px; }
+.btn.wv-sc { --btn-bg: #16a34a; --btn-bg-hover: #15803d; }
+.wv-reacts { display: flex; gap: 2px; padding: 2px; border-radius: 999px; background: var(--fill); border: 1px solid var(--glass-border); }
+.wv-reacts button { width: 36px; height: 36px; border-radius: 999px; font-size: 18px; transition: transform var(--dur-fast) var(--ease-out); }
+.wv-reacts button:hover { transform: translateY(-2px) scale(1.1); background: var(--fill-hover); }
+.wv-reacts button:active { transform: scale(0.9); }
+.wv-sources { display: flex; gap: var(--sp-1); margin-left: auto; }
+.wv-links { display: flex; gap: var(--sp-1); }
+.wv-sources + .wv-links, .wv-reacts + .wv-links { margin-left: auto; }
+
+/* chat */
+.wv-chat { display: grid; grid-template-rows: auto auto minmax(0, 1fr) auto; min-height: 0; border-left: 1px solid var(--line); background: var(--surface); position: relative; }
+.wv-chat-head { display: flex; align-items: center; justify-content: space-between; padding: 0 var(--sp-4); height: 44px; border-bottom: 1px solid var(--line); }
+.wv-chat-head h2 { font-size: 13px; font-weight: 700; }
+.wv-tops { display: flex; gap: var(--sp-1); padding: var(--sp-2) var(--sp-3); border-bottom: 1px solid var(--line); overflow-x: auto; scrollbar-width: none; }
+.wv-tops span { flex: none; display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px 3px 3px; border-radius: 999px; background: rgba(22, 163, 74, 0.16); border: 1px solid rgba(22, 163, 74, 0.4); font-size: 12px; font-weight: 600; white-space: nowrap; }
+.wv-tops span i { font-style: normal; padding: 1px 7px; border-radius: 999px; background: #16a34a; color: #fff; font-size: 11px; }
+.wv-msgs { list-style: none; margin: 0; padding: var(--sp-2) var(--sp-3); overflow-y: auto; display: flex; flex-direction: column; gap: 2px; min-height: 0; overscroll-behavior: contain; }
+.wv-msgs li { font-size: 14px; line-height: 1.45; overflow-wrap: anywhere; padding: 3px 6px; border-radius: 6px; }
+.wv-msgs li:hover { background: var(--fill); }
+.wv-msgs li b { font-weight: 600; margin-right: 6px; }
+.wv-msgs li.me b { color: var(--ok); }
+.wv-msgs li.paid { margin: 4px 0; padding: var(--sp-2) var(--sp-3); border-radius: var(--r-md); background: linear-gradient(135deg, rgba(22, 163, 74, 0.26), rgba(22, 163, 74, 0.08)); border: 1px solid rgba(22, 163, 74, 0.5); }
+.wv-msgs li.paid .amt { display: inline-block; margin-right: 6px; padding: 1px 8px; border-radius: 999px; background: #16a34a; color: #fff; font-size: 12px; font-weight: 700; }
+.wv-msgs li.paid.answered::after { content: " · answered"; color: var(--ink-3); font-size: 11px; }
+.wv-msgs li.pending { opacity: 0.8; border-style: dashed; }
+.wv-msgs li.hello { color: var(--ink-3); font-size: 12px; text-align: center; }
+.wv-newer { position: absolute; left: 50%; bottom: 64px; transform: translateX(-50%); padding: 4px 12px; border-radius: 999px; background: var(--accent); color: #fff; font-size: 12px; font-weight: 600; box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35); }
+.wv-compose { padding: var(--sp-2) var(--sp-3) var(--sp-3); border-top: 1px solid var(--line); display: grid; gap: 4px; }
+.wv-composer { display: flex; gap: var(--sp-2); align-items: center; }
+.wv-me { flex: none; max-width: 92px; height: 40px; padding: 0 10px; border-radius: var(--r-sm); background: var(--fill); border: 1px solid var(--glass-border); color: var(--ok); font-size: 12px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.wv-composer .input { flex: 1; min-width: 0; height: 40px; font-size: 16px; }
+.wv-composer .btn { height: 40px; }
+.wv-err { margin: 0; color: var(--danger); font-size: 12px; }
+
+/* sheets */
+.wv-sheet { width: min(460px, calc(100vw - 24px)); display: grid; gap: var(--sp-3); max-height: calc(100dvh - 24px); overflow-y: auto; }
+.wv-sheet .sub { margin: 0; color: var(--ink-2); font-size: 14px; }
+.wv-amounts { display: grid; grid-template-columns: repeat(5, 1fr); gap: var(--sp-2); }
+.wv-amounts button, .wv-methods button { min-height: 44px; border-radius: var(--r-md); border: 1px solid var(--glass-border); background: var(--fill); font-weight: 700; font-variant-numeric: tabular-nums; padding: 0 8px; }
+.wv-amounts button[aria-checked="true"], .wv-methods button[aria-checked="true"] { background: rgba(22, 163, 74, 0.2); border-color: #16a34a; }
+.wv-amounts input { grid-column: span 5; height: 44px; font-size: 16px; }
+.wv-methods { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: var(--sp-2); }
+.wv-steps { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--sp-2); counter-reset: s; }
+.btn.block { width: 100%; height: 44px; }
+.wv-sheet .row { justify-content: flex-end; }
+
+.toasts { position: fixed; left: 50%; top: 64px; transform: translateX(-50%); display: grid; gap: 8px; z-index: 50; pointer-events: none; }
+.toast { padding: 8px 16px; border-radius: var(--r-md); background: var(--surface-3); border: 1px solid var(--line-2); font-size: 13px; font-weight: 500; pointer-events: auto; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35); }
+.toast.err { background: rgba(120, 20, 40, 0.95); }
+
+/* Laptops with short screens: slimmer strip. */
+@media (max-height: 760px) and (min-width: 901px) { .wv-stagebox { padding: var(--sp-2) var(--sp-3); gap: var(--sp-2); } }
+
+/* Phones and narrow windows: header, full-width video, one scrollable strip, then the chat fills the rest. */
+@media (max-width: 900px) {
+  .wv { grid-template-rows: 48px auto minmax(0, 1fr); grid-template-columns: minmax(0, 1fr); }
+  .wv-top { padding: 0 var(--sp-3); gap: var(--sp-2); }
+  .wv-own { display: none; }
+  .wv-main { display: contents; }
+  .wv-stagecol { grid-template-rows: auto; grid-template-columns: minmax(0, 1fr); }
+  .wv-stagebox, .wv-player { min-width: 0; max-width: 100%; }
+  .wv-stagebox { container-type: normal; padding: 0; display: block; }
+  .wv-player { width: 100%; border-radius: 0; }
+  .wv-ctrls { opacity: 1; padding-top: 18px; }
+  .wv-ctrls input.wv-vol, #wChatToggle { display: none; }
+  .wv-stagebox { --pw: 100%; gap: 0; }
+  .wv-strip { width: 100%; padding: var(--sp-2) var(--sp-3); overflow-x: auto; scrollbar-width: none; border-bottom: 1px solid var(--line); }
+  .wv-unmute .long { display: none; } .wv-unmute .short { display: inline; }
+  .wv-strip .btn { flex: none; height: 40px; }
+  #wJoin span { display: none; }
+  #wJoin { width: 40px; padding: 0; }
+  .wv-reacts button { width: 40px; height: 40px; }
+  .wv-chat { border-left: 0; }
+  .wv-chat-head { height: 36px; }
+  .wv.no-chat .wv-chat { display: grid; }
+}
+/* Phones turned sideways: the video takes the screen, the chat becomes a slim column. */
+@media (max-width: 900px) and (orientation: landscape) and (max-height: 500px) {
+  .wv { grid-template-rows: minmax(0, 1fr); grid-template-columns: minmax(0, 1fr) 280px; }
+  .wv-top { display: none; }
+  .wv-stagecol { grid-template-rows: minmax(0, 1fr); grid-row: 1; grid-column: 1; min-height: 0; }
+  .wv-stagebox { container-type: size; display: grid; align-content: center; min-height: 0; --pw: min(100cqw, (100cqh - 56px) * 16 / 9); }
+  .wv-strip { width: var(--pw); border-bottom: 0; padding: var(--sp-2) 0 0; }
+  .wv-chat { grid-row: 1; grid-column: 2; border-left: 1px solid var(--line); }
+}

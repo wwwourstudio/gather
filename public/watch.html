@@ -2,9 +2,9 @@
 <html lang="en" data-theme="dark">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,interactive-widget=resizes-content">
 <title>Watch live · gather</title>
-<meta name="description" content="Watch the show live.">
+<meta name="description" content="Watch the show live, chat, and send a super chat.">
 <meta name="theme-color" content="#070c1a">
 <link rel="icon" href="/icon.png" type="image/png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -12,35 +12,99 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap">
 <link rel="stylesheet" href="/tokens.css">
 <link rel="stylesheet" href="/ui.css">
-<style>
-  body { min-height: 100vh; background: radial-gradient(120% 90% at 50% 0%, var(--bg-2), var(--bg) 70%); }
-  .w { max-width: 1080px; margin: 0 auto; padding: var(--sp-5) var(--sp-4) var(--sp-8); display: grid; gap: var(--sp-4); }
-  .w-top { display: flex; align-items: center; gap: var(--sp-4); }
-  .w-logo { font: 800 var(--fs-24)/1 var(--font-display); letter-spacing: -0.055em; color: var(--ink); text-decoration: none; }
-  .w-logo i { color: var(--accent); font-style: normal; }
-  .w-title { display: flex; align-items: center; gap: var(--sp-3); flex-wrap: wrap; }
-  .w-title h1 { margin: 0; font: 700 var(--fs-24)/1.2 var(--font-display); letter-spacing: -0.02em; }
-  .w-player { position: relative; aspect-ratio: 16 / 9; border-radius: var(--r-lg); overflow: hidden; background: #000; border: 1px solid var(--glass-border); }
-  .w-player iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
-  .w-empty { aspect-ratio: 16 / 9; border-radius: var(--r-lg); display: grid; place-content: center; text-align: center; gap: var(--sp-2); padding: var(--sp-5); }
-  .w-empty b { font: 700 var(--fs-20) var(--font-display); }
-  .w-empty span { color: var(--ink-2); font-size: var(--fs-14); }
-  .w-links { display: flex; flex-wrap: wrap; gap: var(--sp-2); }
-  .w-tabs { display: flex; flex-wrap: wrap; gap: var(--sp-2); }
-  .w-foot { color: var(--ink-3); font-size: var(--fs-12); }
-  .w-foot a { color: var(--ink-2); }
-</style>
+<link rel="stylesheet" href="/watch.css">
 </head>
 <body>
-<main class="w">
-  <header class="w-top"><a class="w-logo" href="/">gather<i>.</i></a></header>
-  <div class="w-title"><h1 id="wTitle">Loading…</h1><span class="pill live caps" id="wLive" hidden><i class="dot"></i><span id="wLiveText">Live</span></span></div>
-  <div class="w-player" id="wPlayer" hidden></div>
-  <div class="w-empty glass" id="wEmpty"><b id="wEmptyH">Checking the show…</b><span id="wEmptyP"></span></div>
-  <div class="w-tabs" id="wTabs" hidden></div>
-  <div class="w-links" id="wLinks"></div>
-  <p class="w-foot">Made in a free browser studio. <a href="/">Start your own</a>.</p>
-</main>
+<!-- One screen, no page scroll: header, then the video with its control strip, then (beside or below) the chat. -->
+<div class="wv" id="wv">
+  <header class="wv-top">
+    <a class="wv-logo" href="/" aria-label="gather home">gather<i>.</i></a>
+    <div class="wv-title">
+      <h1 id="wTitle">Loading…</h1>
+      <span class="pill live caps" id="wLive" hidden><i class="dot"></i><span id="wLiveText">Live</span></span>
+      <span class="wv-meta" id="wViewers" hidden></span>
+    </div>
+    <a class="wv-own" href="/" target="_blank" rel="noopener">Start your own show</a>
+    <button class="icon-btn" id="wShare" type="button" aria-label="Share this page" data-tip="Share"><svg class="i" aria-hidden="true"><use href="/icons.svg#i-link"/></svg></button>
+  </header>
+
+  <main class="wv-main">
+    <section class="wv-stagecol" aria-label="Video">
+      <div class="wv-stagebox" id="wStageBox">
+        <div class="wv-player" id="wPlayerWrap" tabindex="-1">
+          <div class="wv-video" id="wPlayer" hidden></div>
+          <div class="wv-empty" id="wEmpty"><div class="wv-orb" aria-hidden="true"><i></i><i></i></div><b id="wEmptyH">Checking the show…</b><span id="wEmptyP"></span></div>
+          <button class="wv-unmute" id="wUnmute" type="button" hidden><svg class="i" aria-hidden="true"><use href="/icons.svg#i-play"/></svg><span class="long">Tap to turn on sound</span><span class="short">Tap for sound</span></button>
+          <div class="wv-floats" id="wFloats" aria-hidden="true"></div>
+          <div class="wv-combo" id="wCombo" aria-hidden="true" hidden></div>
+          <div class="wv-ctrls" id="wCtrls">
+            <button class="wv-c" id="wMute" type="button" aria-label="Mute (M)" data-tip="Mute (M)"><svg class="i" aria-hidden="true"><use href="/icons.svg#i-volume-2"/></svg></button>
+            <input class="wv-vol" id="wVol" type="range" min="0" max="1" step="0.05" value="1" aria-label="Volume">
+            <span class="wv-badge" id="wDelay" hidden></span>
+            <span class="wv-sp"></span>
+            <button class="wv-c" id="wPip" type="button" aria-label="Picture in picture" data-tip="Picture in picture"><svg class="i" aria-hidden="true"><use href="/icons.svg#i-pip"/></svg></button>
+            <button class="wv-c" id="wChatToggle" type="button" aria-label="Hide chat (C)" data-tip="Hide chat (C)" aria-pressed="false"><svg class="i" aria-hidden="true"><use href="/icons.svg#i-message-square"/></svg></button>
+            <button class="wv-c" id="wFull" type="button" aria-label="Fullscreen (F)" data-tip="Fullscreen (F)"><svg class="i" aria-hidden="true"><use href="/icons.svg#i-maximize"/></svg></button>
+          </div>
+        </div>
+      <div class="wv-strip">
+          <button class="btn primary wv-sc" id="wSuperBtn" type="button" hidden><span class="wv-sc-ic" aria-hidden="true">$</span>Super chat</button>
+          <a class="btn" id="wJoin" target="_blank" rel="noopener" hidden><svg class="i" aria-hidden="true"><use href="/icons.svg#i-user-plus"/></svg><span>Ask to join</span></a>
+          <div class="wv-reacts" id="wReacts" role="group" aria-label="React"></div>
+          <div class="wv-sources" id="wTabs" role="tablist" aria-label="Watch on" hidden></div>
+          <div class="wv-links" id="wLinks"></div>
+        </div>
+      </div>
+
+    </section>
+
+    <aside class="wv-chat" id="wChat" aria-label="Live chat">
+      <header class="wv-chat-head"><h2>Live chat</h2><span class="wv-meta" id="wChatState"></span></header>
+      <div class="wv-tops" id="wTops" hidden aria-label="Top supporters"></div>
+      <ol class="wv-msgs" id="wMsgs" aria-live="polite"></ol>
+      <button class="wv-newer" id="wNewer" type="button" hidden>New messages ↓</button>
+      <form class="wv-compose" id="wCompose" autocomplete="off">
+        <div class="wv-composer">
+          <button class="wv-me" id="wMe" type="button" aria-label="Change your chat name" data-tip="Change your name"></button>
+          <input class="input" id="wText" maxlength="300" placeholder="Say something…" aria-label="Chat message" enterkeyhint="send">
+          <button class="btn primary" id="wSend" type="submit" aria-label="Send">Send</button>
+        </div>
+        <p class="wv-err" id="wErr" role="alert" hidden></p>
+      </form>
+    </aside>
+  </main>
+</div>
+
+<dialog class="modal" id="wSuperDlg" aria-labelledby="wSuperH">
+  <form method="dialog" class="modal-card glass raised wv-sheet" id="wSuperForm">
+    <button type="button" class="icon-btn sm modal-close" data-close aria-label="Close"><svg class="i sm" aria-hidden="true"><use href="/icons.svg#i-x"/></svg></button>
+    <h2 id="wSuperH">Send a super chat</h2>
+    <p class="sub" id="wSuperSub">It goes on screen as soon as the host sees your payment arrive.</p>
+    <div class="wv-amounts" id="wAmounts" role="radiogroup" aria-label="Amount"></div>
+    <div class="row2">
+      <label class="fld"><span>Your name</span><input class="input" id="wScName" maxlength="24" placeholder="Shown on screen"></label>
+    </div>
+    <label class="fld"><span>Message <em>optional</em></span><textarea class="input" id="wScText" rows="2" maxlength="200" placeholder="Shout-out, question, anything"></textarea></label>
+    <div class="fld"><span>Pay with</span><div class="wv-methods" id="wMethods" role="radiogroup" aria-label="Pay with"></div></div>
+    <p class="hint" id="wPayNote"></p>
+    <ol class="wv-steps">
+      <li><button type="button" class="btn primary block" id="wPayGo">Pay</button></li>
+      <li><button type="button" class="btn block" id="wPaid" disabled>I’ve paid: send it</button></li>
+    </ol>
+    <p class="wv-err" id="wScErr" role="alert" hidden></p>
+  </form>
+</dialog>
+
+<dialog class="modal" id="wNameDlg" aria-labelledby="wNameH">
+  <form method="dialog" class="modal-card glass raised wv-sheet" id="wNameForm">
+    <h2 id="wNameH">Your name in the chat</h2>
+    <input class="input" id="wName" maxlength="24" placeholder="Alex" aria-label="Your name" enterkeyhint="done">
+    <div class="row"><button type="button" class="btn" data-close>Cancel</button><button type="submit" class="btn primary" value="ok">Save</button></div>
+    <p class="wv-err" id="wNameErr" role="alert" hidden></p>
+  </form>
+</dialog>
+
+<div class="toasts" id="toasts" role="status" aria-live="polite"></div>
 <script type="module" src="/watch.js"></script>
 </body>
 </html>
