@@ -2,9 +2,11 @@
 const { handle } = require('../lib/studio');
 
 module.exports = async (req, res) => {
-  res.setHeader('Cache-Control', 'no-store');
   const action = String(req.query?.action || '');
-  let body = req.body;
+  // The watch feed is the same for every viewer: let Vercel's CDN serve it for 2 s, so viewers cost almost nothing.
+  const shared = req.method === 'GET' && action === 'wfeed';
+  res.setHeader('Cache-Control', shared ? 'public, max-age=0, s-maxage=2, stale-while-revalidate=4' : 'no-store');
+  let body = shared ? { studio: req.query?.studio } : req.body;
   if (typeof body === 'string') { try { body = JSON.parse(body || '{}'); } catch { body = {}; } }
   try {
     res.status(200).json(await handle(action, body || {}));

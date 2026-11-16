@@ -609,7 +609,7 @@ async function onServer(m) {
       pollLoop(++pollGen);
       if (S.host === S.id && wasHosting) {
         // Bring the look you set up before creating the studio.
-        setStage({ aspect: pre.aspect, captions: pre.captions, brand: { ...pre.brand, bgImage: '', overlay: '', logo: '' }, title: pre.title || autoTitle(), layout: pre.layout, banner: pre.banner, ticker: pre.ticker, stage: [S.id], feeds: pre.feeds, scene: pre.scene || '', elements: (pre.elements || []).filter((e) => !(e.type === 'image' && e.asset?.startsWith('local-'))) });
+        setStage({ aspect: pre.aspect, captions: pre.captions, brand: { ...pre.brand, bgImage: '', overlay: '', logo: '' }, title: pre.title || autoTitle(), watch: { ...WATCH_DEFAULTS, ...store.get('watchPrefs', {}) }, layout: pre.layout, banner: pre.banner, ticker: pre.ticker, stage: [S.id], feeds: pre.feeds, scene: pre.scene || '', elements: (pre.elements || []).filter((e) => !(e.type === 'image' && e.asset?.startsWith('local-'))) });
         uploadLocalAssets(pre.elements).then((elements) => { if (S.host === S.id) setStage({ elements }); });
         uploadBrandAssets(pre.brand);
         if (S.pendingStream?.id) acctApi('streamStart', { id: S.pendingStream.id }).catch(() => {});
@@ -618,7 +618,7 @@ async function onServer(m) {
       sendMeta({ mic: S.local.micOn, cam: S.local.camOn, sharing: !!S.local.pres });
       uploadAvatar(); S.local.offbgId = ''; uploadOffBg();
       $('#knockWait').hidden = true; $('#enterFields').hidden = false;
-      if (S.host === S.id) refreshLobby();
+      if (S.host === S.id) { refreshLobby(); refreshSupers(); }
       renderAll();
       if (!m.peers.length && S.host === S.id) setTimeout(() => openInvite(), 350);
       else toast(S.host === S.id ? 'Studio ready.' : `You joined ${m.peers.length ? 'the studio' : 'an empty studio'}.`);
@@ -666,6 +666,11 @@ async function onServer(m) {
     case 'state': S.state = m.state; renderAll(); break;
     case 'chat': addMsg(m.msg); break;
     case 'feed': for (const it of m.items || []) addExternal(it); break;
+    case 'viewer-want': viewerWant(m.vid); break;
+    case 'vsignal': viewerSignal(m.from, m.data); break;
+    case 'viewer-left': closeViewer(m.vid); break;
+    case 'superchat': gotSuperchat(m.item, true); break;
+    case 'react': reactFloat(m.emoji); break;
     case 'ai': upsertAI(m.item, false); break;
     case 'caption': showCaption(m.from, m.name, m.text, m.final); break;
     case 'host': {
@@ -1131,7 +1136,7 @@ let lastFrame = 0, nextFrame = 0, frameGap = 1000 / 30;
 function drawProgram() {
   const t0 = performance.now();
   lastFrame = t0; S.local.pres?.draw?.(); draw(); flushEditorLayers();
-  const cost = performance.now() - t0, onAir = !!(S.rec || S.live);
+  const cost = performance.now() - t0, onAir = !!(S.rec || S.live || S.viewers?.size); // direct watch-page viewers count as on air
   frameGap = Math.max(editor.on ? 0 : 1000 / 30 - 2, cost * (onAir ? 1.25 : 2));
   nextFrame = t0 + frameGap;
 }
@@ -1157,8 +1162,8 @@ function speakingCards() {
 
 // ---------------------------------------------------------------- chat feed (studio + Twitch) for overlays
 const FEED_MAX = 200;
-const SRC_COLOR = { studio: null, twitch: '#9146ff', youtube: '#ff0033', rumble: '#85c742', x: '#e7e9ea', kick: '#53fc18' };
-const SRC_NAME = { studio: 'Studio', twitch: 'Twitch', youtube: 'YouTube', rumble: 'Rumble', x: 'X', kick: 'Kick' };
+const SRC_COLOR = { studio: null, twitch: '#9146ff', youtube: '#ff0033', rumble: '#85c742', x: '#e7e9ea', kick: '#53fc18', watch: '#16a34a' };
+const SRC_NAME = { studio: 'Studio', twitch: 'Twitch', youtube: 'YouTube', rumble: 'Rumble', x: 'X', kick: 'Kick', watch: 'Watch page' };
 S.feed = [];
 function pushFeed(m) { S.feed.push(m); if (S.feed.length > FEED_MAX) S.feed.splice(0, S.feed.length - FEED_MAX); }
 
@@ -1806,7 +1811,12 @@ function drawFeatured(t, r) {
   g.textAlign = 'left'; g.fillStyle = '#111827'; g.font = '700 20px Inter, sans-serif';
   g.fillText(f.name, x + pad + 54, y + pad + 12);
   g.fillStyle = '#6b7280'; g.font = '500 14px Inter, sans-serif';
-  g.fillText(f.src === 'studio' ? 'in the studio' : 'on ' + (SRC_NAME[f.src] || f.src), x + pad + 54, y + pad + 33);
+  g.fillText(f.src === 'studio' ? 'in the studio' : f.src === 'watch' ? (f.paid ? 'super chat' : 'on the watch page') : 'on ' + (SRC_NAME[f.src] || f.src), x + pad + 54, y + pad + 33);
+  if (f.paid) { // super chat amount, top right of the card
+    g.font = '800 20px Inter, sans-serif'; const aw = g.measureText(f.paid).width + 24;
+    g.fillStyle = '#16a34a'; rr(x + cw - pad - aw, y + pad + 2, aw, 32, 16); g.fill();
+    g.fillStyle = '#fff'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(f.paid, x + cw - pad - aw / 2, y + pad + 19); g.textAlign = 'left';
+  }
   g.fillStyle = '#111827'; g.font = '500 24px Inter, sans-serif'; g.textBaseline = 'alphabetic';
   lines.forEach((l, i) => g.fillText(l, x + pad + 6, y + 64 + 26 + i * 32));
   g.restore();
@@ -3539,7 +3549,7 @@ function setPhase(p) {
   pill.hidden = p === 'online';
   renderAll();
 }
-function renderAll() { renderHeader(); renderStageUI(); renderCrew(); renderDock(); renderPanels(); renderFeedUI(); renderLayoutsPanel(); renderAIPanel(); renderTips(); renderBrandPanel(); renderStreamPanel(); renderGuestView(); syncTwitch(); syncCaptions(); renderDeck(); renderAds(); renderCallin(); renderProducerUI(); renderGreenRoom(); renderLive(); }
+function renderAll() { renderHeader(); renderStageUI(); renderCrew(); renderDock(); renderPanels(); renderFeedUI(); renderLayoutsPanel(); renderAIPanel(); renderTips(); renderBrandPanel(); renderStreamPanel(); renderGuestView(); syncTwitch(); syncCaptions(); renderDeck(); renderAds(); renderCallin(); renderProducerUI(); renderGreenRoom(); renderLive(); renderWatchSec(); }
 function renderHeader() {
   // The studio name belongs to the studio you're in; outside one the header is just the wordmark.
   const inside = !!S.studio || S.phase === 'reconnecting';
@@ -4050,6 +4060,7 @@ function leave(why) {
   if (S.rec) S.rec.recorder.stop();
   if (S.live) stopLive();
   beaconLeave(why);
+  closeAllViewers(); S.supers.clear();
   outbox = [];
   teardownPeers();
   stopPresentation(); stopCam(); stopMic();
@@ -4996,3 +5007,172 @@ window.__cap = cap;
 $('#liveOffRec').onclick = () => { $('#liveDlg').close(); if (!S.rec) toggleRecord(); };
 $('#audioUnblock').onclick = () => tryPlayAll(); // the pointerdown handler above does the unmuting
 setInterval(() => { if (S.studio && !S.rec && S.state?.rec?.on) renderDock(); }, 1000); // guests' REC timer
+
+// ---------------------------------------------------------------- the public watch page (/w/<studio>)
+// Viewers watch the program straight from this browser over WebRTC (no platform in between), chat, react, send
+// super chats paid directly to the host, and ask to join the stage. A laptop can encode and upload the program
+// for a handful of viewers, so the host sets a cap; past it, viewers fall back to the platform players.
+const WATCH_DEFAULTS = { chat: true, supers: false, join: true, direct: true, cap: 6, slow: 0, min: 2, pay: { paypal: '', venmo: '', cashapp: '', stripe: '' } };
+const watchCfg = () => ({ ...WATCH_DEFAULTS, ...(S.state.watch || {}), pay: { ...WATCH_DEFAULTS.pay, ...(S.state.watch?.pay || {}) } });
+const watchLinkUrl = () => `${location.origin}/w/${S.studio}`;
+const VIEW = new Map(); // viewer id -> { pc }
+S.viewers = VIEW; // for the console and tests
+let programStream = null;
+let hwH264Cache = null;
+/** Does this machine encode H.264 in hardware? The browser reports that as "power efficient". */
+function hwH264() {
+  hwH264Cache ||= (navigator.mediaCapabilities?.encodingInfo?.({ type: 'webrtc', video: { contentType: 'video/H264; profile-level-id=42e01f', width: 1280, height: 720, bitrate: 2_500_000, framerate: 30 } })
+    .then((r) => !!(r.supported && r.powerEfficient)).catch(() => false)) || Promise.resolve(false);
+  return hwH264Cache;
+}
+function programTracks() {
+  audioCtx();
+  if (!programStream || programStream.getVideoTracks()[0]?.readyState !== 'live') programStream = canvas.captureStream(30);
+  return [programStream.getVideoTracks()[0], recDest?.stream.getAudioTracks()[0]].filter(Boolean);
+}
+async function viewerWant(vid) {
+  if (!isHost() || !S.studio) return;
+  closeViewer(vid);
+  const cfg = watchCfg();
+  if (!cfg.direct || VIEW.size >= cfg.cap) return wsSend({ type: 'vsignal', to: vid, data: { bye: true } });
+  const pc = new RTCPeerConnection({ iceServers: S.iceServers, bundlePolicy: 'max-bundle' });
+  VIEW.set(vid, { pc });
+  const ms = new MediaStream(programTracks());
+  for (const t of ms.getTracks()) {
+    const sender = pc.addTrack(t, ms);
+    if (t.kind === 'video') {
+      // H.264 first only where this machine encodes it in hardware (cheap per viewer, sharp); otherwise VP8,
+      // which Chrome's software encoder handles much better than software H.264.
+      try {
+        if (await hwH264()) {
+          const tr = pc.getTransceivers().find((x) => x.sender === sender), caps = RTCRtpSender.getCapabilities?.('video')?.codecs || [];
+          const h264 = caps.filter((c) => /h264/i.test(c.mimeType)), rest = caps.filter((c) => !/h264/i.test(c.mimeType));
+          if (h264.length) tr?.setCodecPreferences([...h264, ...rest]);
+        }
+      } catch {}
+      try { const p = sender.getParameters(); p.encodings = [{ ...(p.encodings?.[0] || {}), maxBitrate: 2_500_000, maxFramerate: 30 }]; p.degradationPreference = 'balanced'; sender.setParameters(p).catch(() => {}); } catch {}
+    }
+  }
+  pc.onicecandidate = (e) => { if (e.candidate) wsSend({ type: 'vsignal', to: vid, data: { candidate: e.candidate } }); };
+  pc.onconnectionstatechange = () => { if (['failed', 'closed'].includes(pc.connectionState)) closeViewer(vid); renderWatchSec(); };
+  try { await pc.setLocalDescription(); wsSend({ type: 'vsignal', to: vid, data: { sdp: pc.localDescription } }); }
+  catch (e) { console.warn('viewer offer failed', e); closeViewer(vid); }
+  renderWatchSec();
+}
+async function viewerSignal(vid, d) {
+  const v = VIEW.get(vid);
+  if (!v || !d) return;
+  try { if (d.sdp) await v.pc.setRemoteDescription(d.sdp); else if (d.candidate) await v.pc.addIceCandidate(d.candidate).catch(() => {}); }
+  catch (e) { console.warn('viewer signal', e); }
+}
+function closeViewer(vid) { const v = VIEW.get(vid); if (!v) return; VIEW.delete(vid); try { v.pc.close(); } catch {} renderWatchSec(); }
+function closeAllViewers() { for (const vid of [...VIEW.keys()]) closeViewer(vid); }
+
+// Super chats: a claim until the host sees the money arrive in their own PayPal/Venmo/Cash App/Stripe.
+S.supers = new Map();
+const PAY_NAME = { paypal: 'PayPal', venmo: 'Venmo', cashapp: 'Cash App', stripe: 'Stripe' };
+const money = (a) => '$' + (Number.isInteger(a) ? a : Number(a).toFixed(2));
+function gotSuperchat(item, fresh) {
+  if (!item?.id) return;
+  const had = S.supers.has(item.id);
+  S.supers.set(item.id, item);
+  if (fresh && !had && item.status === 'pending') {
+    chime();
+    toast(`${money(item.amount)} super chat from ${item.name} on ${PAY_NAME[item.method]}. Check it arrived, then confirm.`, { ms: 12000, action: ['Review', () => { setTab('show'); $('#watchSec')?.scrollIntoView({ block: 'start', behavior: smooth() }); }] });
+  }
+  renderSupers();
+  superInChat(item);
+}
+/** Pending super chats also land in the studio chat, with the confirm buttons right there. Once confirmed, the paid
+    message that every viewer sees replaces it (it arrives as a normal watch-page message with its amount). */
+function superInChat(x) {
+  const log = $('#msgs'); if (!log) return;
+  let li = log.querySelector(`[data-sc="${CSS.escape(x.id)}"]`);
+  if (x.status !== 'pending') { li?.remove(); return; }
+  if (li) return;
+  li = document.createElement('li'); li.className = 'msg ext paid sc-pending'; li.dataset.sc = x.id;
+  const who = document.createElement('div'); who.className = 'who';
+  const badge = document.createElement('span'); badge.className = 'pill caps src-watch'; badge.textContent = 'Super chat';
+  const b = document.createElement('b'); b.textContent = x.name;
+  const amt = document.createElement('span'); amt.className = 'paid-amt'; amt.textContent = money(x.amount);
+  who.append(badge, b, amt);
+  const txt = document.createElement('div'); txt.className = 'txt'; txt.textContent = x.text || '(no message)';
+  const note = document.createElement('div'); note.className = 'sc-note'; note.textContent = `Check your ${PAY_NAME[x.method]} for ${money(x.amount)} from ${x.name}, then:`;
+  const row = document.createElement('div'); row.className = 'row';
+  const btn = (t, cls, act) => { const k = document.createElement('button'); k.type = 'button'; k.className = 'btn sm ' + cls; k.textContent = t; k.onclick = () => superAct(x, act); return k; };
+  row.append(btn('Payment arrived · show it', 'primary', 'confirm'), btn('Not received', 'ghost', 'dismiss'));
+  li.append(who, txt, note, row);
+  appendLog(li);
+}
+function superAct(item, act) {
+  wsSend({ type: 'superchat', id: item.id, do: act });
+  item.status = { confirm: 'confirmed', dismiss: 'dismissed', answered: 'answered' }[act];
+  if (act === 'confirm') setStage({ featured: { id: 'w-' + item.id, src: 'watch', name: item.name, text: item.text || 'Sent a super chat', paid: money(item.amount) } });
+  if ((act === 'answered' || act === 'dismiss') && S.state.featured?.id === 'w-' + item.id) setStage({ featured: null });
+  renderSupers(); superInChat(item);
+}
+function renderSupers() {
+  const box = $('#scList'); if (!box) return;
+  const items = [...S.supers.values()].filter((x) => x.status !== 'dismissed').sort((a, b) => (a.status === 'pending' ? -1 : 0) - (b.status === 'pending' ? -1 : 0) || b.ts - a.ts);
+  $('#scEmpty').hidden = !!items.length;
+  const total = [...S.supers.values()].filter((x) => x.status === 'confirmed' || x.status === 'answered').reduce((s, x) => s + x.amount, 0);
+  $('#scTotal').textContent = total ? `${money(total)} confirmed` : '';
+  box.replaceChildren(...items.map((x) => {
+    const li = document.createElement('li'); li.className = 'sc-item ' + x.status;
+    const top = document.createElement('div'); top.className = 'sc-top';
+    const amt = document.createElement('span'); amt.className = 'paid-amt'; amt.textContent = money(x.amount);
+    const who = document.createElement('b'); who.textContent = x.name;
+    const via = document.createElement('small'); via.textContent = `${PAY_NAME[x.method]} · ${x.status === 'pending' ? 'not confirmed yet' : x.status}`;
+    top.append(amt, who, via);
+    const txt = document.createElement('p'); txt.textContent = x.text || '(no message)';
+    const row = document.createElement('div'); row.className = 'row';
+    const btn = (t, cls, act) => { const b = document.createElement('button'); b.type = 'button'; b.className = 'btn sm ' + cls; b.textContent = t; b.onclick = () => superAct(x, act); return b; };
+    if (x.status === 'pending') row.append(btn('Payment arrived · show it', 'primary', 'confirm'), btn('Not received', 'ghost', 'dismiss'));
+    else if (x.status === 'confirmed') row.append(btn('Answered', '', 'answered'));
+    li.append(top, txt, row);
+    return li;
+  }));
+}
+async function refreshSupers() { if (!S.studio || !isHost()) return; try { for (const x of (await api('scList', creds())).items) gotSuperchat(x, false); } catch {} }
+
+// Reactions from the watch page float over the host's stage view (never into the program).
+function reactFloat(e) {
+  const s = document.createElement('span'); s.className = 'react-float'; s.textContent = e; s.style.left = 10 + Math.random() * 80 + '%';
+  $('#stage')?.append(s); setTimeout(() => s.remove(), 2600);
+}
+
+// The Show panel's watch page section.
+function setWatch(patch) {
+  const cfg = { ...watchCfg(), ...patch, pay: { ...watchCfg().pay, ...(patch.pay || {}) } };
+  store.set('watchPrefs', cfg); // keep the handles for the next show
+  if (isHost() && S.studio) setStage({ watch: cfg });
+  renderWatchSec();
+}
+function renderWatchSec() {
+  if (!window.__watchReady || !$('#watchSec')) return; // renderAll can run before this part of the module loads
+  const cfg = watchCfg(), on = !!S.studio;
+  $('#wpUrl').textContent = on ? watchLinkUrl().replace(/^https?:\/\//, '') : 'Enter your studio to get its watch link';
+  for (const id of ['#wpCopy', '#wpCard', '#wpOpen']) $(id).disabled = !on;
+  $('#wpCount').textContent = on && cfg.direct ? `${VIEW.size} of ${cfg.cap} watching directly` : '';
+  for (const [id, k] of [['#wpChat', 'chat'], ['#wpSupers', 'supers'], ['#wpJoin', 'join'], ['#wpDirect', 'direct']]) if (document.activeElement !== $(id)) $(id).checked = !!cfg[k];
+  for (const k of Object.keys(PAY_NAME)) { const el = $('#wpPay-' + k); if (document.activeElement !== el) el.value = cfg.pay[k] || ''; }
+  if (document.activeElement !== $('#wpCap')) $('#wpCap').value = String(cfg.cap);
+  if (document.activeElement !== $('#wpMin')) $('#wpMin').value = String(cfg.min);
+  $('#wpPayBox').hidden = !cfg.supers;
+  $('#wpNoPay').hidden = !cfg.supers || Object.values(cfg.pay).some(Boolean);
+}
+$('#wpCopy').onclick = () => copy(watchLinkUrl(), 'Watch link copied. Share it anywhere.');
+$('#wpOpen').onclick = () => window.open(watchLinkUrl(), '_blank', 'noopener');
+$('#wpCard').onclick = () => {
+  const els = elementsCopy().filter((e) => !(e.type === 'callin' && e.url === watchLinkUrl()));
+  els.push(withDefaults({ type: 'callin', x: .66, y: .66, w: .31, h: .28, url: watchLinkUrl(), label: 'Watch, chat & join live', phone: '' }));
+  setStage({ elements: els });
+  toast('The watch link and its QR code are on stage.');
+};
+for (const [id, k] of [['#wpChat', 'chat'], ['#wpSupers', 'supers'], ['#wpJoin', 'join'], ['#wpDirect', 'direct']]) $(id).onchange = (e) => setWatch({ [k]: e.target.checked });
+$('#wpCap').onchange = (e) => setWatch({ cap: Number(e.target.value) });
+$('#wpMin').onchange = (e) => setWatch({ min: Math.max(1, Number(e.target.value) || 2) });
+for (const k of Object.keys(PAY_NAME)) $('#wpPay-' + k).addEventListener('change', (e) => setWatch({ pay: { [k]: e.target.value.trim().replace(/^@|^\$/, '').replace(/^https?:\/\/(www\.)?paypal\.me\//i, '') } }));
+setInterval(() => { if ($('#watchSec') && !$('#watchSec').closest('[hidden]')) renderWatchSec(); }, 3000);
+window.__watchReady = true;
+renderWatchSec();

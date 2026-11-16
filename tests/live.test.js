@@ -59,8 +59,10 @@ const check = (name, cond, detail = '') => { console.log(`${cond ? 'ok  ' : 'FAI
   await a.fill('#destList li:nth-child(1) [data-k="watch"]', 'https://www.youtube.com/watch?v=dQw4w9WgXcQ'); await a.press('#destList li:nth-child(1) [data-k="watch"]', 'Tab');
   await a.fill('#destList li:nth-child(2) [data-k="watch"]', 'https://www.twitch.tv/gathershow'); await a.press('#destList li:nth-child(2) [data-k="watch"]', 'Tab');
   const w = await mk();
-  await w.goto(B + '/w/' + code); await w.waitForFunction(() => document.getElementById('wEmptyH').textContent.includes('Not live'), null, { timeout: 8000 });
-  check('watch page before the show: not live', true);
+  // The watch page shows the studio directly (WebRTC from the host) even before going live on any platform.
+  await w.goto(B + '/w/' + code);
+  const directBefore = await w.waitForFunction(() => document.querySelector('#wDirect')?.videoWidth > 0 && document.getElementById('wLiveText').textContent === 'On air', null, { timeout: 30000 }).then(() => true).catch(() => false);
+  check('watch page before the show: plays the studio directly, "On air", not "Live"', directBefore);
   console.log('  button reads:', await a.textContent('#liveBtn'));
   await a.click('#liveBtn');
   await a.waitForFunction(() => window.__gather.live?.phase === 'live', null, { timeout: 20000 });
@@ -69,17 +71,20 @@ const check = (name, cond, detail = '') => { console.log(`${cond ? 'ok  ' : 'FAI
   await a.waitForTimeout(7000);
   console.log('  stats:', await a.textContent('#liveStats'), '| header:', await a.textContent('#liveTop'));
   await a.screenshot({ path: path.join(process.argv[2] || TMP, 'live-on-air.png') });
-  await w.reload(); await w.waitForSelector('#wPlayer iframe', { timeout: 8000 });
+  await w.waitForFunction(() => /^Live · /.test(document.getElementById('wLiveText').textContent), null, { timeout: 8000 }).catch(() => {});
+  const tabs = await w.evaluate(() => [...document.querySelectorAll('#wTabs button')].map((b) => b.textContent));
+  await w.click('#wTabs button:has-text("YouTube")'); await w.waitForSelector('#wPlayer iframe', { timeout: 8000 });
   const src = await w.getAttribute('#wPlayer iframe', 'src');
-  check('watch page plays the YouTube stream and offers both platforms', src.startsWith('https://www.youtube.com/embed/dQw4w9WgXcQ') && (await w.$$('#wTabs button')).length === 2 && await w.isVisible('#wLive'), src);
+  check('watch page offers direct plus both platforms, and plays YouTube when picked', src.startsWith('https://www.youtube.com/embed/dQw4w9WgXcQ') && tabs.length === 3 && /Direct/.test(tabs[0]) && await w.isVisible('#wLive'), `${src} | ${tabs.join(', ')}`);
   await w.screenshot({ path: path.join(process.argv[2] || TMP, 'live-watch-page.png') });
   const keyOnWatch = await w.evaluate(async (c) => JSON.stringify(await (await fetch('/api/studio?action=watch', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ studio: c }) })).json()), code);
-  check('the public watch info has no stream keys', !sinks.some((x) => keyOnWatch.includes(x.key)));
+  const feedOnWatch = await w.evaluate(async (c) => JSON.stringify(await (await fetch('/api/studio?action=wfeed&studio=' + c)).json()), code);
+  check('the public watch info and feed have no stream keys', !sinks.some((x) => keyOnWatch.includes(x.key) || feedOnWatch.includes(x.key)));
   await a.click('#liveBtn');
   await a.waitForFunction(() => !window.__gather.live, null, { timeout: 10000 });
   for (const s of sinks) await exited(s.proc, 10000);
-  await w.reload(); await w.waitForFunction(() => document.getElementById('wEmptyH').textContent.includes('Not live'), null, { timeout: 8000 });
-  check('watch page after the show: back to not live', await w.isHidden('#wLive'));
+  const notLive = await w.waitForFunction(() => !/^Live · /.test(document.getElementById('wLiveText').textContent), null, { timeout: 8000 }).then(() => true).catch(() => false);
+  check('watch page after the show: no longer "Live" on the platforms', notLive);
   for (const [i, s] of sinks.entries()) {
     let info = {};
     try { info = JSON.parse(execFileSync('ffprobe', ['-v', 'error', '-show_entries', 'stream=codec_type,codec_name,width,height:format=duration', '-of', 'json', s.file]).toString()); } catch (e) { info = { error: e.message.slice(0, 120) }; }

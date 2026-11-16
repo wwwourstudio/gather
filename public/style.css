@@ -258,6 +258,7 @@ hr { border: 0; border-top: 1px solid var(--line); margin: var(--sp-1) 0; width:
 /* platform colours for source pills */
 .src-twitch { --pill-bg: #9146ff; --pill-ink: #fff; }
 .src-youtube { --pill-bg: #ff0033; --pill-ink: #fff; }
+.src-watch { --pill-bg: #16a34a; --pill-ink: #fff; }
 .src-rumble { --pill-bg: #85c742; --pill-ink: #10210a; }
 .src-x { --pill-bg: #e7e9ea; --pill-ink: #0f1419; }
 .src-tiktok { --pill-bg: #fe2c55; --pill-ink: #fff; }
@@ -820,3 +821,19 @@ body.deck-closed .deck { padding-bottom: var(--sp-2); }
 .skip-link:focus { transform: none; }
 .skip-link[hidden] { display: none; }
 .dock:focus { outline: none; }
+/* Show panel: the watch page section and the super chat queue */
+.watch-sec { display: grid; gap: var(--sp-3); }
+.row.between { justify-content: space-between; }
+.wp-url { display: block; padding: var(--sp-2) var(--sp-3); border-radius: var(--r-sm); background: var(--surface-2); font-size: 12px; overflow-wrap: anywhere; color: var(--ink-2); }
+.sc-list { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--sp-2); }
+.sc-item { padding: var(--sp-3); border-radius: var(--r-md); border: 1px solid var(--glass-border); background: var(--fill); display: grid; gap: var(--sp-2); }
+.sc-item.pending { border-color: var(--warn-line); background: var(--warn-bg); }
+.sc-item.answered { opacity: 0.6; }
+.sc-item p { margin: 0; font-size: 13px; }
+.sc-top { display: flex; align-items: center; gap: var(--sp-2); flex-wrap: wrap; }
+.sc-top small { color: var(--ink-3); font-size: 12px; margin-left: auto; }
+.warn-note { color: var(--warn-ink); }
+.react-float { position: absolute; bottom: 10%; font-size: 30px; pointer-events: none; z-index: 5; animation: react-up 2.4s var(--ease-out) forwards; }
+@keyframes react-up { from { transform: translateY(0) scale(.6); opacity: 0; } 15% { opacity: 1; transform: translateY(-20px) scale(1.1); } to { transform: translateY(-220px); opacity: 0; } }
+.msg.sc-pending { border: 1px dashed var(--warn-line); background: var(--warn-bg); border-radius: var(--r-md); padding: var(--sp-2) var(--sp-3); display: grid; gap: 6px; }
+.msg.sc-pending .sc-note { font-size: 12px; color: var(--ink-3); }
