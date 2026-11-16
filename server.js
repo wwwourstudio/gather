@@ -32,7 +32,7 @@ http.createServer((req, res) => {
   }
   if (u.pathname === '/api/studio') {
     let raw = '';
-    req.on('data', (c) => { raw += c; if (raw.length > 256 * 1024) req.destroy(); });
+    req.on('data', (c) => { raw += c; if (raw.length > 640 * 1024) req.destroy(); }); // room for a 45 s voice question
     req.on('end', async () => {
       let body = {};
       try { body = raw ? JSON.parse(raw) : {}; } catch {}

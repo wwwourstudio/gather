@@ -862,3 +862,9 @@ body.deck-closed .deck { padding-bottom: var(--sp-2); }
 .emote-list figure { margin: 0; display: grid; justify-items: center; gap: 2px; font-size: 11px; color: var(--ink-3); }
 .emote-list img { width: 36px; height: 36px; object-fit: contain; }
 .msg .q-badge { font-size: 11px; font-weight: 700; color: var(--warn-ink); margin-left: 4px; }
+.vm-text { margin: 0; font-size: 13px; line-height: 1.45; }
+.vm-text small { color: var(--ink-3); }
+.sc-item.vm.new, .msg.vm-msg.new { border: 1px solid var(--warn-line); background: var(--warn-bg); }
+.msg.vm-msg { border-radius: var(--r-md); padding: var(--sp-2) var(--sp-3); display: grid; gap: 6px; }
+.msg.vm-msg .row { flex-wrap: wrap; }
+.code.sm { font-size: 14px; padding: var(--sp-2); overflow-wrap: anywhere; }

@@ -85,7 +85,8 @@ function render(info) {
   $('#wViewers').textContent = info.viewers ? `${info.viewers} watching` : '';
   const w = info.watch || {};
   $('#wSuperBtn').hidden = !w.supers || w.chat === false;
-  $('#wJoin').hidden = !w.join; $('#wJoin').href = '/c/' + code;
+  // Voice questions replace the old call-in: raise a hand, record, the host decides.
+  $('#wHand').hidden = $('#wMic').hidden = w.voice === false || !navigator.mediaDevices?.getUserMedia || !window.MediaRecorder;
   $('#wChatState').textContent = !info.found ? '' : w.chat === false ? 'Chat is off' : w.slow ? `Slow mode · ${w.slow}s` : '';
   $('#wCompose').hidden = !info.found || w.chat === false;
   renderChat(info.chat || []);
@@ -706,3 +707,76 @@ setInterval(() => {
   if (ready && !CLIP.on && (navigator.hardwareConcurrency || 2) >= 6 && !/Mobi/i.test(navigator.userAgent)) clipStart();
   if (!ready && CLIP.on) clipStop();
 }, 2000);
+
+// ---------------------------------------------------------------- voice questions: raise a hand and record
+// Up to 45 s of audio, recorded in this browser. Where the browser can (Chrome, Edge, Safari), it also writes down
+// what was said as you speak, so the host can read the question before deciding to play it.
+const VQ = { rec: null, chunks: [], stream: null, t0: 0, timer: null, sr: null, text: '', blob: null, meter: null };
+const MAX_S = 45;
+function voiceOpen() {
+  $('#wVoiceName').value = sess?.named ? sess.name : store.get('name', '');
+  voiceReset(); showErr('#wVoiceErr', ''); $('#wVoiceDlg').showModal();
+}
+function voiceReset() {
+  VQ.blob = null; VQ.text = ''; $('#wRecPlay').hidden = true; $('#wRecPlay').removeAttribute('src');
+  $('#wRecText').hidden = true; $('#wRecSend').disabled = true; $('#wRecAgain').hidden = true;
+  $('#wRecTime').textContent = `0:00 / 0:${MAX_S}`; $('#wRecHint').textContent = 'Tap the red button and speak.'; $('#wRecBtn').classList.remove('on');
+}
+async function voiceStart() {
+  try {
+    VQ.stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } });
+  } catch { return showErr('#wVoiceErr', 'Allow the microphone to record a question (the lock icon in the address bar).'); }
+  // Stop the show's sound while recording, so it isn't picked up.
+  const v = W.direct.video; VQ.wasMuted = v?.muted; if (v) v.muted = true;
+  const mime = ['audio/webm;codecs=opus', 'audio/ogg;codecs=opus', 'audio/mp4', 'audio/webm'].find((m) => MediaRecorder.isTypeSupported(m)) || '';
+  VQ.chunks = []; VQ.rec = new MediaRecorder(VQ.stream, { mimeType: mime, audioBitsPerSecond: 32000 });
+  VQ.rec.ondataavailable = (e) => { if (e.data.size) VQ.chunks.push(e.data); };
+  VQ.rec.onstop = voiceStopped;
+  VQ.rec.start(500); VQ.t0 = Date.now();
+  $('#wRecBtn').classList.add('on'); $('#wRecBtn').setAttribute('aria-label', 'Stop recording'); $('#wRecHint').textContent = 'Recording… tap to stop.';
+  VQ.timer = setInterval(() => { const s = Math.floor((Date.now() - VQ.t0) / 1000); $('#wRecTime').textContent = `0:${String(s).padStart(2, '0')} / 0:${MAX_S}`; if (s >= MAX_S) voiceStop(); }, 250);
+  // A level meter, so people can see the mic hears them.
+  try { const ac = new AudioContext(), an = ac.createAnalyser(); ac.createMediaStreamSource(VQ.stream).connect(an); const buf = new Uint8Array(an.fftSize); VQ.meter = { ac, id: setInterval(() => { an.getByteTimeDomainData(buf); let p = 0; for (const x of buf) p = Math.max(p, Math.abs(x - 128)); $('#wRecLevel').style.width = Math.min(100, p * 1.6) + '%'; }, 80) }; } catch {}
+  // Live transcript where the browser offers speech recognition.
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (SR) {
+    try {
+      const sr = new SR(); sr.continuous = true; sr.interimResults = true; sr.lang = navigator.language || 'en-US';
+      let finals = '';
+      sr.onresult = (e) => { let interim = ''; for (let i = e.resultIndex; i < e.results.length; i++) { if (e.results[i].isFinal) finals += e.results[i][0].transcript + ' '; else interim += e.results[i][0].transcript; } VQ.text = (finals + interim).trim(); $('#wRecText').hidden = !VQ.text; $('#wRecText').textContent = VQ.text; };
+      sr.onerror = () => {}; sr.start(); VQ.sr = sr;
+    } catch {}
+  }
+}
+function voiceStop() { if (VQ.rec?.state === 'recording') VQ.rec.stop(); }
+function voiceStopped() {
+  clearInterval(VQ.timer); try { VQ.sr?.stop(); } catch {} VQ.sr = null;
+  if (VQ.meter) { clearInterval(VQ.meter.id); VQ.meter.ac.close().catch(() => {}); VQ.meter = null; } $('#wRecLevel').style.width = '0';
+  VQ.stream?.getTracks().forEach((t) => t.stop()); VQ.stream = null;
+  const v = W.direct.video; if (v && VQ.wasMuted === false) v.muted = false;
+  VQ.dur = Math.round((Date.now() - VQ.t0) / 1000);
+  VQ.blob = new Blob(VQ.chunks, { type: (VQ.rec.mimeType || 'audio/webm').split(';')[0] });
+  $('#wRecBtn').classList.remove('on'); $('#wRecBtn').setAttribute('aria-label', 'Start recording');
+  if (VQ.dur < 2) { showErr('#wVoiceErr', 'That was very short. Try again and say your question.'); return voiceReset(); }
+  $('#wRecPlay').src = URL.createObjectURL(VQ.blob); $('#wRecPlay').hidden = false;
+  $('#wRecHint').textContent = 'Listen back, then send it.'; $('#wRecSend').disabled = false; $('#wRecAgain').hidden = false;
+}
+$('#wRecBtn').onclick = () => (VQ.rec?.state === 'recording' ? voiceStop() : voiceStart());
+$('#wRecAgain').onclick = () => voiceReset();
+$('#wRecSend').onclick = async () => {
+  showErr('#wVoiceErr', '');
+  const name = $('#wVoiceName').value.trim();
+  if (!name) { $('#wVoiceName').focus(); return showErr('#wVoiceErr', 'Add your name so the host can greet you.'); }
+  $('#wRecSend').disabled = true;
+  try {
+    await ensureSession(); if (name !== sess.name) await setName(name);
+    const data = await new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = rej; r.readAsDataURL(VQ.blob); });
+    await api('wsend', { ...creds(), type: 'voice', data, transcript: VQ.text, dur: VQ.dur });
+    $('#wVoiceDlg').close();
+    $('#wMsgs').append(Object.assign(document.createElement('li'), { className: 'hello', textContent: '✋ Your voice question went to the host. They’ll play it if they pick it.' }));
+    $('#wMsgs').scrollTop = $('#wMsgs').scrollHeight;
+  } catch (e) { showErr('#wVoiceErr', e.message); $('#wRecSend').disabled = false; }
+};
+$('#wVoiceDlg').addEventListener('close', () => { if (VQ.rec?.state === 'recording') voiceStop(); });
+$('#wHand').onclick = voiceOpen;
+$('#wMic').onclick = voiceOpen;

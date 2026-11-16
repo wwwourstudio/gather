@@ -39,6 +39,7 @@
       <button class="btn hdr user-btn" id="userBtn" aria-label="Your account"><span class="user-av" id="userAv"></span><svg id="userIcon" class="i" aria-hidden="true"><use href="/icons.svg#i-user"/></svg><span class="user-label" id="userLabel">Sign in</span></button>
       <button class="icon-btn hdr-ic" id="helpTop" aria-label="Help" data-tip="Help"><svg class="i" aria-hidden="true"><use href="/icons.svg#i-circle-help"/></svg></button>
       <button class="icon-btn hdr-ic" id="settingsTop" aria-label="Settings" data-tip="Settings"><svg class="i" aria-hidden="true"><use href="/icons.svg#i-sliders-horizontal"/></svg></button>
+      <button class="btn hdr in-studio" id="watchTop" hidden data-tip="Your public watch page"><svg class="i" aria-hidden="true"><use href="/icons.svg#i-eye"/></svg><span>Watch page</span></button>
       <button class="btn hdr in-studio" id="enterTop" hidden><svg class="i" aria-hidden="true"><use href="/icons.svg#i-user-plus"/></svg><span id="enterTopText">Invite</span></button>
       <button class="btn hdr primary host-only in-studio live-top" id="liveTop" hidden><svg class="i" aria-hidden="true"><use href="/icons.svg#i-radio"/></svg><span id="livePillText">Go live</span></button>
     </div>
@@ -235,7 +236,8 @@
             <label class="toggle-row"><span><b>Direct video</b><small>Viewers watch from your browser with under a second of delay.</small></span><input type="checkbox" class="toggle" id="wpDirect" role="switch"></label>
             <label class="fld"><span>Direct viewers at once <em>each one uses up to 2.5 Mbps of your upload</em></span><select id="wpCap"><option value="3">3</option><option value="6">6</option><option value="10">10</option><option value="15">15</option><option value="20">20</option></select></label>
             <label class="toggle-row"><span><b>Live chat</b><small>Viewer messages land in your chat; show any of them on stage.</small></span><input type="checkbox" class="toggle" id="wpChat" role="switch"></label>
-            <label class="toggle-row"><span><b>Ask to join the stage</b><small>Viewers can knock; you let them in from the waiting room.</small></span><input type="checkbox" class="toggle" id="wpJoin" role="switch"></label>
+            <label class="toggle-row"><span><b>Show the watch link on stream</b><small>A small “Watch &amp; chat live” badge with the address, so platform viewers find your page.</small></span><input type="checkbox" class="toggle" id="wpBadge" role="switch"></label>
+            <label class="toggle-row"><span><b>Voice questions</b><small>Viewers raise a hand and record a question. You read the transcript, then play it on air or delete it.</small></span><input type="checkbox" class="toggle" id="wpVoice" role="switch"></label>
             <label class="toggle-row"><span><b>Super chats</b><small>Paid straight to you. You confirm each one before it’s shown.</small></span><input type="checkbox" class="toggle" id="wpSupers" role="switch"></label>
             <div class="form" id="wpPayBox" hidden>
               <div class="row2"><label class="fld"><span>PayPal.me name</span><input id="wpPay-paypal" maxlength="40" placeholder="yourname" spellcheck="false"></label><label class="fld"><span>Venmo username</span><input id="wpPay-venmo" maxlength="31" placeholder="your-name" spellcheck="false"></label></div>
@@ -243,6 +245,9 @@
               <label class="fld"><span>Stripe payment link <em>adds card, Apple Pay and Google Pay</em></span><input id="wpPay-stripe" maxlength="120" placeholder="https://buy.stripe.com/…" spellcheck="false"></label>
               <p class="hint warn-note" id="wpNoPay" hidden>Add at least one way to pay, or viewers won’t see the Super chat button.</p>
             </div>
+            <div class="row between"><b>Voice questions</b><span class="hint" id="vmCount" style="margin:0"></span></div>
+            <ul class="sc-list" id="vmList"></ul>
+            <p class="hint" id="vmEmpty" style="margin:0">None yet. Raised hands chime and appear here and in the chat.</p>
             <div class="row between"><b>Super chats</b><span class="hint" id="scTotal" style="margin:0"></span></div>
             <ul class="sc-list" id="scList"></ul>
             <p class="hint" id="scEmpty" style="margin:0">None yet. New ones chime and appear here.</p>
@@ -325,15 +330,6 @@
             <input type="checkbox" class="toggle" id="overlaySwitch" role="switch">
           </label>
           <hr>
-          <div class="fld"><span>Call-in line <em>viewers talk to you live, over WebRTC</em></span>
-            <div class="soft-card callin">
-              <p class="num" id="callinUrl">Enter a studio to get your call-in link</p>
-              <p class="hint" style="margin:0">Share this link or put the QR card on stage. Callers wait in line until you click <b>Let in</b>; you can mute or remove them any time.</p>
-              <div class="row2"><label class="fld"><span>Card headline</span><input id="callinLabel" maxlength="60" placeholder="Call in live"></label><label class="fld"><span>Phone or note <em>optional</em></span><input id="callinPhone" maxlength="40" placeholder="Text LIVE to 555-0100"></label></div>
-              <div class="row"><button type="button" class="btn sm" id="callinCopy" disabled>Copy call-in link</button><button type="button" class="btn primary sm" id="callinCard" disabled>Show call-in card on stage</button></div>
-            </div>
-          </div>
-          <hr>
           <label class="toggle-row"><span><b>Guests go straight on stage</b><small>Off: new guests wait backstage until you click their picture</small></span><input type="checkbox" class="toggle" id="autoStage" role="switch"></label>
         </div>
       </section>
@@ -355,6 +351,7 @@
               <button type="button" class="btn sm" data-add="text">+ Text</button>
               <button type="button" class="btn sm" data-add="image">+ Image or logo</button>
               <button type="button" class="btn sm" data-add="timer">+ Clock / countdown</button>
+              <button type="button" class="btn sm" data-add="callin">+ Watch link card</button>
               <button type="button" class="btn sm" data-add="shape">+ Colour block</button>
             </div>
           </div>
@@ -910,6 +907,10 @@
     <button type="button" class="btn primary lg block" id="copyLink">Copy invite link</button>
     <button type="button" class="btn lg block" id="copyCode">Copy the code instead</button>
     <p class="fine" id="inviteFine">Anyone with this code can join. Maximum six participants. Keep this tab open while hosting.</p>
+    <hr>
+    <p class="sub" style="margin:0"><b>For viewers:</b> your watch page, with the show, chat and voice questions.</p>
+    <output class="code sm" id="inviteWatch">—</output>
+    <div class="row"><button type="button" class="btn block" id="copyWatch">Copy watch link</button><button type="button" class="btn ghost" id="openWatch">Open</button></div>
   </form>
 </dialog>
 

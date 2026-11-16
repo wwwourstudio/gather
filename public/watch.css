@@ -292,3 +292,19 @@ body { background: #05070d; }
 /* the vertical player is narrow: keep only the controls that matter there */
 .wv.vertical #wDelay, .wv.vertical #wQual { display: none; }
 .wv-unmute { white-space: nowrap; }
+
+/* voice questions: raise a hand and record */
+.wv-hand { --btn-bg: rgba(250, 204, 21, 0.14); --btn-line: rgba(250, 204, 21, 0.45); flex: none; }
+#wMic { right: 68px; } .wv-inputwrap .input { padding-right: 104px; }
+.wv-rec { display: flex; align-items: center; gap: var(--sp-4); padding: var(--sp-3); border-radius: var(--r-md); background: var(--surface-2); }
+.wv-recbtn { width: 64px; height: 64px; border-radius: 50%; border: 3px solid rgba(255, 255, 255, 0.85); display: grid; place-items: center; flex: none; }
+.wv-recbtn span { width: 26px; height: 26px; border-radius: 50%; background: #ef4444; transition: border-radius .15s, width .15s, height .15s; }
+.wv-recbtn.on span { width: 22px; height: 22px; border-radius: 5px; }
+.wv-recbtn.on { animation: wv-pulse 1s ease-in-out infinite alternate; }
+.wv-recinfo { display: grid; gap: 6px; flex: 1; min-width: 0; }
+.wv-recinfo b { font-variant-numeric: tabular-nums; }
+.wv-level { height: 6px; border-radius: 999px; background: rgba(255, 255, 255, 0.1); overflow: hidden; }
+.wv-level i { display: block; height: 100%; width: 0; background: #22c55e; transition: width .08s; }
+.wv-recinfo small { color: var(--ink-3); }
+.wv-transcript { margin: 0; padding: var(--sp-2) var(--sp-3); border-left: 3px solid var(--accent); color: var(--ink-2); font-size: 14px; }
+#wRecPlay { width: 100%; }

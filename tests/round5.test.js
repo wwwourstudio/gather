@@ -57,12 +57,12 @@ const SP = process.argv[2];
   const back = await c.evaluate(async (code) => { const r = await fetch('/api/studio?action=join', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ studio: code, name: 'Caller again', dev: JSON.parse(localStorage.getItem('gather:dev')) }) }); return r.status; }, await a.evaluate(() => window.__gather.studio));
   console.log('  removed caller rejoining with the link:', back);
   if (back !== 403) console.log('FAIL a removed person got back in');
-  // 6 call-in card + sponsors + glass panel
-  await a.click('[data-tab="show"]'); await a.click('#callinCard');
+  // 6 watch-link card (replaced the call-in card) + sponsors + glass panel
+  await a.click('[data-tab="show"]'); await a.click('#wpCard');
   await a.click('[data-tab="look"]'); await a.click('.look-seg:visible [data-look="brand"]'); await a.setInputFiles('#adFile', SP + '/logo.png');
-  await b.waitForFunction(() => window.__gather.state.ads.on && window.__gather.state.ads.items.length === 1 && window.__gather.state.elements.some(e => e.type === 'callin' && e.url.includes('/c/')), null, { timeout: 8000 });
+  await b.waitForFunction(() => window.__gather.state.ads.on && window.__gather.state.ads.items.length === 1 && window.__gather.state.elements.some(e => e.type === 'callin' && e.url.includes('/w/')), null, { timeout: 8000 });
   await a.click('#panelSeg [data-panel="solid"]'); await b.waitForFunction(() => window.__gather.state.brand.panel === 'solid', null, { timeout: 5000 });
-  console.log('6 call-in card, sponsor ad and solid panels synced');
+  console.log('6 watch-link card, sponsor ad and solid panels synced');
   // 7 AI producer (provider mocked)
   await a.click('[data-tab="ai"]'); await a.fill('#aiKey', 'sk-test'); await a.fill('#aiName', 'Sam');
   const nd = (evs) => evs.map((e) => JSON.stringify(e)).join('\n') + '\n';
