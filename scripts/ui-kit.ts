@@ -123,8 +123,8 @@ async function main(): Promise<void> {
     fonts: [...new Set([...document.querySelectorAll('body *')].filter((e) => (e as HTMLElement).checkVisibility?.()).map((e) => getComputedStyle(e).fontFamily.split(',')[0].replace(/"/g, '').trim()))],
   }));
   check(app.rawSvgs === 0, `app has no hand-drawn SVG icons (found ${app.rawSvgs})`);
-  check(app.sprite > 20, `app icons come from the Lucide sprite (${app.sprite})`);
-  check(app.fonts.every((f) => ['Inter', 'Plus Jakarta Sans'].includes(f)), `app UI uses only Inter + Plus Jakarta Sans (found ${app.fonts.join(', ')})`);
+  check(app.sprite > 20, `app icons come from gather’s icon sprite (${app.sprite})`);
+  check(app.fonts.every((f) => ['Inter', 'Plus Jakarta Sans', 'JetBrains Mono'].includes(f)), `app UI uses only Inter + Plus Jakarta Sans, with JetBrains Mono for links and codes (found ${app.fonts.join(', ')})`);
   check(errors.length === 0, `no page errors (${errors.join('; ')})`);
 
   await browser.close();

@@ -1,6 +1,6 @@
 // gather UI primitives — the behaviour half of ui.css: Icon, loading state, Popover anchoring, Tooltip.
 
-/** A Lucide icon from the sprite. size: 'md' (20px) or 'sm' (16px). */
+/** An icon from gather's sprite (scripts/icons.js). size: 'md' (20px) or 'sm' (16px). */
 export function icon(name, { size = 'md', cls = '' } = {}) {
   return `<svg class="i${size === 'sm' ? ' sm' : ''}${cls ? ' ' + cls : ''}" aria-hidden="true"><use href="/icons.svg#i-${name}"/></svg>`;
 }

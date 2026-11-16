@@ -25,7 +25,7 @@ code, kbd, .mono { font-family: var(--font-mono); }
 .caps { font-size: var(--fs-11); font-weight: 600; letter-spacing: var(--tracking-caps); text-transform: uppercase; color: var(--ink-3); }
 kbd { font: 600 var(--fs-11)/1 var(--font-ui); font-variant-numeric: tabular-nums; padding: 2px var(--sp-1); min-width: 16px; text-align: center; border: 1px solid var(--line-2); border-bottom-width: 2px; border-radius: 4px; background: var(--fill); color: var(--ink-2); }
 
-/* ---------------------------------------------------------------- Icon (Lucide sprite) */
+/* ---------------------------------------------------------------- Icon (gather’s own sprite, scripts/icons.js) */
 .i { width: var(--icon-md); height: var(--icon-md); flex: none; fill: none; stroke: currentColor; stroke-width: var(--icon-stroke); stroke-linecap: round; stroke-linejoin: round; vertical-align: middle; }
 .i.sm { width: var(--icon-sm); height: var(--icon-sm); }
 /* Icons are gather's own duotone set (scripts/icons.js): a soft body under the outline, solid accents where needed. */
