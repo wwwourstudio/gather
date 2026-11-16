@@ -4641,12 +4641,12 @@ async function checkServer() {
 }
 function setEnterMode(m) {
   enterMode = m;
-  $$('#enterForm .seg button').forEach((b) => { const on = b.dataset.mode === m; b.classList.toggle('on', on); b.setAttribute('aria-selected', on); });
+  $$('#enterForm .seg button[data-mode]').forEach((b) => { const on = b.dataset.mode === m; b.classList.toggle('on', on); b.setAttribute('aria-selected', on); });
   $('#codeFld').hidden = m !== 'join';
   $('#enterGo').textContent = m === 'join' ? 'Join studio' : 'Create studio';
   $('#enterErr').hidden = true;
 }
-$$('#enterForm .seg button').forEach((b) => b.addEventListener('click', () => setEnterMode(b.dataset.mode)));
+$$('#enterForm .seg button[data-mode]').forEach((b) => b.addEventListener('click', () => setEnterMode(b.dataset.mode)));
 $('#enterForm').addEventListener('submit', async (e) => {
   if (e.submitter?.value !== 'go') return; // close button
   e.preventDefault();
