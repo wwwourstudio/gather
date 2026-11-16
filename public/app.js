@@ -611,7 +611,7 @@ async function onServer(m) {
       pollLoop(++pollGen);
       if (S.host === S.id && wasHosting) {
         // Bring the look you set up before creating the studio.
-        setStage({ aspect: pre.aspect, captions: pre.captions, brand: { ...pre.brand, bgImage: '', overlay: '', logo: '' }, title: pre.title || autoTitle(), watch: { ...WATCH_DEFAULTS, ...store.get('watchPrefs', {}) }, layout: pre.layout, banner: pre.banner, ticker: pre.ticker, stage: [S.id], feeds: pre.feeds, scene: pre.scene || '', elements: (pre.elements || []).filter((e) => !(e.type === 'image' && e.asset?.startsWith('local-'))) });
+        setStage({ aspect: pre.aspect, captions: pre.captions, brand: { ...pre.brand, bgImage: '', overlay: '', logo: '' }, title: pre.title || autoTitle(), watch: { ...WATCH_DEFAULTS, ...store.get('watchPrefs', {}) }, shop: { items: store.get('shopItems', []), pinned: '', sale: null }, layout: pre.layout, banner: pre.banner, ticker: pre.ticker, stage: [S.id], feeds: pre.feeds, scene: pre.scene || '', elements: (pre.elements || []).filter((e) => !(e.type === 'image' && e.asset?.startsWith('local-'))) });
         uploadLocalAssets(pre.elements).then((elements) => { if (S.host === S.id) setStage({ elements }); });
         uploadBrandAssets(pre.brand);
         if (S.pendingStream?.id) acctApi('streamStart', { id: S.pendingStream.id }).catch(() => {});
@@ -673,6 +673,9 @@ async function onServer(m) {
     case 'viewer-left': closeViewer(m.vid); break;
     case 'superchat': gotSuperchat(m.item, true); break;
     case 'react': reactFloat(m.emoji); break;
+    case 'wqueue': gotQueue(m); break;
+    case 'queue': renderQueue(m.items); break;
+    case 'wreport': if (m.count >= 3) toast(`A watch-page message was hidden after ${m.count} spam reports.`, { ms: 6000 }); break;
     case 'ai': upsertAI(m.item, false); break;
     case 'caption': showCaption(m.from, m.name, m.text, m.final); break;
     case 'host': {
@@ -1049,6 +1052,7 @@ function drawChrome() {
     const hasLogoTL = assetImg(S.state.brand.logo) && lg && lg.x < .2 && lg.y < .12;
     g.fillText(S.state.title.toUpperCase().split('').join(String.fromCharCode(8202)), 30, hasLogoTL ? H - 22 : 22);
   }
+  if (window.__shopReady) { drawProduct(); drawPoll(); }
 }
 // The program is painted tier by tier: stage → media → (brand frame) → overlays → chat → ticker → system.
 const TIER_Z = Object.fromEntries(TIERS.map((x) => [x.id, x.z]));
@@ -1231,6 +1235,7 @@ function addExternal(m) {
   const badge = document.createElement('span'); badge.className = 'pill caps src-' + m.src; badge.textContent = SRC_NAME[m.src] || m.src;
   const b = document.createElement('b'); b.textContent = m.name; if (m.color) b.style.color = m.color;
   who.append(badge, b);
+  if (m.q) { const q = document.createElement('span'); q.className = 'q-badge'; q.textContent = '✋ Question'; who.append(q); }
   if (m.paid) { const amt = document.createElement('span'); amt.className = 'paid-amt'; amt.textContent = m.paid; who.append(amt); }
   const txt = document.createElement('div'); txt.className = 'txt'; txt.textContent = m.text;
   li.append(who, txt, msgActions(m));
@@ -5019,7 +5024,7 @@ setInterval(() => { if (S.studio && !S.rec && S.state?.rec?.on) renderDock(); },
 // Viewers watch the program straight from this browser over WebRTC (no platform in between), chat, react, send
 // super chats paid directly to the host, and ask to join the stage. A laptop can encode and upload the program
 // for a handful of viewers, so the host sets a cap; past it, viewers fall back to the platform players.
-const WATCH_DEFAULTS = { chat: true, supers: false, join: true, direct: true, cap: 6, slow: 0, min: 2, about: '', links: [], pay: { paypal: '', venmo: '', cashapp: '', stripe: '' } };
+const WATCH_DEFAULTS = { chat: true, supers: false, join: true, queue: false, direct: true, cap: 6, slow: 0, min: 2, about: '', links: [], pay: { paypal: '', venmo: '', cashapp: '', stripe: '' } };
 const watchCfg = () => ({ ...WATCH_DEFAULTS, ...(S.state.watch || {}), pay: { ...WATCH_DEFAULTS.pay, ...(S.state.watch?.pay || {}) } });
 const watchLinkUrl = () => `${location.origin}/w/${S.studio}`;
 const VIEW = new Map(); // viewer id -> { pc }
@@ -5190,6 +5195,8 @@ function renderWatchSec() {
   if (document.activeElement !== $('#wpLinks')) $('#wpLinks').value = (cfg.links || []).map((l) => `${l.label} | ${l.url}`).join('\n');
   if (document.activeElement !== $('#wpMin')) $('#wpMin').value = String(cfg.min);
   $('#wpPayBox').hidden = !cfg.supers;
+  if (document.activeElement !== $('#wpQueue')) $('#wpQueue').checked = !!cfg.queue;
+  if (window.__shopReady) { renderShop(); renderPoll(); renderEmotes(); }
   $('#wpNoPay').hidden = !cfg.supers || Object.values(cfg.pay).some(Boolean);
 }
 $('#wpCopy').onclick = () => copy(watchLinkUrl(), 'Watch link copied. Share it anywhere.');
@@ -5212,3 +5219,205 @@ for (const k of Object.keys(PAY_NAME)) $('#wpPay-' + k).addEventListener('change
 setInterval(() => { if ($('#watchSec') && !$('#watchSec').closest('[hidden]')) renderWatchSec(); }, 3000);
 window.__watchReady = true;
 renderWatchSec();
+
+// ---------------------------------------------------------------- shop: sell products live (checkout on the store's own site)
+const shopCfg = () => ({ items: [], pinned: '', sale: null, store: '', ...(S.state.shop || {}) });
+function setShop(patch) {
+  const next = { ...shopCfg(), ...patch };
+  store.set('shopItems', next.items); // the catalogue follows the host to their next show
+  if (isHost() && S.studio) setStage({ shop: next }); else S.state.shop = next;
+  renderShop();
+}
+const imgCache = new Map();
+/** An image for the program canvas, only if its host allows cross-origin use: anything else would taint the canvas and break recording. */
+function corsImg(url) {
+  if (!url) return null;
+  let e = imgCache.get(url);
+  if (!e) { e = { img: new Image(), ok: false }; e.img.crossOrigin = 'anonymous'; e.img.onload = () => { e.ok = true; }; e.img.src = url; imgCache.set(url, e); }
+  return e.ok ? e.img : null;
+}
+function renderShop() {
+  if (!$('#shopList')) return;
+  const sh = shopCfg();
+  $('#shopCount').textContent = sh.items.length ? `${sh.items.length} product${sh.items.length === 1 ? '' : 's'}${sh.pinned ? ' · 1 pinned' : ''}` : '';
+  $('#shopList').replaceChildren(...sh.items.map((p) => {
+    const li = document.createElement('li'); li.className = 'shop-item' + (sh.pinned === p.id ? ' pinned' : '');
+    const im = document.createElement(p.img ? 'img' : 'div'); if (p.img) { im.src = p.img; im.alt = ''; im.loading = 'lazy'; } else im.className = 'ph';
+    const txt = document.createElement('div'); const t = document.createElement('b'); t.textContent = p.title; const sm = document.createElement('small');
+    const onSale = sh.sale?.id === p.id && sh.sale.until > Date.now();
+    sm.textContent = [p.price, p.src === 'shopify' ? 'Shopify' : p.src === 'etsy' ? 'Etsy' : 'Link', onSale ? `Flash sale ${sh.sale.pct ? sh.sale.pct + '% off' : ''} · ${sh.sale.code} · ${fmtTime(sh.sale.until - Date.now())} left` : ''].filter(Boolean).join(' · ');
+    txt.append(t, sm);
+    const acts = document.createElement('div'); acts.className = 'acts';
+    const btn = (label, cls, fn) => { const b = document.createElement('button'); b.type = 'button'; b.className = 'btn sm ' + cls; b.textContent = label; b.onclick = fn; return b; };
+    acts.append(
+      btn(sh.pinned === p.id ? 'Unpin' : 'Pin', sh.pinned === p.id ? '' : 'primary', () => setShop({ pinned: sh.pinned === p.id ? '' : p.id })),
+      btn(onSale ? 'End sale' : 'Flash sale', '', () => {
+        if (onSale) return setShop({ sale: null });
+        const code = prompt('Discount code buyers enter at checkout (create it in your store first):', 'LIVE20'); if (!code) return;
+        const pct = Number(prompt('How much off, in percent? (shown on screen)', '20')) || 0;
+        const mins = Number(prompt('How many minutes should it last?', '10')) || 10;
+        setShop({ pinned: p.id, sale: { id: p.id, code: code.trim().slice(0, 24), pct: Math.min(95, Math.max(0, pct)), until: Date.now() + mins * 60e3 } });
+        toast(`Flash sale on: ${code} for ${mins} min.`);
+      }),
+      btn('Remove', 'ghost', () => setShop({ items: sh.items.filter((x) => x.id !== p.id), pinned: sh.pinned === p.id ? '' : sh.pinned, sale: sh.sale?.id === p.id ? null : sh.sale })),
+    );
+    li.append(im, txt, acts);
+    return li;
+  }));
+}
+$('#shopAdd').onclick = () => {
+  let url = $('#shopUrl').value.trim(); if (url && !/^https?:\/\//i.test(url)) url = 'https://' + url;
+  const title = $('#shopTitle').value.trim(), img = $('#shopImg').value.trim();
+  if (!title || !/^https:\/\//.test(url)) return toast('Add a name and an https:// product link.', { err: true });
+  const src = /etsy\.com/i.test(url) ? 'etsy' : /myshopify\.com|shopify/i.test(url) ? 'shopify' : 'link';
+  setShop({ items: [...shopCfg().items, { id: uid(), title, price: $('#shopPrice').value.trim(), url, img: /^https:\/\//.test(img) ? img : '', src }].slice(0, 24) });
+  for (const id of ['#shopTitle', '#shopPrice', '#shopUrl', '#shopImg']) $(id).value = '';
+};
+// Shopify's Storefront API is made for browsers (public token, CORS allowed), so products load straight from the store.
+$('#shopDomain').value = store.get('shopDomain', ''); $('#shopToken').value = store.get('shopToken', '');
+$('#shopLoad').onclick = async () => {
+  const domain = $('#shopDomain').value.trim().replace(/^https?:\/\//, '').replace(/\/.*$/, ''), token = $('#shopToken').value.trim();
+  if (!/^[a-z0-9-]+(\.[a-z0-9-]+)+$/i.test(domain) || !token) return toast('Add your store address and its Storefront token.', { err: true });
+  store.set('shopDomain', domain); store.set('shopToken', token);
+  $('#shopMsg').textContent = 'Loading…';
+  try {
+    const r = await fetch(`https://${domain}/api/2025-01/graphql.json`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Shopify-Storefront-Access-Token': token },
+      body: JSON.stringify({ query: '{ products(first: 24, sortKey: BEST_SELLING) { nodes { id title handle onlineStoreUrl featuredImage { url(transform: { maxWidth: 480 }) } priceRange { minVariantPrice { amount currencyCode } } } } }' }) });
+    const j = await r.json();
+    if (!r.ok || j.errors) throw new Error(j.errors?.[0]?.message || `Shopify answered ${r.status}`);
+    const fmt = (p) => { try { return new Intl.NumberFormat(undefined, { style: 'currency', currency: p.currencyCode }).format(p.amount); } catch { return p.amount; } };
+    const items = j.data.products.nodes.map((n) => ({ id: n.id.split('/').pop().slice(-12), title: n.title, price: fmt(n.priceRange.minVariantPrice), img: n.featuredImage?.url || '', url: n.onlineStoreUrl || `https://${domain}/products/${n.handle}`, src: 'shopify' }));
+    const keep = shopCfg().items.filter((x) => x.src !== 'shopify');
+    setShop({ items: [...items, ...keep].slice(0, 24), store: domain });
+    $('#shopMsg').textContent = `${items.length} products loaded.`;
+  } catch (e) { $('#shopMsg').textContent = ''; toast('Couldn’t load your Shopify products: ' + e.message, { err: true, ms: 8000 }); }
+};
+/** The pinned product on stage, with a flash-sale countdown. Bottom-left, or top-left when a chat card is showing. */
+function drawProduct() {
+  const sh = S.state.shop, p = sh?.items?.find((x) => x.id === sh.pinned);
+  if (!p) return;
+  const sale = sh.sale?.id === p.id && sh.sale.until > Date.now() ? sh.sale : null;
+  const w = 420, h = sale ? 132 : 104, x = 28, y = S.state.featured ? 28 : H - h - 28;
+  g.save();
+  g.shadowColor = 'rgba(0,0,0,.35)'; g.shadowBlur = 24; g.shadowOffsetY = 8;
+  g.fillStyle = '#ffffff'; rr(x, y, w, h, 16); g.fill(); g.shadowColor = 'transparent';
+  const im = corsImg(p.img), pad = 14, is = h - pad * 2;
+  if (im) { g.save(); rr(x + pad, y + pad, is, is, 10); g.clip(); const k = Math.max(is / im.naturalWidth, is / im.naturalHeight); g.drawImage(im, x + pad + (is - im.naturalWidth * k) / 2, y + pad + (is - im.naturalHeight * k) / 2, im.naturalWidth * k, im.naturalHeight * k); g.restore(); }
+  else { g.fillStyle = S.state.brand.color; rr(x + pad, y + pad, is, is, 10); g.fill(); g.fillStyle = '#fff'; g.font = '800 30px Inter, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText('🛍', x + pad + is / 2, y + pad + is / 2); }
+  const tx = x + pad * 2 + is;
+  g.textAlign = 'left'; g.textBaseline = 'alphabetic';
+  g.fillStyle = sale ? '#dc2626' : '#16a34a'; g.font = '800 12px Inter, sans-serif';
+  g.fillText(sale ? `FLASH SALE${sale.pct ? ' · ' + sale.pct + '% OFF' : ''}` : 'SHOP THE SHOW', tx, y + 30);
+  g.fillStyle = '#111827'; g.font = '700 20px Inter, sans-serif';
+  g.fillText(wrapLines(p.title, w - (tx - x) - pad, 1)[0] || p.title, tx, y + 56);
+  g.fillStyle = '#374151'; g.font = '600 16px Inter, sans-serif'; g.fillText(p.price || '', tx, y + 80);
+  if (sale) { g.fillStyle = '#111827'; g.font = '700 15px Inter, sans-serif'; g.fillText(`Code ${sale.code} · ends in ${fmtTime(sale.until - Date.now())}`, tx, y + 110); }
+  g.restore();
+}
+
+// ---------------------------------------------------------------- polls and predictions
+let pollKind = 'poll';
+S.pollCounts = [];
+$$('#pollKind button').forEach((b) => b.addEventListener('click', () => { pollKind = b.dataset.kind; $$('#pollKind button').forEach((x) => x.setAttribute('aria-checked', String(x === b))); }));
+$('#pollGo').onclick = () => {
+  const q = $('#pollQ').value.trim(), opts = $('#pollOpts').value.split('\n').map((x) => x.trim()).filter(Boolean).slice(0, 4);
+  if (!q || opts.length < 2) return toast('Add a question and at least two choices.', { err: true });
+  setStage({ poll: { id: uid().slice(0, 8), kind: pollKind, q, opts, until: Date.now() + Number($('#pollMins').value) * 60e3, answer: -1 } });
+  S.pollCounts = opts.map(() => 0); renderPoll();
+};
+$('#pollEnd').onclick = () => { if (S.state.poll) setStage({ poll: { ...S.state.poll, until: Math.min(S.state.poll.until, Date.now()) } }); renderPoll(); };
+function renderPoll() {
+  const p = S.state.poll, box = $('#pollLive'); if (!box) return;
+  if (!p) { box.replaceChildren(); $('#pollState').textContent = ''; return; }
+  const open = p.until > Date.now(), total = S.pollCounts.reduce((a, b) => a + b, 0);
+  $('#pollState').textContent = open ? `Live · ${fmtTime(p.until - Date.now())} left · ${total} vote${total === 1 ? '' : 's'}` : `Closed · ${total} votes`;
+  const rows = p.opts.map((o, i) => {
+    const n = S.pollCounts[i] || 0, pct = total ? Math.round(n / total * 100) : 0;
+    const d = document.createElement('div'); d.className = 'poll-bar';
+    const bar = document.createElement('i'); bar.style.width = pct + '%';
+    const l = document.createElement('span'); l.textContent = (p.answer === i ? '✓ ' : '') + o; const r = document.createElement('b'); r.textContent = `${pct}% · ${n}`;
+    d.append(bar, l, r);
+    if (p.kind === 'predict' && !open && p.answer < 0) { d.style.cursor = 'pointer'; d.title = 'Settle the prediction with this answer'; d.onclick = () => setStage({ poll: { ...p, answer: i } }); }
+    return d;
+  });
+  const title = document.createElement('p'); title.className = 'hint'; title.style.margin = '0';
+  title.textContent = p.kind === 'predict' && !open && p.answer < 0 ? 'Voting closed. Click the right answer to settle the prediction.' : p.q;
+  const clear = document.createElement('button'); clear.type = 'button'; clear.className = 'btn sm ghost'; clear.textContent = 'Remove from screen'; clear.onclick = () => setStage({ poll: null });
+  box.replaceChildren(title, ...rows, clear);
+}
+/** The host reads live counts from the same cached feed viewers use (one GET every 2 s, only while a poll exists). */
+setInterval(async () => {
+  if (!isHost() || !S.studio || !S.state.poll) return;
+  try { const f = await (await fetch(`/api/studio?action=wfeed&studio=${encodeURIComponent(S.studio)}`)).json(); if (f.poll?.id === S.state.poll.id) S.pollCounts = f.poll.counts; } catch {}
+  renderPoll();
+}, 2000);
+function drawPoll() {
+  const p = S.state.poll; if (!p) return;
+  const open = p.until > Date.now(), total = (S.pollCounts || []).reduce((a, b) => a + b, 0);
+  const w = 360, rowH = 34, h = 70 + p.opts.length * (rowH + 8), x = W - w - 28, y = 28;
+  g.save();
+  g.fillStyle = 'rgba(10,14,26,.86)'; rr(x, y, w, h, 16); g.fill();
+  g.fillStyle = '#9ca3af'; g.font = '800 12px Inter, sans-serif'; g.textAlign = 'left'; g.textBaseline = 'alphabetic';
+  g.fillText((p.kind === 'predict' ? 'PREDICTION' : 'POLL') + (open ? ` · ${fmtTime(p.until - Date.now())} · vote on the watch page` : ` · ${total} votes`), x + 18, y + 26);
+  g.fillStyle = '#fff'; g.font = '700 18px Inter, sans-serif'; g.fillText(wrapLines(p.q, w - 36, 1)[0] || p.q, x + 18, y + 52);
+  p.opts.forEach((o, i) => {
+    const n = (S.pollCounts || [])[i] || 0, pct = total ? n / total : 0, ry = y + 66 + i * (rowH + 8);
+    g.fillStyle = 'rgba(255,255,255,.08)'; rr(x + 18, ry, w - 36, rowH, 8); g.fill();
+    g.fillStyle = p.answer === i ? '#16a34a' : S.state.brand.color; if (pct) { rr(x + 18, ry, Math.max(12, (w - 36) * pct), rowH, 8); g.fill(); }
+    g.fillStyle = '#fff'; g.font = '600 15px Inter, sans-serif'; g.fillText((p.answer === i ? '✓ ' : '') + o, x + 30, ry + 22);
+    g.textAlign = 'right'; g.fillText(total ? Math.round(pct * 100) + '%' : '', x + w - 30, ry + 22); g.textAlign = 'left';
+  });
+  g.restore();
+}
+
+// ---------------------------------------------------------------- play with me: the viewer queue
+S.queue = [];
+function gotQueue(m) { chime(); toast(`${m.name}${m.tag ? ' (' + m.tag + ')' : ''} wants to play.`, { action: ['Open', () => { setTab('show'); $('#queueSec').open = true; }] }); S.queue.push({ name: m.name, tag: m.tag, status: 'waiting', ts: Date.now() }); renderQueue(S.queue); }
+function renderQueue(items) {
+  if (items) S.queue = items;
+  if (!$('#queueList')) return;
+  const waiting = S.queue.filter((x) => x.status !== 'called');
+  $('#queueCount').textContent = waiting.length ? `${waiting.length} waiting` : '';
+  $('#queueList').replaceChildren(...S.queue.map((x) => { const li = document.createElement('li'); li.className = x.status; const a = document.createElement('span'); a.textContent = x.name; const b = document.createElement('small'); b.textContent = x.status === 'called' ? 'called' : x.tag || ''; li.append(a, b); return li; }));
+}
+$('#queueNext').onclick = () => { wsSend({ type: 'qpick' }); toast('The next player sees “You’re up!” with a button to join the stage.'); };
+$('#queueClear').onclick = () => { wsSend({ type: 'qclear' }); S.queue = []; renderQueue(); };
+$('#wpQueue').onchange = (e) => setWatch({ queue: e.target.checked });
+
+// ---------------------------------------------------------------- custom emotes
+function renderEmotes() {
+  if (!$('#emoteList')) return;
+  const list = S.state.emotes || [];
+  $('#emoteCount').textContent = list.length ? `${list.length}` : '';
+  $('#emoteList').replaceChildren(...list.map((e) => {
+    const f = document.createElement('figure'); const src = assetImg(e.asset)?.src; const im = document.createElement(src ? 'img' : 'span'); if (src) { im.alt = e.name; im.src = src; } else { im.className = 'ph'; im.textContent = '…'; } const c = document.createElement('figcaption'); c.textContent = `:${e.name}:`;
+    f.title = 'Click to remove'; f.style.cursor = 'pointer'; f.onclick = () => setStage({ emotes: list.filter((x) => x !== e) });
+    f.append(im, c); return f;
+  }));
+}
+$('#emoteAdd').onclick = () => { if (!/^[a-z0-9_]{2,20}$/i.test($('#emoteName').value.trim())) return toast('Name the emote first: 2–20 letters or numbers.', { err: true }); $('#emoteFile').click(); };
+$('#emoteFile').onchange = async (e) => {
+  const f = e.target.files[0]; e.target.value = ''; if (!f || !S.studio) return;
+  if (f.size > 400_000) return toast('That image is too big. Use one under 200 KB.', { err: true });
+  try {
+    const data = await new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = rej; r.readAsDataURL(f); });
+    const asset = await storeAsset(data);
+    setStage({ emotes: [...(S.state.emotes || []).filter((x) => x.name !== $('#emoteName').value.trim().toLowerCase()), { name: $('#emoteName').value.trim().toLowerCase(), asset }] });
+    $('#emoteName').value = ''; toast('Emote added.');
+  } catch (err) { toast(err.message, { err: true }); }
+};
+
+// ---------------------------------------------------------------- vertical: tell the watch page where the speaker is
+let lastFocus = 0.5;
+setInterval(() => {
+  if (!isHost() || !S.studio || !camRects.length) return;
+  const now = performance.now(), ids = S.state.stage || [];
+  let best = -1, bestT = -1;
+  ids.forEach((id, i) => { const t = speaking.get(id) || -1; if (camRects[i] && t > bestT && now - t < 1500) { bestT = t; best = i; } });
+  const r = camRects[best >= 0 ? best : 0];
+  const focus = Math.round(((r.x + r.w / 2) / W) * 100) / 100;
+  if (Math.abs(focus - lastFocus) >= 0.08) { lastFocus = focus; setStage({ focus }); }
+}, 2000);
+
+window.__shopReady = true;
+setInterval(() => { if (isHost() && $('#shopSec')?.open) renderShop(); }, 1000);

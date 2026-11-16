@@ -246,6 +246,43 @@
             <div class="row between"><b>Super chats</b><span class="hint" id="scTotal" style="margin:0"></span></div>
             <ul class="sc-list" id="scList"></ul>
             <p class="hint" id="scEmpty" style="margin:0">None yet. New ones chime and appear here.</p>
+
+            <!-- Shop: products sold live; checkout happens on the store's own site -->
+            <details class="sec-fold" id="shopSec"><summary><b>Shop</b><span class="hint" id="shopCount" style="margin:0"></span></summary>
+              <p class="hint" style="margin:0">Pin a product and it pops up on stage and on your watch page. Buyers check out on your store.</p>
+              <div class="row2"><label class="fld"><span>Shopify store</span><input id="shopDomain" maxlength="80" placeholder="yourstore.myshopify.com" spellcheck="false"></label><label class="fld"><span>Storefront token <em>Shopify admin → Apps → Develop apps</em></span><input id="shopToken" maxlength="80" type="password" autocomplete="off" spellcheck="false"></label></div>
+              <div class="row"><button type="button" class="btn sm" id="shopLoad">Load my Shopify products</button><span class="hint" id="shopMsg" style="margin:0"></span></div>
+              <details class="sub-fold"><summary>Add a product by hand <em>Etsy, Gumroad, anything with a link</em></summary>
+                <div class="row2"><label class="fld"><span>Name</span><input id="shopTitle" maxlength="80" placeholder="Limited hoodie"></label><label class="fld"><span>Price</span><input id="shopPrice" maxlength="16" placeholder="$45"></label></div>
+                <label class="fld"><span>Product link</span><input id="shopUrl" maxlength="400" placeholder="https://www.etsy.com/listing/…" spellcheck="false"></label>
+                <label class="fld"><span>Image link <em>optional</em></span><input id="shopImg" maxlength="400" placeholder="https://…/photo.jpg" spellcheck="false"></label>
+                <button type="button" class="btn sm" id="shopAdd">Add product</button>
+              </details>
+              <ul class="shop-list" id="shopList"></ul>
+            </details>
+
+            <!-- Polls and predictions -->
+            <details class="sec-fold" id="pollSec"><summary><b>Polls &amp; predictions</b><span class="hint" id="pollState" style="margin:0"></span></summary>
+              <div class="seg block" role="radiogroup" aria-label="Kind" id="pollKind"><button type="button" role="radio" data-kind="poll" aria-checked="true">Poll</button><button type="button" role="radio" data-kind="predict" aria-checked="false">Prediction</button></div>
+              <label class="fld"><span>Question</span><input id="pollQ" maxlength="120" placeholder="Who wins this round?"></label>
+              <label class="fld"><span>Choices <em>one per line, 2 to 4</em></span><textarea id="pollOpts" rows="3" maxlength="200" placeholder="Red team&#10;Blue team"></textarea></label>
+              <div class="row"><select id="pollMins" aria-label="Voting time"><option value="1">1 min</option><option value="2" selected>2 min</option><option value="5">5 min</option><option value="10">10 min</option></select><button type="button" class="btn sm primary" id="pollGo">Start</button><button type="button" class="btn sm ghost" id="pollEnd">End</button></div>
+              <div id="pollLive"></div>
+            </details>
+
+            <!-- Play with me: viewers queue up with their gamertag -->
+            <details class="sec-fold" id="queueSec"><summary><b>Play with me</b><span class="hint" id="queueCount" style="margin:0"></span></summary>
+              <label class="toggle-row"><span><b>Take players</b><small>Viewers join a queue with their gamertag from the watch page.</small></span><input type="checkbox" class="toggle" id="wpQueue" role="switch"></label>
+              <div class="row"><button type="button" class="btn sm primary" id="queueNext">Call next player</button><button type="button" class="btn sm ghost" id="queueClear">Clear queue</button></div>
+              <ol class="queue-list" id="queueList"></ol>
+            </details>
+
+            <!-- Custom emotes: :name: in chat -->
+            <details class="sec-fold" id="emoteSec"><summary><b>Custom emotes</b><span class="hint" id="emoteCount" style="margin:0"></span></summary>
+              <div class="row"><input id="emoteName" maxlength="20" placeholder="hype" aria-label="Emote name" spellcheck="false"><button type="button" class="btn sm" id="emoteAdd">Upload image</button><input type="file" id="emoteFile" accept="image/png,image/webp,image/gif,image/jpeg" hidden></div>
+              <p class="hint" style="margin:0">Viewers type <code>:name:</code> in chat. Square images under 200 KB work best.</p>
+              <div class="emote-list" id="emoteList"></div>
+            </details>
           </div>
           <hr>
           <label class="fld"><span>Banner text</span><textarea id="bannerText" rows="3" maxlength="120">Welcome to the conversation</textarea></label>

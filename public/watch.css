@@ -190,3 +190,105 @@ body { background: #05070d; }
   .wv.theater .wv-chat { display: grid; left: var(--sp-2); right: var(--sp-2); top: auto; bottom: 64px; width: auto; height: 42%; min-height: 0; }
   .wv-c.wv-txt { min-width: 34px; padding: 0 6px; }
 }
+
+/* ---- store, gaming and chat upgrades ---- */
+/* Chat rows: avatar, name, time, text; actions appear on hover/focus (always on for touch). */
+.wv-msgs li.row { display: grid; grid-template-columns: 28px minmax(0, 1fr); gap: 8px; align-items: start; padding: 4px 6px; position: relative; }
+.wv-av { width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; font: 700 11px var(--font-ui); color: #0b1020; flex: none; }
+.wv-mh { display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap; }
+.wv-mh b { margin: 0 !important; }
+.wv-mh time { color: var(--ink-3); font-size: 11px; font-variant-numeric: tabular-nums; }
+.wv-mt { display: block; }
+.wv-mt img.emote { width: 24px; height: 24px; vertical-align: -6px; object-fit: contain; }
+.wv-mt .at { color: var(--accent-text); font-weight: 600; }
+.wv-msgs li.mention { background: color-mix(in srgb, var(--accent) 16%, transparent); box-shadow: inset 3px 0 0 var(--accent); }
+.wv-msgs li.q { background: rgba(250, 204, 21, 0.08); box-shadow: inset 3px 0 0 #facc15; }
+.wv-qb { font-size: 11px; font-weight: 700; color: #facc15; }
+.wv-acts { position: absolute; right: 4px; top: 2px; display: none; gap: 2px; background: var(--surface-3); border: 1px solid var(--line-2); border-radius: 8px; padding: 2px; }
+.wv-msgs li.row:hover .wv-acts, .wv-msgs li.row:focus-within .wv-acts { display: flex; }
+@media (hover: none) { .wv-acts { position: static; display: flex; background: none; border: 0; padding: 0; grid-column: 2; } }
+.wv-acts button { height: 26px; min-width: 26px; padding: 0 6px; border-radius: 6px; font-size: 12px; color: var(--ink-2); }
+.wv-acts button:hover { background: var(--fill-hover); color: var(--ink); }
+.wv-acts button[aria-pressed="true"] { color: #f472b6; }
+.wv-like { font-size: 11px; color: #f472b6; margin-left: 2px; }
+
+/* composer: question toggle and emoji button inside the field */
+.wv-inputwrap { position: relative; flex: 1; min-width: 0; display: flex; }
+.wv-inputwrap .input { flex: 1; padding-right: 72px; }
+.wv-ib { position: absolute; top: 4px; width: 32px; height: 32px; border-radius: 6px; font-size: 16px; }
+#wAsk { right: 36px; opacity: 0.6; } #wEmoji { right: 4px; }
+#wAsk[aria-pressed="true"] { opacity: 1; background: rgba(250, 204, 21, 0.2); }
+.wv-ib:hover { background: var(--fill-hover); }
+.wv-compose { position: relative; }
+.wv-picker, .wv-mentions { position: absolute; bottom: calc(100% + 6px); right: var(--sp-3); left: var(--sp-3); max-height: 260px; overflow-y: auto; padding: var(--sp-2); border-radius: var(--r-md); background: var(--surface-3); border: 1px solid var(--line-2); box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45); z-index: 6; }
+.wv-picker { display: grid; grid-template-columns: repeat(8, 1fr); gap: 2px; }
+.wv-picker[hidden], .wv-mentions[hidden] { display: none; }
+.wv-picker button { height: 36px; border-radius: 6px; font-size: 20px; display: grid; place-items: center; }
+.wv-picker button:hover { background: var(--fill-hover); }
+.wv-picker img { width: 26px; height: 26px; object-fit: contain; }
+.wv-picker h3 { grid-column: 1 / -1; font-size: 11px; color: var(--ink-3); margin: 4px 2px; text-transform: uppercase; letter-spacing: .06em; }
+.wv-mentions button { display: block; width: 100%; text-align: left; padding: 6px 10px; border-radius: 6px; font-size: 14px; }
+.wv-mentions button:hover, .wv-mentions button.on { background: var(--fill-hover); }
+
+/* live cards above the chat: pinned product, poll, play-with-me */
+.wv-cards { display: grid; gap: var(--sp-2); padding: var(--sp-2) var(--sp-3) 0; }
+.wv-cards:empty { display: none; }
+.wv-card { border-radius: var(--r-md); border: 1px solid var(--line-2); background: var(--surface-2); padding: var(--sp-2) var(--sp-3); display: grid; gap: 6px; animation: wv-in .25s var(--ease-out); }
+@keyframes wv-in { from { transform: translateY(6px); opacity: 0; } }
+.wv-card .k { font: 800 11px var(--font-ui); letter-spacing: .06em; text-transform: uppercase; color: var(--ink-3); display: flex; justify-content: space-between; }
+.wv-card.sale { border-color: #dc2626; background: linear-gradient(135deg, rgba(220, 38, 38, 0.18), var(--surface-2)); }
+.wv-card.sale .k { color: #fca5a5; }
+.wv-prod { display: grid; grid-template-columns: 56px 1fr auto; gap: 10px; align-items: center; }
+.wv-prod img, .wv-prod .ph { width: 56px; height: 56px; border-radius: 10px; object-fit: cover; background: var(--surface-3); display: grid; place-items: center; font-size: 24px; }
+.wv-prod b { display: block; font-size: 14px; line-height: 1.25; }
+.wv-prod small { color: var(--ink-2); font-size: 13px; }
+.wv-buy { --btn-bg: #16a34a; --btn-bg-hover: #15803d; --btn-ink: #fff; --btn-line: transparent; }
+.wv-code { display: flex; align-items: center; gap: 6px; font-size: 13px; }
+.wv-code code { padding: 2px 8px; border-radius: 6px; background: rgba(255, 255, 255, 0.1); font-weight: 700; letter-spacing: .04em; }
+.wv-vote { display: grid; gap: 4px; }
+.wv-vote button { position: relative; overflow: hidden; text-align: left; padding: 7px 10px; border-radius: 8px; background: var(--fill); border: 1px solid var(--glass-border); font-size: 13px; display: flex; justify-content: space-between; }
+.wv-vote button i { position: absolute; inset: 0 auto 0 0; background: var(--accent-soft); }
+.wv-vote button span, .wv-vote button b { position: relative; }
+.wv-vote button.mine { border-color: var(--accent); }
+.wv-vote button.right { border-color: #16a34a; }
+.wv-vote button:disabled { cursor: default; }
+.wv-q { display: flex; gap: 6px; }
+.wv-q input { flex: 1; min-width: 0; height: 36px; font-size: 16px; }
+.wv-card.up { border-color: #16a34a; background: linear-gradient(135deg, rgba(22, 163, 74, 0.25), var(--surface-2)); }
+
+/* Shop tab */
+.wv-shop { grid-row: 2 / 5; overflow-y: auto; padding: var(--sp-3); display: grid; gap: var(--sp-2); align-content: start; }
+.wv-products { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: var(--sp-2); }
+.wv-products a { display: grid; gap: 4px; padding: 6px; border-radius: var(--r-md); background: var(--fill); border: 1px solid var(--glass-border); color: var(--ink); text-decoration: none; }
+.wv-products a:hover { background: var(--fill-hover); }
+.wv-products img, .wv-products .ph { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 8px; background: var(--surface-3); display: grid; place-items: center; font-size: 32px; }
+.wv-products b { font-size: 13px; line-height: 1.25; }
+.wv-products small { color: var(--ink-2); font-size: 12px; }
+.wv-products .on-sale small { color: #fca5a5; font-weight: 700; }
+.wv-chat.shop .wv-tops, .wv-chat.shop .wv-cards, .wv-chat.shop .wv-msgs, .wv-chat.shop .wv-compose, .wv-chat.shop .wv-newer { display: none; }
+
+/* hype meter */
+.wv-hype { display: flex; align-items: center; gap: 6px; padding: 0 10px; height: 40px; border-radius: 999px; background: var(--fill); border: 1px solid var(--glass-border); font-size: 12px; flex: none; }
+.wv-hype i { width: 64px; height: 6px; border-radius: 999px; background: rgba(255, 255, 255, 0.1); overflow: hidden; display: block; }
+.wv-hype b { display: block; height: 100%; width: 0; background: linear-gradient(90deg, #f59e0b, #ef4444, #ec4899); transition: width .6s var(--ease-out); }
+.wv-hype em { font-style: normal; font-weight: 700; color: var(--ink-2); min-width: 44px; }
+.wv-hype.max { animation: wv-pulse .8s ease-in-out infinite alternate; border-color: #ec4899; }
+@keyframes wv-pulse { to { box-shadow: 0 0 18px rgba(236, 72, 153, 0.6); } }
+
+/* vertical: on an upright phone the picture becomes 9:16, cropped around the speaker (or truly vertical shows) */
+.wv.vertical .wv-player { aspect-ratio: 9 / 16; width: auto; height: min(68dvh, 100vw * 16 / 9); margin: 0 auto; }
+.wv.vertical .wv-video video { object-fit: cover; transition: object-position .8s var(--ease-out); }
+.wv.native916 .wv-player { aspect-ratio: 9 / 16; width: min(100%, (100cqh - 56px) * 9 / 16); }
+.wv.native916 .wv-video video { object-fit: contain; }
+@media (max-width: 900px) { .wv.vertical .wv-strip, .wv.native916 .wv-strip { width: 100%; } .wv.vertical .wv-stagebox { background: #000; } }
+/* phones: keep the chat visible under a vertical player, and let the live cards scroll in their own box */
+@media (max-width: 900px) {
+  .wv.vertical .wv-player { height: min(56dvh, 100vw * 16 / 9); }
+  .wv-cards { max-height: 34dvh; overflow-y: auto; }
+  .wv-card { padding: 6px 10px; gap: 4px; }
+  .wv-prod { grid-template-columns: 44px 1fr auto; }
+  .wv-prod img, .wv-prod .ph { width: 44px; height: 44px; }
+}
+/* the vertical player is narrow: keep only the controls that matter there */
+.wv.vertical #wDelay, .wv.vertical #wQual { display: none; }
+.wv-unmute { white-space: nowrap; }

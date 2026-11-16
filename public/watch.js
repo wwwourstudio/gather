@@ -91,6 +91,7 @@ function render(info) {
   renderChat(info.chat || []);
   renderTops(info.chat || []);
   renderAbout(info);
+  renderShopUI(info); renderPollCard(info); renderQueueCard(info); renderHype(info); renderVertical(info);
   renderCaps(info);
   renderSources(info);
   floatReacts(info.reacts);
@@ -99,8 +100,11 @@ function render(info) {
 function renderChat(items) {
   const log = $('#wMsgs'), atBottom = log.scrollHeight - log.scrollTop - log.clientHeight < 40;
   for (const m of items) {
+    if (W.muted.has(String(m.name).toLowerCase())) continue;
+    const old = log.querySelector(`[data-id="${CSS.escape(m.id)}"] .wv-like`); if (old) old.textContent = m.likes ? `♥ ${m.likes}` : '';
     const key = m.id + ':' + (m.status || '');
     if (W.shown.has(key)) continue;
+    if (W.booted && sess?.named && m.name !== sess.name && new RegExp('@' + sess.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b', 'i').test(m.text)) toast(`${m.name} mentioned you.`);
     W.shown.add(key);
     log.querySelector(`[data-id="${CSS.escape(m.id)}"]`)?.remove();
     log.querySelector(`[data-sc="${CSS.escape(m.sc || '')}"]`)?.remove(); // my own pending claim, now confirmed
@@ -108,6 +112,7 @@ function renderChat(items) {
   }
   while (log.children.length > 200) log.firstChild.remove();
   if (atBottom) log.scrollTop = log.scrollHeight; else if (items.length) $('#wNewer').hidden = false;
+  W.booted = true;
 }
 $('#wMsgs').addEventListener('scroll', () => { const l = $('#wMsgs'); if (l.scrollHeight - l.scrollTop - l.clientHeight < 40) $('#wNewer').hidden = true; });
 $('#wNewer').onclick = () => { const l = $('#wMsgs'); l.scrollTop = l.scrollHeight; $('#wNewer').hidden = true; };
@@ -115,13 +120,45 @@ const NAME_COLORS = ['#7fa8ff', '#f472b6', '#fbbf24', '#34d399', '#a78bfa', '#38
 const nameColor = (n) => NAME_COLORS[[...String(n)].reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 7) % NAME_COLORS.length];
 function msgEl(m) {
   const li = document.createElement('li');
-  li.dataset.id = m.id; if (m.sc) li.dataset.sc = m.sc;
+  li.dataset.id = m.id; li.dataset.name = m.name; if (m.sc) li.dataset.sc = m.sc;
   if (m.paid) li.className = 'paid' + (m.status === 'answered' ? ' answered' : '') + (m.status === 'pending' ? ' pending' : '');
-  if (sess?.named && m.name === sess.name) li.classList.add('me');
-  if (m.paid) { const a = document.createElement('span'); a.className = 'amt'; a.textContent = m.paid; li.append(a); }
-  const b = document.createElement('b'); b.textContent = m.name; if (!li.classList.contains('me')) b.style.color = nameColor(m.name);
-  li.append(b, document.createTextNode(m.text));
+  else li.className = 'row' + (m.q ? ' q' : '');
+  const mine = sess?.named && m.name === sess.name;
+  if (mine) li.classList.add('me');
+  if (!mine && sess?.named && new RegExp('@' + sess.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b', 'i').test(m.text)) li.classList.add('mention');
+  if (m.paid) { const a = document.createElement('span'); a.className = 'amt'; a.textContent = m.paid; li.append(a); const b = document.createElement('b'); b.textContent = m.name; li.append(b, richText(m.text)); return li; }
+  // avatar · name · time · text, then like / reply / more on hover
+  const av = document.createElement('span'); av.className = 'wv-av'; av.style.background = nameColor(m.name); av.textContent = (m.name || '?').trim().split(/\s+/).slice(0, 2).map((w) => w[0]).join('').toUpperCase(); av.setAttribute('aria-hidden', 'true');
+  const body = document.createElement('div');
+  const head = document.createElement('div'); head.className = 'wv-mh';
+  const b = document.createElement('b'); b.textContent = m.name; if (!mine) b.style.color = nameColor(m.name);
+  const t = document.createElement('time'); const d = new Date(m.ts || Date.now()); t.dateTime = d.toISOString(); t.textContent = d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+  head.append(b, t);
+  if (m.q) { const q = document.createElement('span'); q.className = 'wv-qb'; q.textContent = '✋ Question'; head.append(q); }
+  const lk = document.createElement('span'); lk.className = 'wv-like'; lk.textContent = m.likes ? `♥ ${m.likes}` : ''; head.append(lk);
+  body.append(head, richText(m.text));
+  const acts = document.createElement('div'); acts.className = 'wv-acts';
+  const mk = (txt, label, fn) => { const k = document.createElement('button'); k.type = 'button'; k.textContent = txt; k.setAttribute('aria-label', label); k.title = label; k.onclick = fn; return k; };
+  if (!String(m.id).startsWith('mine-')) {
+    const like = mk('♥', 'Like', () => likeMsg(m.id, like)); like.setAttribute('aria-pressed', String(W.liked.has(m.id)));
+    acts.append(like, mk('↩', 'Reply', () => { const x = $('#wText'); x.value = `@${m.name} ` + x.value.replace(/^@\S+\s/, ''); x.focus(); }));
+    if (!mine) acts.append(mk('⚑', 'Report spam', () => reportMsg(m.id, li)), mk('🔇', `Mute ${m.name} for me`, () => muteName(m.name)));
+  }
+  li.append(av, body, acts);
   return li;
+}
+/** Message text with :emotes: as the host's images and @names highlighted. Built from text nodes, never HTML. */
+function richText(text) {
+  const span = document.createElement('span'); span.className = 'wv-mt';
+  const emotes = new Map((W.info?.emotes || []).map((e) => [e.name, e.asset]));
+  for (const part of String(text).split(/(:[a-z0-9_]{2,20}:|@[^\s@]{1,24})/i)) {
+    if (!part) continue;
+    const em = part.match(/^:([a-z0-9_]{2,20}):$/i);
+    if (em && emotes.has(em[1].toLowerCase())) { const im = document.createElement('img'); im.className = 'emote'; im.alt = part; im.title = part; im.src = emoteSrc(emotes.get(em[1].toLowerCase())); span.append(im); continue; }
+    if (/^@/.test(part)) { const a = document.createElement('span'); a.className = 'at'; a.textContent = part; span.append(a); continue; }
+    span.append(document.createTextNode(part));
+  }
+  return span;
 }
 /** Top supporters: confirmed super chats this show, biggest first, pinned above the chat. */
 function renderTops(items) {
@@ -319,10 +356,12 @@ $('#wCompose').addEventListener('submit', async (e) => {
   try {
     if (naming) await naming.catch(() => {});
     await ensureSession(); renderMe();
-    const r = await api('wsend', { ...creds(), type: 'chat', text });
+    const asking = $('#wAsk').getAttribute('aria-pressed') === 'true';
+    const r = await api('wsend', { ...creds(), type: asking ? 'question' : 'chat', text });
+    if (asking) { setAsk(false); toast('Question sent. The host sees it highlighted.'); }
     $('#wText').value = '';
     W.shown.add(r.id + ':');
-    $('#wMsgs').append(msgEl({ id: r.id, name: sess.name, text })); $('#wMsgs').scrollTop = $('#wMsgs').scrollHeight;
+    $('#wMsgs').append(msgEl({ id: r.id, name: sess.name, text, ts: Date.now(), q: asking })); $('#wMsgs').scrollTop = $('#wMsgs').scrollHeight;
   } catch (err) {
     if (err.status === 401) { await renew().catch(() => {}); return showErr('#wErr', 'Your chat session ended. Send again.'); }
     showErr('#wErr', err.message);
@@ -416,12 +455,15 @@ function renderAbout(info) {
     a.append(host); li.append(a); return li;
   }));
 }
-function setTab(about) {
-  $('#wChat').classList.toggle('about', about); $('#wAbout').hidden = !about;
-  $('#wTabChat').setAttribute('aria-selected', String(!about)); $('#wTabAbout').setAttribute('aria-selected', String(about));
+function setTab(tab) {
+  tab = tab === true ? 'about' : tab === false ? 'chat' : tab;
+  $('#wChat').classList.toggle('about', tab === 'about'); $('#wChat').classList.toggle('shop', tab === 'shop');
+  $('#wAbout').hidden = tab !== 'about'; $('#wShop').hidden = tab !== 'shop';
+  for (const [id, t] of [['#wTabChat', 'chat'], ['#wTabShop', 'shop'], ['#wTabAbout', 'about']]) $(id).setAttribute('aria-selected', String(tab === t));
 }
-$('#wTabChat').onclick = () => setTab(false);
-$('#wTabAbout').onclick = () => setTab(true);
+$('#wTabChat').onclick = () => setTab('chat');
+$('#wTabShop').onclick = () => setTab('shop');
+$('#wTabAbout').onclick = () => setTab('about');
 $('#wAboutShare').onclick = () => $('#wShare').click();
 
 // Captions: lines from the studio's live captions. If the host already shows captions on screen, CC is redundant.
@@ -451,3 +493,216 @@ setQuality(W.q);
 // Fill: crop the 16:9 picture to fill a tall screen (phones held upright, full screen).
 function setFill(on) { $('#wPlayerWrap').classList.toggle('fill', on); $('#wFill').setAttribute('aria-pressed', String(on)); }
 $('#wFill').onclick = () => setFill(!$('#wPlayerWrap').classList.contains('fill'));
+
+// ---------------------------------------------------------------- chat: likes, reports, muting, questions, emoji, @mentions
+W.liked = new Set(store.get('liked:' + code, []));
+W.muted = new Set(store.get('muted', []));
+async function likeMsg(id, btn) {
+  if (W.liked.has(id)) return;
+  W.liked.add(id); store.set('liked:' + code, [...W.liked].slice(-300)); btn?.setAttribute('aria-pressed', 'true');
+  const lk = $(`[data-id="${CSS.escape(id)}"] .wv-like`); if (lk) { const n = (Number(lk.textContent.replace(/\D/g, '')) || 0) + 1; lk.textContent = `♥ ${n}`; }
+  try { await ensureSession(); await api('wsend', { ...creds(), type: 'like', msg: id }); } catch {}
+}
+async function reportMsg(id, li) {
+  li.remove(); toast('Reported. Messages reported by several viewers are hidden for everyone.');
+  try { await ensureSession(); await api('wsend', { ...creds(), type: 'report', msg: id }); } catch {}
+}
+function muteName(name) {
+  W.muted.add(String(name).toLowerCase()); store.set('muted', [...W.muted]);
+  for (const li of document.querySelectorAll('#wMsgs li')) if (String(li.dataset.name).toLowerCase() === String(name).toLowerCase()) li.remove();
+  toast(`You won’t see ${name}’s messages any more. Only you.`);
+}
+function setAsk(on) { $('#wAsk').setAttribute('aria-pressed', String(on)); $('#wText').placeholder = on ? 'Ask the host a question…' : 'Say something…'; }
+$('#wAsk').onclick = () => { setAsk($('#wAsk').getAttribute('aria-pressed') !== 'true'); $('#wText').focus(); };
+const emoteSrc = (asset) => `/api/studio?action=wemote&studio=${encodeURIComponent(code)}&asset=${encodeURIComponent(asset)}`;
+// Emote images come back as JSON {data}; swap each <img> to its data URL once loaded.
+const emoteData = new Map();
+new MutationObserver(() => {
+  for (const im of document.querySelectorAll('img.emote:not([data-ok]), .wv-picker img:not([data-ok])')) {
+    im.dataset.ok = '1';
+    const u = im.getAttribute('src'); if (!u || u.startsWith('data:')) continue;
+    if (!emoteData.has(u)) emoteData.set(u, fetch(u).then((r) => r.json()).then((j) => j.data).catch(() => ''));
+    emoteData.get(u).then((d) => { if (d) im.src = d; });
+  }
+}).observe(document.body, { childList: true, subtree: true });
+const EMOJI = ['😂', '🤣', '😍', '😮', '😢', '😡', '👍', '👎', '🙏', '👏', '🔥', '💯', '🎉', '❤️', '💀', '😎', '🤯', '🥶', '😱', '🤔', '👀', '✅', '❌', '⚡', '🏆', '🎮', '🕹️', '🎯', '💎', '🚀', '🍿', 'GG', 'W', 'L', 'POG', '🤝'];
+function openPicker() {
+  const box = $('#wPicker'), emotes = W.info?.emotes || [];
+  const btn = (label, insert, img) => { const b = document.createElement('button'); b.type = 'button'; if (img) { const i = document.createElement('img'); i.src = img; i.alt = label; b.append(i); } else b.textContent = label; b.title = label; b.onclick = () => { insertText(insert); }; return b; };
+  const parts = [];
+  if (emotes.length) { const h = document.createElement('h3'); h.textContent = 'This show'; parts.push(h, ...emotes.map((e) => btn(`:${e.name}:`, `:${e.name}: `, emoteSrc(e.asset)))); const h2 = document.createElement('h3'); h2.textContent = 'Emoji'; parts.push(h2); }
+  parts.push(...EMOJI.map((e) => btn(e, e.length > 2 ? e + ' ' : e)));
+  box.replaceChildren(...parts); box.hidden = false; $('#wEmoji').setAttribute('aria-expanded', 'true');
+}
+function closePicker() { $('#wPicker').hidden = true; $('#wEmoji').setAttribute('aria-expanded', 'false'); }
+function insertText(t) { const x = $('#wText'), at = x.selectionStart ?? x.value.length; x.value = x.value.slice(0, at) + t + x.value.slice(x.selectionEnd ?? at); x.focus(); x.selectionStart = x.selectionEnd = at + t.length; }
+$('#wEmoji').onclick = (e) => { e.stopPropagation(); if ($('#wPicker').hidden) openPicker(); else closePicker(); };
+document.addEventListener('click', (e) => { if (!e.target.closest('#wPicker, #wEmoji')) closePicker(); if (!e.target.closest('#wMentions, #wText')) $('#wMentions').hidden = true; });
+// @mentions: typing @ suggests people who chatted recently.
+$('#wText').addEventListener('input', () => {
+  const x = $('#wText'), m = x.value.slice(0, x.selectionStart).match(/@([^\s@]{0,24})$/);
+  const box = $('#wMentions');
+  if (!m) { box.hidden = true; return; }
+  const names = [...new Set([...document.querySelectorAll('#wMsgs li[data-name]')].map((li) => li.dataset.name).reverse())].filter((n) => n !== sess?.name && n.toLowerCase().startsWith(m[1].toLowerCase())).slice(0, 6);
+  if (!names.length) { box.hidden = true; return; }
+  box.replaceChildren(...names.map((n) => { const b = document.createElement('button'); b.type = 'button'; b.textContent = '@' + n; b.onclick = () => { const at = x.selectionStart; x.value = x.value.slice(0, at - m[0].length) + '@' + n + ' ' + x.value.slice(at); box.hidden = true; x.focus(); }; return b; }));
+  box.hidden = false;
+});
+
+// ---------------------------------------------------------------- shop: pinned product, flash sale, Shop tab
+function money(p) { return p || ''; }
+function productCard(p, sale) {
+  const card = document.createElement('div'); card.className = 'wv-card' + (sale ? ' sale' : '');
+  const k = document.createElement('div'); k.className = 'k'; const l = document.createElement('span'); l.textContent = sale ? `⚡ Flash sale${sale.pct ? ' · ' + sale.pct + '% off' : ''}` : '🛍 Featured now';
+  const r = document.createElement('span'); r.className = 'wv-cd'; if (sale) r.dataset.until = sale.until; k.append(l, r);
+  const row = document.createElement('div'); row.className = 'wv-prod';
+  const im = document.createElement(p.img ? 'img' : 'div'); if (p.img) { im.src = p.img; im.alt = ''; im.loading = 'lazy'; } else { im.className = 'ph'; im.textContent = '🛍'; }
+  const txt = document.createElement('div'); const b = document.createElement('b'); b.textContent = p.title; const sm = document.createElement('small'); sm.textContent = money(p.price); txt.append(b, sm);
+  const buy = document.createElement('a'); buy.className = 'btn wv-buy'; buy.href = p.url; buy.target = '_blank'; buy.rel = 'noopener'; buy.textContent = 'Buy';
+  buy.onclick = () => { if (sale?.code) navigator.clipboard?.writeText(sale.code).then(() => toast(`Code ${sale.code} copied. Paste it at checkout.`)).catch(() => {}); };
+  row.append(im, txt, buy); card.append(k, row);
+  if (sale?.code) { const c = document.createElement('div'); c.className = 'wv-code'; c.append('Use code ', Object.assign(document.createElement('code'), { textContent: sale.code }), ' at checkout'); card.append(c); }
+  return card;
+}
+function renderShopUI(info) {
+  const sh = info.shop, items = sh?.items || [];
+  $('#wTabShop').hidden = !items.length;
+  if (!items.length && $('#wChat').classList.contains('shop')) setTab('chat');
+  const sale = sh?.sale && sh.sale.until > Date.now() ? sh.sale : null;
+  const key = JSON.stringify([sh?.pinned, sale, items.map((x) => x.id)]);
+  if (W.shopKey !== key) {
+    W.shopKey = key;
+    $('#wShopNote').textContent = items.length ? `Checkout happens on ${sh.store || 'the seller’s store'}.` : '';
+    $('#wProducts').replaceChildren(...items.map((p) => { const li = document.createElement('li'); const a = document.createElement('a'); a.href = p.url; a.target = '_blank'; a.rel = 'noopener'; if (sale?.id === p.id) li.className = 'on-sale';
+      const im = document.createElement(p.img ? 'img' : 'div'); if (p.img) { im.src = p.img; im.alt = ''; im.loading = 'lazy'; } else { im.className = 'ph'; im.textContent = '🛍'; }
+      const b = document.createElement('b'); b.textContent = p.title; const sm = document.createElement('small'); sm.textContent = sale?.id === p.id ? `${p.price} · ${sale.pct ? sale.pct + '% off with ' : 'code '}${sale.code}` : p.price; a.append(im, b, sm); li.append(a); return li; }));
+    $('#wCards').querySelector('[data-card="shop"]')?.remove();
+    const p = items.find((x) => x.id === sh?.pinned);
+    if (p) { const c = productCard(p, sale?.id === p.id ? sale : null); c.dataset.card = 'shop'; $('#wCards').prepend(c); if (W.booted && sale?.id === p.id) toast(`⚡ Flash sale: ${p.title}`); }
+  }
+}
+// countdowns tick every second
+setInterval(() => { for (const el of document.querySelectorAll('[data-until]')) { const ms = Number(el.dataset.until) - Date.now(); el.textContent = ms > 0 ? `${Math.floor(ms / 60000)}:${String(Math.floor(ms / 1000) % 60).padStart(2, '0')} left` : 'ended'; } }, 1000);
+
+// ---------------------------------------------------------------- polls and predictions
+W.votes = store.get('votes:' + code, {});
+function renderPollCard(info) {
+  const p = info.poll; let card = $('#wCards [data-card="poll"]');
+  if (!p) { card?.remove(); return; }
+  const open = p.until > Date.now(), mine = W.votes[p.id], total = p.counts.reduce((a, b) => a + b, 0), show = !open || mine != null;
+  const key = JSON.stringify([p.id, p.counts, open, mine, p.answer]);
+  if (card?.dataset.key === key) return;
+  const fresh = document.createElement('div'); fresh.className = 'wv-card'; fresh.dataset.card = 'poll'; fresh.dataset.key = key;
+  const k = document.createElement('div'); k.className = 'k'; const l = document.createElement('span'); l.textContent = p.kind === 'predict' ? '🔮 Prediction' : '📊 Poll'; const r = document.createElement('span'); if (open) r.dataset.until = p.until; else r.textContent = `${total} votes`; k.append(l, r);
+  const q = document.createElement('b'); q.textContent = p.q;
+  const list = document.createElement('div'); list.className = 'wv-vote';
+  p.opts.forEach((o, i) => {
+    const b = document.createElement('button'); b.type = 'button'; b.disabled = !open || mine != null;
+    if (mine === i) b.classList.add('mine'); if (p.answer === i) b.classList.add('right');
+    const pct = total ? Math.round(p.counts[i] / total * 100) : 0;
+    const bar = document.createElement('i'); bar.style.width = show ? pct + '%' : '0';
+    const a = document.createElement('span'); a.textContent = (p.answer === i ? '✓ ' : mine === i ? '• ' : '') + o; const c = document.createElement('b'); c.textContent = show ? pct + '%' : '';
+    b.append(bar, a, c);
+    b.onclick = async () => { try { await ensureSession(); await api('wsend', { ...creds(), type: 'vote', poll: p.id, opt: i }); W.votes[p.id] = i; store.set('votes:' + code, W.votes); renderPollCard(W.info); } catch (e) { toast(e.message, true); } };
+    list.append(b);
+  });
+  fresh.append(k, q, list);
+  if (p.kind === 'predict' && p.answer >= 0 && mine != null) { const res = document.createElement('small'); res.textContent = mine === p.answer ? '🎉 You called it!' : 'Not this time.'; fresh.append(res); }
+  if (card) card.replaceWith(fresh); else $('#wCards').append(fresh);
+}
+
+// ---------------------------------------------------------------- play with me: queue up with a gamertag
+W.queued = store.get('queued:' + code, false);
+function renderQueueCard(info) {
+  const qi = info.queue, card = $('#wCards [data-card="queue"]');
+  if (!qi?.open && !W.called) { card?.remove(); if (!qi?.open) W.queued = false; return; }
+  const ahead = W.queued && sess ? Math.max(0, (qi.up || []).indexOf(sess.name)) : 0;
+  const key = JSON.stringify([qi.size, W.queued, W.called, ahead]);
+  if (card?.dataset.key === key) return;
+  const c = document.createElement('div'); c.className = 'wv-card' + (W.called ? ' up' : ''); c.dataset.card = 'queue'; c.dataset.key = key;
+  const k = document.createElement('div'); k.className = 'k'; k.append(Object.assign(document.createElement('span'), { textContent: '🎮 Play with the streamer' }), Object.assign(document.createElement('span'), { textContent: `${qi.size} in line` }));
+  c.append(k);
+  if (W.called) {
+    const b = document.createElement('b'); b.textContent = 'You’re up! The streamer called you.';
+    const go = document.createElement('a'); go.className = 'btn wv-buy'; go.href = '/c/' + code; go.target = '_blank'; go.rel = 'noopener'; go.textContent = 'Join the stage';
+    c.append(b, go);
+  } else if (W.queued) {
+    const b = document.createElement('span'); b.textContent = ahead ? `You’re in line · ${ahead} ahead of you` : 'You’re in line. We’ll ping you when you’re up.';
+    const leave = document.createElement('button'); leave.type = 'button'; leave.className = 'btn sm ghost'; leave.textContent = 'Leave the line';
+    leave.onclick = async () => { W.queued = false; store.set('queued:' + code, false); try { await api('wsend', { ...creds(), type: 'unqueue' }); } catch {} renderQueueCard(W.info); };
+    c.append(b, leave);
+  } else {
+    const f = document.createElement('div'); f.className = 'wv-q';
+    const inp = document.createElement('input'); inp.className = 'input'; inp.placeholder = 'Your gamertag'; inp.maxLength = 32; inp.value = store.get('gamertag', '');
+    const go = document.createElement('button'); go.type = 'button'; go.className = 'btn primary'; go.textContent = 'Join the line';
+    go.onclick = async () => { try { await ensureSession(); store.set('gamertag', inp.value.trim()); await api('wsend', { ...creds(), type: 'queue', tag: inp.value.trim() }); W.queued = true; store.set('queued:' + code, true); renderQueueCard(W.info); } catch (e) { toast(e.message, true); } };
+    f.append(inp, go); c.append(f);
+  }
+  if (card) card.replaceWith(c); else $('#wCards').append(c);
+}
+// While in line, check every 8 s whether the host called me.
+setInterval(async () => {
+  if (!W.queued || W.called || !sess) return;
+  try { const r = await api('wping', creds()); if (r.queue?.status === 'called') { W.called = true; toast('🎮 You’re up! Tap “Join the stage”.'); try { new AudioContext().resume(); } catch {} renderQueueCard(W.info); } } catch {}
+}, 8000);
+
+// ---------------------------------------------------------------- hype meter: how much the room is reacting
+function renderHype(info) {
+  const total = Object.values(info.reacts || {}).reduce((a, b) => a + b, 0);
+  const lv = Math.min(100, Math.round(total * 4));
+  $('#wHypeBar').style.width = lv + '%';
+  $('#wHypeLvl').textContent = lv >= 100 ? 'MAX' : lv >= 60 ? 'Hot' : lv >= 25 ? 'Warm' : 'Chill';
+  $('#wHype').classList.toggle('max', lv >= 100);
+}
+
+// ---------------------------------------------------------------- vertical: 9:16 on upright phones, framed on the speaker
+function renderVertical(info) {
+  const native = info.aspect === '9:16', upright = innerHeight > innerWidth && innerWidth <= 900;
+  $('#wv').classList.toggle('native916', native);
+  $('#wv').classList.toggle('vertical', !native && upright && W.vertical !== false);
+  const v = $('#wDirect'); if (v) v.style.objectPosition = `${Math.round((info.focus ?? 0.5) * 100)}% 50%`;
+  $('#wFill').setAttribute('aria-pressed', String($('#wv').classList.contains('vertical')));
+}
+addEventListener('resize', () => { if (W.info) renderVertical(W.info); });
+// On phones, Fill switches between the vertical crop and the full 16:9 picture.
+$('#wFill').onclick = () => { W.vertical = !$('#wv').classList.contains('vertical'); if (innerHeight > innerWidth && innerWidth <= 900) renderVertical(W.info || {}); else setFill(!$('#wPlayerWrap').classList.contains('fill')); };
+
+// ---------------------------------------------------------------- clips: save the last ~30 s from this browser
+// Two overlapping recorders restart every 30 s, so one of them always holds 30-60 s of the show. Nothing is
+// uploaded: the clip is made and saved on this device.
+const CLIP = { recs: [], timer: null, on: false };
+function clipStart() {
+  const v = W.direct.video; if (!v?.srcObject || !window.MediaRecorder || CLIP.on) return;
+  CLIP.on = true;
+  const mime = ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm', 'video/mp4'].find((m) => MediaRecorder.isTypeSupported(m)) || '';
+  const spawn = () => {
+    if (!W.direct.video?.srcObject) return clipStop();
+    try {
+      const rec = new MediaRecorder(W.direct.video.srcObject, { mimeType: mime, videoBitsPerSecond: 2_000_000 }), chunks = [];
+      rec.ondataavailable = (e) => { if (e.data.size) chunks.push(e.data); };
+      rec.start(1000); CLIP.recs.push({ rec, chunks, t0: Date.now(), mime: rec.mimeType || mime });
+      while (CLIP.recs.length > 2) { const old = CLIP.recs.shift(); try { old.rec.stop(); } catch {} }
+    } catch (e) { console.warn('clip recorder', e); }
+  };
+  spawn(); CLIP.timer = setInterval(spawn, 30000);
+}
+function clipStop() { clearInterval(CLIP.timer); for (const r of CLIP.recs) { try { r.rec.stop(); } catch {} } CLIP.recs = []; CLIP.on = false; }
+$('#wClip').onclick = async () => {
+  if (!CLIP.on) { clipStart(); return toast('Clipping is on. Tap Clip again any time to save the last 30 seconds.'); }
+  const r = CLIP.recs[0]; if (!r || Date.now() - r.t0 < 3000) return toast('Give it a few seconds, then tap Clip again.');
+  try { r.rec.requestData(); } catch {}
+  await new Promise((res) => setTimeout(res, 300));
+  const blob = new Blob(r.chunks, { type: r.mime.split(';')[0] });
+  const name = `${(W.info?.title || 'gather').replace(/[^\w-]+/g, '-').slice(0, 40)}-clip-${new Date().toISOString().slice(11, 19).replace(/:/g, '')}.${/mp4/.test(r.mime) ? 'mp4' : 'webm'}`;
+  const file = new File([blob], name, { type: blob.type });
+  if (navigator.canShare?.({ files: [file] })) { try { await navigator.share({ files: [file], title: 'Clip from ' + (W.info?.title || 'the show') }); return; } catch {} }
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 10000);
+  toast(`Clip saved (${Math.round((Date.now() - r.t0) / 1000)} s).`);
+};
+// The Clip button appears once the direct picture plays; desktops keep the buffer ready from the start.
+setInterval(() => {
+  const ready = W.direct.state === 'live' && !!window.MediaRecorder;
+  $('#wClip').hidden = !ready;
+  if (ready && !CLIP.on && (navigator.hardwareConcurrency || 2) >= 6 && !/Mobi/i.test(navigator.userAgent)) clipStart();
+  if (!ready && CLIP.on) clipStop();
+}, 2000);
