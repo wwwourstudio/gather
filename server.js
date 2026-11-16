@@ -36,7 +36,7 @@ http.createServer((req, res) => {
     req.on('end', async () => {
       let body = {};
       try { body = raw ? JSON.parse(raw) : {}; } catch {}
-      if (req.method === 'GET' && u.searchParams.get('action') === 'wfeed') body = { studio: u.searchParams.get('studio') };
+      if (req.method === 'GET' && ['wfeed', 'wemote'].includes(u.searchParams.get('action'))) body = { studio: u.searchParams.get('studio'), asset: u.searchParams.get('asset') };
       try { json(res, 200, await handle(u.searchParams.get('action'), body)); }
       catch (e) { if (!e.status) console.error(e); json(res, e.status || 500, { error: e.status ? e.message : `The studio server hit an error: ${e.message}` }); }
     });

@@ -837,3 +837,28 @@ body.deck-closed .deck { padding-bottom: var(--sp-2); }
 @keyframes react-up { from { transform: translateY(0) scale(.6); opacity: 0; } 15% { opacity: 1; transform: translateY(-20px) scale(1.1); } to { transform: translateY(-220px); opacity: 0; } }
 .msg.sc-pending { border: 1px dashed var(--warn-line); background: var(--warn-bg); border-radius: var(--r-md); padding: var(--sp-2) var(--sp-3); display: grid; gap: 6px; }
 .msg.sc-pending .sc-note { font-size: 12px; color: var(--ink-3); }
+/* Show panel: folding sections for the shop, polls, the play-with-me queue and emotes */
+.sec-fold { border-top: 1px solid var(--line); padding-top: var(--sp-3); display: grid; gap: var(--sp-3); }
+.sec-fold > summary { display: flex; align-items: center; justify-content: space-between; cursor: pointer; list-style: none; }
+.sec-fold > summary::-webkit-details-marker { display: none; }
+.sec-fold > summary::after { content: "▸"; color: var(--ink-3); margin-left: var(--sp-2); }
+.sec-fold[open] > summary::after { content: "▾"; }
+.sec-fold[open] { gap: var(--sp-3); }
+.sub-fold summary { cursor: pointer; font-size: 13px; color: var(--ink-2); }
+.sub-fold[open] { display: grid; gap: var(--sp-2); }
+.shop-list, .queue-list { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--sp-2); }
+.shop-item { display: grid; grid-template-columns: 44px 1fr auto; gap: var(--sp-2); align-items: center; padding: var(--sp-2); border-radius: var(--r-md); background: var(--fill); border: 1px solid var(--glass-border); }
+.shop-item.pinned { border-color: var(--accent); background: var(--accent-soft); }
+.shop-item img, .shop-item .ph { width: 44px; height: 44px; border-radius: 8px; object-fit: cover; background: var(--surface-2); }
+.shop-item b { display: block; font-size: 13px; }
+.shop-item small { color: var(--ink-3); font-size: 12px; }
+.shop-item .acts { display: flex; gap: 4px; flex-wrap: wrap; justify-content: flex-end; }
+.poll-bar { position: relative; padding: 6px 10px; border-radius: 8px; background: var(--fill); overflow: hidden; font-size: 13px; display: flex; justify-content: space-between; }
+.poll-bar i { position: absolute; inset: 0 auto 0 0; background: var(--accent-soft); z-index: 0; }
+.poll-bar span, .poll-bar b { position: relative; z-index: 1; }
+.queue-list li { display: flex; justify-content: space-between; align-items: center; padding: 6px 10px; border-radius: 8px; background: var(--fill); font-size: 13px; }
+.queue-list li.called { opacity: 0.55; }
+.emote-list { display: flex; flex-wrap: wrap; gap: var(--sp-2); }
+.emote-list figure { margin: 0; display: grid; justify-items: center; gap: 2px; font-size: 11px; color: var(--ink-3); }
+.emote-list img { width: 36px; height: 36px; object-fit: contain; }
+.msg .q-badge { font-size: 11px; font-weight: 700; color: var(--warn-ink); margin-left: 4px; }
