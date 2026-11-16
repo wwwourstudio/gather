@@ -55,6 +55,8 @@ function mkStore(get, big) {
 const MAX = 6;
 let W = 1280, H = 720; // swapped to 720x1280 for the vertical stage
 const DEFAULT_TITLE = 'The conversation studio';
+/** A new show is named after its host ("Maya's show") instead of a placeholder that reads like a real title. */
+const autoTitle = () => { const first = String(S.name || '').trim().split(/\s+/)[0]; return first ? `${first}’s show`.slice(0, 60) : ''; };
 const DEFAULT_PRESETS = ['Have a question? Drop it in the chat.', 'Thanks for joining us today.'];
 const BGS = {
   dusk: ['#1d3f47', '#2a3566', '#3c3f74', 'rgba(255,255,255,.05)', false],
@@ -607,7 +609,7 @@ async function onServer(m) {
       pollLoop(++pollGen);
       if (S.host === S.id && wasHosting) {
         // Bring the look you set up before creating the studio.
-        setStage({ aspect: pre.aspect, captions: pre.captions, brand: { ...pre.brand, bgImage: '', overlay: '', logo: '' }, title: pre.title, layout: pre.layout, banner: pre.banner, ticker: pre.ticker, stage: [S.id], feeds: pre.feeds, scene: pre.scene || '', elements: (pre.elements || []).filter((e) => !(e.type === 'image' && e.asset?.startsWith('local-'))) });
+        setStage({ aspect: pre.aspect, captions: pre.captions, brand: { ...pre.brand, bgImage: '', overlay: '', logo: '' }, title: pre.title || autoTitle(), layout: pre.layout, banner: pre.banner, ticker: pre.ticker, stage: [S.id], feeds: pre.feeds, scene: pre.scene || '', elements: (pre.elements || []).filter((e) => !(e.type === 'image' && e.asset?.startsWith('local-'))) });
         uploadLocalAssets(pre.elements).then((elements) => { if (S.host === S.id) setStage({ elements }); });
         uploadBrandAssets(pre.brand);
         if (S.pendingStream?.id) acctApi('streamStart', { id: S.pendingStream.id }).catch(() => {});
@@ -3621,6 +3623,9 @@ function renderDock() {
   $('#shareLabel').textContent = S.local.pres ? 'Stop presenting' : 'Present';
   share.disabled = !S.studio;
   rec.classList.toggle('recording', !!S.rec);
+  rec.setAttribute('aria-pressed', String(!!S.rec));
+  $('#skipDock').hidden = !S.studio;
+  rec.setAttribute('aria-label', S.rec ? `Stop recording (${fmtTime(Date.now() - S.rec.t0)})` : 'Record');
   $('#recLabel').textContent = S.rec ? fmtTime(Date.now() - S.rec.t0) : 'Record';
   rec.disabled = !S.studio;
   // Everyone in the studio sees when the show is recorded or live, not just the host (consent).
@@ -3633,10 +3638,9 @@ function renderDock() {
   renderDockNote();
 }
 // ---------------------------------------------------------------- first-run guide: one next step at a time, in the dock
-// Five steps for a new host. Each ticks itself off from what actually happened (a title set, camera and mic on,
+// Four steps for a new host (the show is named automatically). Each ticks itself off from what actually happened (camera and mic on,
 // a guest invited, a scene picked, recording or live), so it never asks you to confirm anything. Shown once.
 const GUIDE = [
-  { id: 'name', label: 'Name your show', done: () => !!S.state.title && S.state.title !== DEFAULT_TITLE, go: () => editTitle() },
   { id: 'av', label: 'Turn on camera and mic', done: () => !!(S.local.camOn && S.local.micOn && S.local.audio), go: () => openDlg('settingsDlg') },
   { id: 'invite', label: 'Invite a guest', done: () => S.guide.invited || S.peers.size > 0, go: () => openInvite() },
   { id: 'scene', label: 'Pick a scene', done: () => S.guide.scened, go: () => { $('#deck')?.scrollIntoView({ behavior: smooth(), block: 'center' }); $('#sceneStrip .scene:not(.on)')?.focus(); } },
@@ -3795,6 +3799,7 @@ function renderScenes() {
     b.className = 'tile scene' + (sc.id === active ? ' on' : '') + (sc.kind === 'saved' ? ' saved' : '');
     b.disabled = !host; b.title = `${sc.name}${i < 9 ? ` (${i + 1})` : ''}`;
     b.setAttribute('aria-pressed', String(sc.id === active));
+    b.tabIndex = -1; // one tab stop for the whole strip; arrow keys move within it (see sceneKeys)
     const nm = document.createElement('span'); nm.className = 'sc-name'; nm.textContent = sc.name;
     if (i < 9) { const k = document.createElement('kbd'); k.textContent = i + 1; nm.append(k); }
     b.append(scenePreview(sc), nm);
@@ -3804,8 +3809,27 @@ function renderScenes() {
   const save = document.createElement('button'); save.type = 'button'; save.className = 'tile scene add'; save.disabled = !host;
   save.innerHTML = `<span class="sc-pv add-pv">${icon('plus')}</span><span class="sc-name">Save scene</span>`;
   save.onclick = () => { setTab('layouts'); $('#layoutName').focus(); };
+  save.tabIndex = -1;
+  const keep = strip.contains(document.activeElement) ? [...strip.children].indexOf(document.activeElement) : -1;
   strip.replaceChildren(...chips, save);
+  const all = [...strip.children];
+  const stop = all[keep] || all.find((b) => b.classList.contains('on')) || all[0];
+  if (stop) stop.tabIndex = 0;
+  if (keep >= 0) stop?.focus();
 }
+/** Roving tabindex: Tab enters and leaves the scene strip in one step; arrows, Home and End move inside it. */
+function sceneKeys(e) {
+  const all = [...$('#sceneStrip').children];
+  const i = all.indexOf(document.activeElement);
+  if (i < 0) return;
+  const to = { ArrowRight: i + 1, ArrowDown: i + 1, ArrowLeft: i - 1, ArrowUp: i - 1, Home: 0, End: all.length - 1 }[e.key];
+  if (to == null) return;
+  e.preventDefault();
+  const next = all[Math.max(0, Math.min(all.length - 1, to))];
+  all.forEach((b) => { b.tabIndex = b === next ? 0 : -1; });
+  next.focus(); next.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+}
+$('#sceneStrip').addEventListener('keydown', sceneKeys);
 function chooseLayout(l) {
   if (l === 'custom' && !(S.state.elements || []).some((e) => e.type === 'slot')) return applyTemplate(TEMPLATES[0]);
   setStage({ layout: l });
@@ -4785,8 +4809,16 @@ function openInvite() {
   $('#inviteCode').textContent = S.studio;
   const n = participants().length;
   $('#inviteFine').textContent = `Anyone with this code can join. ${n} of ${MAX} seats taken.${isHost() ? ' Keep this tab open while hosting.' : ''}`;
+  inviteOpener = document.activeElement !== document.body ? document.activeElement : null;
   $('#inviteDlg').showModal();
 }
+let inviteOpener = null;
+// When the studio opened the invite dialog by itself, focus would fall to <body>: land on Invite instead.
+$('#inviteDlg').addEventListener('close', () => {
+  const back = inviteOpener?.isConnected && !inviteOpener.closest('[hidden]') ? inviteOpener : [$('#enterTop'), $('#micBtn')].find((b) => b && !b.hidden && b.offsetParent);
+  inviteOpener = null;
+  setTimeout(() => back?.focus(), 0);
+});
 $('#autoStage').checked = store.get('autoStage', false);
 $('#autoStage').onchange = (e) => store.set('autoStage', e.target.checked);
 $('#noteLink').onclick = () => { copy(inviteLink(), 'Invite link copied.'); guideMark('invited'); };

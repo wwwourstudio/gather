@@ -815,3 +815,8 @@ body.deck-closed .deck { padding-bottom: var(--sp-2); }
   .user-label { display: none; }
   #liveTop { padding: 0 var(--sp-2); white-space: nowrap; }
 }
+/* Keyboard users skip the header, deck and chat (about 30 tab stops) straight to the dock. */
+.skip-link { position: fixed; left: var(--sp-3); top: var(--sp-3); z-index: 1000; padding: var(--sp-2) var(--sp-4); border-radius: var(--r-md); background: var(--accent); color: #fff; font-weight: 600; text-decoration: none; transform: translateY(-200%); }
+.skip-link:focus { transform: none; }
+.skip-link[hidden] { display: none; }
+.dock:focus { outline: none; }
