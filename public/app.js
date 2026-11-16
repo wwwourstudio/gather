@@ -620,7 +620,7 @@ async function onServer(m) {
       sendMeta({ mic: S.local.micOn, cam: S.local.camOn, sharing: !!S.local.pres });
       uploadAvatar(); S.local.offbgId = ''; uploadOffBg();
       $('#knockWait').hidden = true; $('#enterFields').hidden = false;
-      if (S.host === S.id) { refreshLobby(); refreshSupers(); }
+      if (S.host === S.id) { refreshLobby(); refreshSupers(); refreshVoice(); }
       renderAll();
       if (!m.peers.length && S.host === S.id) setTimeout(() => openInvite(), 350);
       else toast(S.host === S.id ? 'Studio ready.' : `You joined ${m.peers.length ? 'the studio' : 'an empty studio'}.`);
@@ -674,6 +674,8 @@ async function onServer(m) {
     case 'superchat': gotSuperchat(m.item, true); break;
     case 'react': reactFloat(m.emoji); break;
     case 'wqueue': gotQueue(m); break;
+    case 'voicemail': gotVoice(m.item, true); break;
+    case 'voicemail-update': if (!m.item) dropVoice(m.id); else gotVoice(m.item, false); break;
     case 'queue': renderQueue(m.items); break;
     case 'wreport': if (m.count >= 3) toast(`A watch-page message was hidden after ${m.count} spam reports.`, { ms: 6000 }); break;
     case 'ai': upsertAI(m.item, false); break;
@@ -1052,7 +1054,7 @@ function drawChrome() {
     const hasLogoTL = assetImg(S.state.brand.logo) && lg && lg.x < .2 && lg.y < .12;
     g.fillText(S.state.title.toUpperCase().split('').join(String.fromCharCode(8202)), 30, hasLogoTL ? H - 22 : 22);
   }
-  if (window.__shopReady) { drawProduct(); drawPoll(); }
+  if (window.__shopReady) { drawProduct(); drawPoll(); drawWatchBadge(); }
 }
 // The program is painted tier by tier: stage → media → (brand frame) → overlays → chat → ticker → system.
 const TIER_Z = Object.fromEntries(TIERS.map((x) => [x.id, x.z]));
@@ -1413,7 +1415,7 @@ const ELEMENT_DEFAULTS = {
   media: () => ({ type: 'media', x: .025, y: .07, w: .7, h: .86, radius: 12 }),
   ai: () => ({ type: 'ai', x: .62, y: .07, w: .355, h: .62, size: 22 }),
   tip: () => ({ type: 'tip', x: .025, y: .64, w: .34, h: .31, provider: 'paypal', url: '', label: 'Support the show' }),
-  callin: () => ({ type: 'callin', x: .66, y: .66, w: .31, h: .28, url: '', label: 'Call in live', phone: '' }),
+  callin: () => ({ type: 'callin', x: .66, y: .66, w: .31, h: .28, url: S.studio ? `${location.origin}/w/${S.studio}` : '', label: 'Watch & chat live', phone: '' }), // the watch-link card (QR + address)
   shape: () => ({ type: 'shape', x: .4, y: .4, w: .2, h: .2, color: '#0b1020', opacity: 1, radius: 0, label: '' }),
 };
 const px720 = (x, y, w, h) => ({ x: x / 1280, y: y / 720, w: w / 1280, h: h / 720 });
@@ -1875,7 +1877,7 @@ function setEditing(on) {
   $('#editToggle').textContent = editor.on ? 'Done editing' : 'Edit on stage';
   renderEditor();
 }
-const ELABEL = { slot: 'Camera', chat: 'Chat box', text: 'Text', image: 'Image', timer: 'Timer', media: 'Presentation', ai: 'AI window', tip: 'Support card', callin: 'Call-in card', shape: 'Colour block', banner: 'Lower third', ticker: 'Ticker', logo: 'Logo', ads: 'Sponsor ads', featured: 'Featured chat', captions: 'Captions' };
+const ELABEL = { slot: 'Camera', chat: 'Chat box', text: 'Text', image: 'Image', timer: 'Timer', media: 'Presentation', ai: 'AI window', tip: 'Support card', callin: 'Watch link card', shape: 'Colour block', banner: 'Lower third', ticker: 'Ticker', logo: 'Logo', ads: 'Sponsor ads', featured: 'Featured chat', captions: 'Captions' };
 function elName(e) {
   if (e.type === 'slot') return `Camera ${e.index + 1}`;
   if (e.type === 'text') return e.text ? `“${e.text.slice(0, 22)}”` : 'Text';
@@ -3561,7 +3563,7 @@ function setPhase(p) {
   pill.hidden = p === 'online';
   renderAll();
 }
-function renderAll() { renderHeader(); renderStageUI(); renderCrew(); renderDock(); renderPanels(); renderFeedUI(); renderLayoutsPanel(); renderAIPanel(); renderTips(); renderBrandPanel(); renderStreamPanel(); renderGuestView(); syncTwitch(); syncCaptions(); renderDeck(); renderAds(); renderCallin(); renderProducerUI(); renderGreenRoom(); renderLive(); renderWatchSec(); }
+function renderAll() { renderHeader(); renderStageUI(); renderCrew(); renderDock(); renderPanels(); renderFeedUI(); renderLayoutsPanel(); renderAIPanel(); renderTips(); renderBrandPanel(); renderStreamPanel(); renderGuestView(); syncTwitch(); syncCaptions(); renderDeck(); renderAds(); renderProducerUI(); renderGreenRoom(); renderLive(); renderWatchSec(); }
 function renderHeader() {
   // The studio name belongs to the studio you're in; outside one the header is just the wordmark.
   const inside = !!S.studio || S.phase === 'reconnecting';
@@ -3570,6 +3572,7 @@ function renderHeader() {
   $('#studioTitle').classList.toggle('editable', isHost());
   $('#studioTitle').title = isHost() ? 'Click to rename the show' : '';
   $('#enterTop').hidden = !S.studio;
+  if ($('#watchTop')) $('#watchTop').hidden = !S.studio || !isHost();
   $('#liveTop').hidden = !S.studio || !isHost();
   document.body.classList.toggle('pre', !S.studio && S.phase !== 'reconnecting'); // landing: just the stage hero
   // Scheduled shows: on the landing page they sit under the hero (that's where you start one); inside a studio, in Go live.
@@ -4338,18 +4341,8 @@ function renderLobby() {
 async function refreshLobby() { if (!S.studio || !isHost()) return; try { S.lobby = (await api('lobbyList', creds())).lobby; renderLobby(); } catch {} }
 setInterval(() => { if (S.studio && isHost() && S.lobby?.length) refreshLobby(); }, 10000);
 const callinLink = () => `${location.origin}/c/${S.studio}`;
-$('#callinCopy').onclick = () => { if (!S.studio) return toast('Enter a studio first.'); copy(callinLink(), 'Call-in link copied.'); };
-$('#callinCard').onclick = () => {
-  if (!S.studio) return toast('Enter a studio first.');
-  const els = elementsCopy().filter((e) => e.type !== 'callin');
-  els.push(withDefaults({ type: 'callin', x: .66, y: .66, w: .31, h: .28, url: callinLink(), label: $('#callinLabel').value.trim() || 'Call in live', phone: $('#callinPhone').value.trim() }));
-  setStage({ elements: els });
-  toast('Call-in card is on stage.');
-};
-function renderCallin() {
-  $('#callinUrl').textContent = S.studio ? callinLink().replace(/^https?:\/\//, '') : 'Enter a studio to get your call-in link';
-  $('#callinCopy').disabled = !S.studio; $('#callinCard').disabled = !S.studio || !isHost();
-}
+// The public call-in line is gone: viewers raise a hand on the watch page and record a voice question instead.
+// The /c/ link stays only as the private way in for a "Play with me" player the host calls up.
 // Callers: knock and wait
 async function startKnock(code, callin) {
   S.knockCode = code;
@@ -5024,7 +5017,7 @@ setInterval(() => { if (S.studio && !S.rec && S.state?.rec?.on) renderDock(); },
 // Viewers watch the program straight from this browser over WebRTC (no platform in between), chat, react, send
 // super chats paid directly to the host, and ask to join the stage. A laptop can encode and upload the program
 // for a handful of viewers, so the host sets a cap; past it, viewers fall back to the platform players.
-const WATCH_DEFAULTS = { chat: true, supers: false, join: true, queue: false, direct: true, cap: 6, slow: 0, min: 2, about: '', links: [], pay: { paypal: '', venmo: '', cashapp: '', stripe: '' } };
+const WATCH_DEFAULTS = { chat: true, supers: false, join: false, queue: false, voice: true, badge: true, direct: true, cap: 6, slow: 0, min: 2, about: '', links: [], pay: { paypal: '', venmo: '', cashapp: '', stripe: '' } };
 const watchCfg = () => ({ ...WATCH_DEFAULTS, ...(S.state.watch || {}), pay: { ...WATCH_DEFAULTS.pay, ...(S.state.watch?.pay || {}) } });
 const watchLinkUrl = () => `${location.origin}/w/${S.studio}`;
 const VIEW = new Map(); // viewer id -> { pc }
@@ -5188,7 +5181,7 @@ function renderWatchSec() {
   $('#wpUrl').textContent = on ? watchLinkUrl().replace(/^https?:\/\//, '') : 'Enter your studio to get its watch link';
   for (const id of ['#wpCopy', '#wpCard', '#wpOpen']) $(id).disabled = !on;
   $('#wpCount').textContent = on && cfg.direct ? `${VIEW.size} of ${cfg.cap} watching directly` : '';
-  for (const [id, k] of [['#wpChat', 'chat'], ['#wpSupers', 'supers'], ['#wpJoin', 'join'], ['#wpDirect', 'direct']]) if (document.activeElement !== $(id)) $(id).checked = !!cfg[k];
+  for (const [id, k] of [['#wpChat', 'chat'], ['#wpSupers', 'supers'], ['#wpJoin', 'join'], ['#wpDirect', 'direct'], ['#wpVoice', 'voice'], ['#wpBadge', 'badge']]) if ($(id) && document.activeElement !== $(id)) $(id).checked = cfg[k] !== false && !!(cfg[k] ?? true);
   for (const k of Object.keys(PAY_NAME)) { const el = $('#wpPay-' + k); if (document.activeElement !== el) el.value = cfg.pay[k] || ''; }
   if (document.activeElement !== $('#wpCap')) $('#wpCap').value = String(cfg.cap);
   if (document.activeElement !== $('#wpAbout')) $('#wpAbout').value = cfg.about || '';
@@ -5207,7 +5200,7 @@ $('#wpCard').onclick = () => {
   setStage({ elements: els });
   toast('The watch link and its QR code are on stage.');
 };
-for (const [id, k] of [['#wpChat', 'chat'], ['#wpSupers', 'supers'], ['#wpJoin', 'join'], ['#wpDirect', 'direct']]) $(id).onchange = (e) => setWatch({ [k]: e.target.checked });
+for (const [id, k] of [['#wpChat', 'chat'], ['#wpSupers', 'supers'], ['#wpJoin', 'join'], ['#wpDirect', 'direct'], ['#wpVoice', 'voice'], ['#wpBadge', 'badge']]) if ($(id)) $(id).onchange = (e) => setWatch({ [k]: e.target.checked });
 $('#wpCap').onchange = (e) => setWatch({ cap: Number(e.target.value) });
 $('#wpAbout').onchange = (e) => setWatch({ about: e.target.value.trim() });
 $('#wpLinks').onchange = (e) => {
@@ -5421,3 +5414,113 @@ setInterval(() => {
 
 window.__shopReady = true;
 setInterval(() => { if (isHost() && $('#shopSec')?.open) renderShop(); }, 1000);
+
+// ---------------------------------------------------------------- voice questions: raised hands from the watch page
+// A viewer records up to 45 s; their browser transcribes it. The host reads the transcript first, then previews it
+// privately, plays it on air (into the program, so the stream, the recording and the guests hear it), or deletes it.
+S.vms = new Map();
+const vmAudio = new Map(); // id -> data URL, fetched on first use
+function gotVoice(item, fresh) {
+  if (!item?.id) return;
+  const had = S.vms.has(item.id);
+  S.vms.set(item.id, { ...(S.vms.get(item.id) || {}), ...item });
+  if (fresh && !had) { chime(); toast(`🎙 ${item.name} raised a hand with a voice question.`, { ms: 9000, action: ['Review', () => { setTab('show'); $('#vmList')?.scrollIntoView({ block: 'center', behavior: smooth() }); }] }); }
+  renderVoice();
+}
+function dropVoice(id) { S.vms.delete(id); vmAudio.delete(id); renderVoice(); }
+async function refreshVoice() { if (!S.studio || !isHost()) return; try { for (const x of (await api('vmList', creds())).items) gotVoice(x, false); } catch {} }
+async function voiceData(id) {
+  if (!vmAudio.has(id)) vmAudio.set(id, (await api('vmGet', { ...creds(), vm: id })).data);
+  return vmAudio.get(id);
+}
+let vmPlaying = null;
+async function playVoice(x, onAir) {
+  try {
+    vmPlaying?.stop();
+    const a = new Audio(await voiceData(x.id));
+    let mix = null;
+    if (onAir) {
+      // Into the program mix (stream, recording, guests) and to the host's own speakers.
+      const node = audioCtx().createMediaElementSource(a);
+      mix = mixInMedia(node); node.connect(audioCtx().destination);
+      setStage({ featured: { id: 'vm-' + x.id, src: 'watch', name: x.name, text: x.transcript || 'Voice question', paid: '🎙' } });
+      wsSend({ type: 'vmMark', id: x.id, status: 'aired' });
+    } else wsSend({ type: 'vmMark', id: x.id, status: 'heard' });
+    const stop = () => { try { a.pause(); } catch {} mix?.dispose(); if (vmPlaying?.a === a) vmPlaying = null; renderVoice(); };
+    a.onended = stop;
+    vmPlaying = { a, id: x.id, onAir, stop };
+    await a.play();
+    renderVoice();
+  } catch (e) { toast(e.message || 'Couldn’t play that voice question.', { err: true }); }
+}
+async function aiTranscribe(x) {
+  const key = store.get('aiKey:openai', '');
+  if (!key) { toast('Add a ChatGPT (OpenAI) key in the AI panel for AI transcripts.', { err: true }); return setTab('ai'); }
+  try {
+    const r = await fetch('/api/ai', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mode: 'stt', apiKey: key, data: await voiceData(x.id) }) });
+    const j = await r.json(); if (!r.ok) throw new Error(j.error);
+    x.transcript = j.text; x.ai = true; renderVoice();
+  } catch (e) { toast(e.message, { err: true }); }
+}
+function voiceRow(x, inChat) {
+  const li = document.createElement('li'); li.className = (inChat ? 'msg ext vm-msg ' : 'sc-item ') + 'vm ' + (x.status || 'new'); li.dataset.vm = x.id;
+  const top = document.createElement('div'); top.className = inChat ? 'who' : 'sc-top';
+  const badge = document.createElement('span'); badge.className = 'pill caps src-watch'; badge.textContent = '🎙 Voice question';
+  const who = document.createElement('b'); who.textContent = x.name;
+  const meta = document.createElement('small'); meta.textContent = `${x.dur || '?'} s${x.status === 'aired' ? ' · played on air' : x.status === 'heard' ? ' · previewed' : ''}`;
+  top.append(badge, who, meta);
+  const txt = document.createElement('p'); txt.className = 'vm-text'; txt.textContent = x.transcript ? `“${x.transcript}”` : 'No transcript (their browser couldn’t transcribe). Preview it, or get an AI transcript.';
+  if (x.ai) { const s = document.createElement('small'); s.textContent = ' · AI transcript'; txt.append(s); }
+  const row = document.createElement('div'); row.className = 'row';
+  const btn = (t, cls, fn) => { const b = document.createElement('button'); b.type = 'button'; b.className = 'btn sm ' + cls; b.textContent = t; b.onclick = fn; return b; };
+  const playing = vmPlaying?.id === x.id;
+  row.append(
+    playing ? btn('Stop', 'danger', () => vmPlaying.stop()) : btn('Preview (only you)', '', () => playVoice(x, false)),
+    btn('Play on air', 'primary', () => playVoice(x, true)),
+    btn('AI transcript', 'ghost', () => aiTranscribe(x)),
+    btn('Delete', 'ghost', () => { if (vmPlaying?.id === x.id) vmPlaying.stop(); wsSend({ type: 'vmDel', id: x.id }); dropVoice(x.id); if (S.state.featured?.id === 'vm-' + x.id) setStage({ featured: null }); }),
+  );
+  li.append(top, txt, row);
+  return li;
+}
+function renderVoice() {
+  if (!$('#vmList')) return;
+  const items = [...S.vms.values()].sort((a, b) => b.ts - a.ts);
+  $('#vmEmpty').hidden = !!items.length;
+  const fresh = items.filter((x) => x.status === 'new').length;
+  $('#vmCount').textContent = items.length ? `${items.length}${fresh ? ` · ${fresh} new` : ''}` : '';
+  $('#vmList').replaceChildren(...items.map((x) => voiceRow(x, false)));
+  // In the studio chat too, so a raised hand is seen where the host is already looking.
+  const log = $('#msgs');
+  if (log) for (const x of items) { const old = log.querySelector(`[data-vm="${CSS.escape(x.id)}"]`); const el = voiceRow(x, true); if (old) old.replaceWith(el); else appendLog(el); }
+  if (log) for (const el of log.querySelectorAll('[data-vm]')) if (!S.vms.has(el.dataset.vm)) el.remove();
+}
+
+// ---------------------------------------------------------------- where viewers find the watch page
+$('#watchTop').onclick = (ev) => {
+  if (!S.studio) return;
+  const url = watchLinkUrl();
+  copy(url, 'Watch link copied. Share it anywhere.');
+  if (ev.shiftKey || ev.metaKey) window.open(url, '_blank', 'noopener');
+};
+$('#copyWatch').onclick = () => copy(watchLinkUrl(), 'Watch link copied.');
+$('#openWatch').onclick = () => window.open(watchLinkUrl(), '_blank', 'noopener');
+$('#inviteDlg').addEventListener('toggle', () => { if ($('#inviteDlg').open && S.studio) $('#inviteWatch').textContent = watchLinkUrl().replace(/^https?:\/\//, ''); });
+/** On stream: "Watch & chat live · host/w/code", bottom right, unless the host turned it off or placed the QR card. */
+function drawWatchBadge() {
+  if (!S.studio || watchCfg().badge === false) return;
+  if ((S.state.elements || []).some((e) => e.type === 'callin' && !e.hidden)) return;
+  const text = `${location.host}/w/${S.studio}`, label = 'WATCH & CHAT LIVE';
+  g.save();
+  g.font = '700 15px Inter, sans-serif'; const tw = g.measureText(text).width;
+  g.font = '800 11px Inter, sans-serif'; const lw = g.measureText(label).width;
+  const w = Math.max(tw, lw) + 56, h = 50, tick = (stageElements().find((e) => e.type === 'ticker' && !e.hidden) && S.state.ticker) ? 56 : 0;
+  const x = W - w - 24, y = H - h - 24 - tick;
+  g.fillStyle = 'rgba(8,12,22,.82)'; rr(x, y, w, h, 12); g.fill();
+  g.fillStyle = S.state.brand.color; rr(x + 12, y + 15, 20, 20, 6); g.fill();
+  g.fillStyle = '#fff'; g.beginPath(); g.moveTo(x + 19, y + 20); g.lineTo(x + 27, y + 25); g.lineTo(x + 19, y + 30); g.closePath(); g.fill();
+  g.textAlign = 'left'; g.textBaseline = 'alphabetic';
+  g.fillStyle = '#9ca3af'; g.font = '800 11px Inter, sans-serif'; g.fillText(label, x + 42, y + 20);
+  g.fillStyle = '#fff'; g.font = '700 15px Inter, sans-serif'; g.fillText(text, x + 42, y + 38);
+  g.restore();
+}
