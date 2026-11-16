@@ -18,7 +18,10 @@ let pages = []; // for the timing dump on failure
   await a.waitForSelector('#inviteDlg[open]'); const code = await a.textContent('#inviteCode'); await a.click('#inviteDlg .modal-close');
   await b.goto((process.env.GATHER_URL || 'http://localhost:8080') + '/s/' + code); await b.waitForSelector('#enterDlg[open]');
   // Picking a background in the green room must not turn an invited guest's "Join studio" into "Create studio".
-  await b.click('#grFx [data-fx="blur"]'); await b.click('#grFx [data-fx="none"]');
+  // Any chip triggered that bug, so "Real" is enough. "Blur" would load and compile the background model on the
+  // guest's main thread just as it joins; on CI's GPU-less machines that stalled the guest for seconds and made
+  // later steps time out. (Effects on GPU-less machines are V5 audit item B7.)
+  await b.click('#grFx [data-fx="none"]');
   const goLabel = (await b.textContent('#enterGo')).trim();
   console.log('guest still joins after picking a background:', goLabel === 'Join studio', `(${goLabel})`);
   if (goLabel !== 'Join studio') console.log('FAIL a background chip switched the guest to', goLabel);
