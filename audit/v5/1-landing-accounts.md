@@ -10,7 +10,7 @@ The browser was Playwright Chromium with a fake camera and microphone; second an
 - Scripts: `/tmp/claude-0/-home-user-gather/0c2621ff-ea6b-5d46-b42f-d9d837e41814/scratchpad/a1/` (`landing.js`, `acct.js`, `guest2.js`, `misc.js`, `mobile.js`, `chips*.js`, `reset.js`)
 - Screenshots: `audit/v5/shots/landing/`
 
-Counts: **10 broken items (2 P0, 3 P1, 5 P2)** plus **14 P3 polish items**, all reproduced; 12 improvements; 10 V5 ideas.
+Counts: **10 broken items (2 P0, 3 P1, 5 P2)** plus **15 P3 polish items**, all reproduced; 12 improvements; 10 V5 ideas.
 
 ---
 
@@ -78,7 +78,17 @@ Counts: **10 broken items (2 P0, 3 P1, 5 P2)** plus **14 P3 polish items**, all 
   - It opens in Join mode with the code filled, and no account is asked for.
   - The guest joins and is not host.
 - **Locked studio:** a third person's knock shows "Waiting for the host" (`knock-waiting.png`).
-- **Removed guest:** see the guest flow results below (B-section notes).
+- **Lobby (locked studio):**
+  - The host's Waiting list shows the knocker.
+  - **Decline:** the knocker sees "The host couldn't take you right now."
+  - **Let in:** a second knock, once admitted, joins the studio.
+- **Removed guest:**
+  - The host's two-click remove works, and the guest's next heartbeat returns 403.
+  - Reopening the same link in the same browser gives "The host removed you from this studio." (device bar)
+- **Call-in links:**
+  - `/c/<code>` to a studio that isn't live: "This studio isn't live right now…"
+  - `/c/<code>` to a live studio: "You're in the call-in queue…"
+  - The call-in green room still shows the Create/Join tabs, which are irrelevant there.
 - **Pages at 390**
   - The account dialog hides its side panel and fits the screen (`acct-signup-390.png`).
   - The green room fits at 390×844 without scrolling the page (`greenroom-join-390.png`).
@@ -222,6 +232,7 @@ Counts: **10 broken items (2 P0, 3 P1, 5 P2)** plus **14 P3 polish items**, all 
 | P3-11 | `GET /api/account` returns a plain-text "Not found" 404 instead of JSON 405. | `server.js:27` |
 | P3-12 | The watch page shows the H1 "Show not found" for a studio that just hasn't opened yet, including a scheduled show's own studio. | `watch.js:render`, `page_w_gather_nothere.png` |
 | P3-13 | Privacy "Questions" points at "the support email shown on its Google sign-in screen", which no one can find. | `privacy.html` last section |
+| P3-15 | After the host declines, the knock panel still reads "Waiting for the host" with the pulsing orb. Only the line under it changes, and the only button is Cancel (no "Ask again"). | `app.js:4204`, `knock-declined.png` |
 | P3-14 | On sign-up and sign-in pages the console shows `401/409/503 Failed to load resource` for expected validation answers. That's noise, not a fault, but every expected validation answer adds an error to the console. | all account calls |
 
 ---
@@ -292,5 +303,6 @@ Counts: **10 broken items (2 P0, 3 P1, 5 P2)** plus **14 P3 polish items**, all 
 
 ---
 
-### Guest, knock and remove flow results
-(Filled in from `guest2.js`; see below.)
+### Note on test environment
+- Another auditor restarted port 8105 during my run. B1 was re-run against the fresh 8105 server and reproduced again: the guest ended up in a new studio `gather-2630b82b55ab` instead of the invite.
+- Headless Chromium is slow here. Playwright's real clicks sometimes timed out while the camera pipeline ran, so `guest2.js` uses `element.click()`. These timeouts are not reported as app bugs.
