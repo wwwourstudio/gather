@@ -273,6 +273,10 @@ hr { border: 0; border-top: 1px solid var(--line); margin: var(--sp-1) 0; width:
 .dest-top { display: flex; align-items: center; gap: var(--sp-2); }
 .dest-top .toggle-inline { margin-left: auto; }
 .dest .hint { margin: 0; font-size: var(--fs-11); }
+.dest-state { margin: 0; font-size: var(--fs-12, 12px); font-weight: 600; }
+.dest-state.live { color: var(--ok, #2f9e77); }
+.dest-state.failed { color: var(--danger, #e5484d); }
+.live-why { margin: 0; }
 #liveBtn.ending { --btn-bg: var(--danger-soft); --btn-ink: var(--danger); --btn-line: color-mix(in srgb, var(--danger) 40%, transparent); }
 .live-stats { margin: 0; font-variant-numeric: tabular-nums; }
 .live-tool.on-air.icon-btn.stacked { --ib-bg: var(--live); --ib-bg-hover: var(--live); color: #fff; font-variant-numeric: tabular-nums; }
@@ -506,6 +510,8 @@ hr { border: 0; border-top: 1px solid var(--line); margin: var(--sp-1) 0; width:
 #wSteps { display: grid; gap: var(--sp-4); }
 
 /* ---------------------------------------------------------------- toasts */
+/* #toasts is a manual popover so it sits in the top layer, above any open dialog. Undo the popover defaults. */
+.toasts[popover] { top: auto; right: auto; margin: 0; padding: 0; border: 0; background: none; color: inherit; overflow: visible; height: auto; }
 .toasts { position: fixed; left: 50%; bottom: calc(100px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); display: grid; gap: var(--sp-2); z-index: var(--z-toast); justify-items: center; pointer-events: none; width: max-content; max-width: calc(100vw - var(--sp-8)); }
 .toast { display: flex; align-items: center; gap: var(--sp-3); padding: var(--sp-2) var(--sp-4); border-radius: var(--r-md); font-size: var(--fs-13); font-weight: 500; animation: rise var(--dur) var(--ease-out); pointer-events: auto; text-align: center; }
 .toast.err { --glass-bg-raised: rgba(120, 20, 40, 0.92); --on-media: rgba(120, 20, 40, 0.92); }
@@ -797,4 +803,15 @@ body.deck-closed .deck { padding-bottom: var(--sp-2); }
   .ac-card { width: 480px; grid-template-columns: 1fr; }
   .ac-side { display: none; }
   .ac-main { padding: var(--sp-6) var(--sp-5); }
+}
+/* V5 audit: a lasting prompt when the browser blocks guests' sound (was a 6 s toast). */
+.audio-unblock { position: fixed; top: calc(var(--h-top, 64px) + var(--sp-3)); left: 50%; transform: translateX(-50%); z-index: var(--z-toast); display: inline-flex; align-items: center; gap: var(--sp-2); padding: var(--sp-2) var(--sp-4); border-radius: var(--r-md); font: inherit; font-size: var(--fs-13); font-weight: 600; color: inherit; cursor: pointer; border: 1px solid var(--glass-border); }
+.audio-unblock[hidden] { display: none; }
+/* Phones: the REC/Live chip shrinks to a dot and a timer so it can't push Go live off screen. */
+@media (max-width: 600px) {
+  .rec-chip { padding: 0 var(--sp-2); gap: 4px; flex: none; white-space: nowrap; }
+  .rec-chip #recPillText { font-size: 11px; }
+  .top-actions { flex-wrap: nowrap; min-width: 0; }
+  .user-label { display: none; }
+  #liveTop { padding: 0 var(--sp-2); white-space: nowrap; }
 }

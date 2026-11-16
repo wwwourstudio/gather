@@ -25,7 +25,7 @@ const fakeSR = () => {
   await a0.waitForTimeout(2200); await a0.close();
   await a.waitForTimeout(2200);
   const a2 = await mk(); await a2.goto((process.env.GATHER_URL || 'http://localhost:8080') + '/');
-  await a2.click('#userBtn'); await a2.fill('#acEmail', email); await a2.fill('#acPass', 'correct horse'); await a2.click('#acGo');
+  await a2.click('#userBtn'); await a2.click('#acTabs [data-ac="in"]'); await a2.fill('#acEmail', email); await a2.fill('#acPass', 'correct horse'); await a2.click('#acGo');
   await a2.waitForFunction(() => window.__acct.user && JSON.parse(localStorage.getItem('gather:brandPrefs') || '{}').font === 'playfair', null, { timeout: 8000 });
   console.log('  settings followed to a second browser:', await a2.evaluate(() => JSON.stringify({ font: window.__gather.state.brand.font, banner: window.__gather.state.brand.bannerStyle, aiNoise: window.__gather.audioFx.ai })));
   await a2.close();

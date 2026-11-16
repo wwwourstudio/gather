@@ -35,9 +35,21 @@ function target(d) {
   if (!/^rtmps?:\/\/[a-z0-9.-]+(:\d+)?(\/[^\s|[\]]*)?$/i.test(url) || /[\s|[\]]/.test(key) || key.length > 400) return null;
   return key ? `${url}/${key}` : url;
 }
-const redact = (s) => String(s).replace(/rtmps?:\/\/\S+/gi, (u) => u.replace(/\/[^/]*$/, '/•••'));
+// Hide everything after the app path: a key containing '/' must not leak its first part (rtmp://host/app/•••).
+const redact = (s) => String(s).replace(/rtmps?:\/\/[^\s'"]+/gi, (u) => { const m = u.match(/^(rtmps?:\/\/[^/]+(?:\/[^/]+)?)/i); return (m ? m[1] : u) + '/•••'; });
+/** FFmpeg's error line, in words a host understands. */
+function plain(line) {
+  if (/refused/i.test(line)) return 'the connection was refused';
+  if (/timed out|timeout/i.test(line)) return 'the server didn’t answer';
+  if (/40[13]|denied|unauthori[sz]ed|forbidden/i.test(line)) return 'the platform rejected the stream key';
+  if (/resolve|not known|no such host/i.test(line)) return 'that server address doesn’t exist';
+  return 'the connection failed';
+}
 
 let live = 0;
+const used = new Map(); // token nonce → expiry: tokens are single-use
+const studios = new Map(); // studio → its open socket: one stream per studio
+const releaseStudio = (s, ws) => { if (studios.get(s) === ws) studios.delete(s); };
 const server = http.createServer((req, res) => {
   if (req.url === '/health') { res.writeHead(200, { 'Content-Type': 'application/json' }); return res.end(JSON.stringify({ ok: true, live, max: MAX })); }
   res.writeHead(404); res.end();
@@ -48,16 +60,25 @@ server.on('upgrade', (req, socket, head) => {
   const claim = u.pathname === '/live' ? verify(u.searchParams.get('t')) : null;
   if (!claim) { socket.end('HTTP/1.1 401 Unauthorized\r\nConnection: close\r\n\r\n'); return; }
   if (live >= MAX) { socket.end('HTTP/1.1 503 Service Unavailable\r\nConnection: close\r\n\r\n'); return; }
-  wss.handleUpgrade(req, socket, head, (ws) => run(ws, claim));
+  // Each token works once, and each studio streams once at a time, so a leaked token can't fill the relay.
+  if (used.has(claim.n || u.searchParams.get('t'))) { socket.end('HTTP/1.1 401 Unauthorized\r\nConnection: close\r\n\r\n'); return; }
+  if (studios.has(claim.s)) { socket.end('HTTP/1.1 409 Conflict\r\nConnection: close\r\n\r\n'); return; }
+  used.set(claim.n || u.searchParams.get('t'), claim.e);
+  for (const [k, e] of used) if (e < Date.now()) used.delete(k);
+  wss.handleUpgrade(req, socket, head, (ws) => { studios.set(claim.s, ws); run(ws, claim); });
 });
 
 function run(ws, claim) {
   live++;
   const say = (m) => { if (ws.readyState === 1) ws.send(JSON.stringify(m)); };
-  let ff = null, started = false, ended = false, queued = 0, bytesIn = 0;
+  let ff = null, started = false, ended = false, queued = 0, bytesIn = 0, failed = new Set(), dests = [];
+  // A session that starts and then sends nothing would hold a relay slot for ever: end it after 30 s of silence.
+  let idle = null;
+  const kick = () => { clearTimeout(idle); idle = setTimeout(() => { say({ t: 'error', message: 'The stream went quiet, so the relay stopped it.' }); ws.close(4003); }, 30000); };
   const finish = (why) => {
     if (ended) return; ended = true; live--;
-    clearTimeout(firstMsg);
+    clearTimeout(firstMsg); clearTimeout(idle);
+    releaseStudio(claim.s, ws);
     if (ff) { try { ff.stdin.end(); } catch {} setTimeout(() => ff && ff.kill('SIGKILL'), 5000).unref(); }
     console.log(`[relay] ${claim.s} ended: ${why}`);
   };
@@ -67,9 +88,9 @@ function run(ws, claim) {
       if (isBinary) return;
       let m; try { m = JSON.parse(String(data)); } catch { return; }
       if (m.type !== 'start') return;
-      const dests = (Array.isArray(m.dests) ? m.dests : []).slice(0, 6).map(target);
+      dests = (Array.isArray(m.dests) ? m.dests : []).slice(0, 6).map(target);
       if (!dests.length || dests.some((x) => !x)) { say({ t: 'error', message: 'Check the server URLs and stream keys: each needs an rtmp:// or rtmps:// address.' }); return ws.close(4001); }
-      clearTimeout(firstMsg);
+      clearTimeout(firstMsg); kick();
       const copy = m.video === 'h264' && TRANSCODE !== 'always';
       const v = copy ? ['-c:v', 'copy'] : ['-c:v', 'libx264', '-preset', 'veryfast', '-tune', 'zerolatency', '-b:v', '4500k', '-maxrate', '4500k', '-bufsize', '9000k', '-g', '60', '-pix_fmt', 'yuv420p'];
       const out = dests.length === 1 ? ['-f', 'flv', dests[0]] : ['-f', 'tee', dests.map((x) => `[f=flv:onfail=ignore]${x}`).join('|')];
@@ -84,12 +105,19 @@ function run(ws, claim) {
         for (const line of parts) {
           if (/\btime=\d/.test(line)) { // progress line; with several destinations size and bitrate read N/A
             const num = (k) => { const m = line.match(new RegExp(k + '=\\s*([\\d.]+)')); return m ? +m[1] : null; };
-            if (!started) { started = true; say({ t: 'live' }); }
+            if (!started) { started = true; say({ t: 'live' }); dests.forEach((_, i) => { if (!failed.has(i)) say({ t: 'dest', i, state: 'live' }); }); }
             const time = line.match(/time=(\S+)/)[1];
             const [hh, mm, ss] = time.split(':').map(Number), secs = hh * 3600 + mm * 60 + ss;
             say({ t: 'stats', frame: num('frame'), fps: num('fps'), time, kbps: num('bitrate') ?? (secs > 0 ? Math.round(bytesIn * 8 / 1000 / secs) : null), speed: num('speed') });
           }
-          else if (line.trim()) { const msg = redact(line.trim()).slice(0, 300); console.warn(`[relay] ${claim.s}: ${msg}`); if (/error|refused|failed|denied|timed out/i.test(msg)) say({ t: 'warn', message: msg }); }
+          else if (line.trim()) {
+            const msg = redact(line.trim()).slice(0, 300); console.warn(`[relay] ${claim.s}: ${msg}`);
+            if (!/error|refused|failed|denied|timed out/i.test(msg)) continue;
+            // Which destination failed? Match the (redacted) address in FFmpeg's line; with one destination it's that one.
+            const hit = dests.length === 1 ? [0] : dests.map((d, i) => (msg.includes(redact(d)) ? i : -1)).filter((i) => i >= 0);
+            if (hit.length) for (const i of hit) { if (!failed.has(i)) { failed.add(i); say({ t: 'dest', i, state: 'failed', reason: plain(msg) }); } }
+            else say({ t: 'warn', message: plain(msg) });
+          }
         }
       });
       ff.stdin.on('error', () => {});
@@ -99,7 +127,7 @@ function run(ws, claim) {
       return;
     }
     if (!isBinary || ended) return;
-    bytesIn += data.length;
+    bytesIn += data.length; kick();
     if (!ff.stdin.write(data)) {
       queued += data.length;
       if (queued > 64 * 1024 * 1024) { say({ t: 'error', message: 'The relay can’t keep up with this stream.' }); ws.close(4002); }

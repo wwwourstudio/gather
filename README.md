@@ -39,7 +39,8 @@ gather sends email through [Resend](https://resend.com) and schedules reminders 
 | --- | --- | --- |
 | `RESEND_API_KEY` | `re_…` | From resend.com → API Keys |
 | `MAIL_FROM` | `gather <studio@yourdomain.com>` | Must use a domain verified in Resend |
-| `APP_URL` | `https://gather-gold-nine.vercel.app` | Used in email links; defaults to the request's host |
+| `APP_URL` | `https://gather-gold-nine.vercel.app` | Used in email links (password reset, invites). On Vercel it falls back to the production domain; it never uses the request's Host header, so set it on any other host or emails are switched off |
+| `INVITES_PER_DAY` | `60` | Optional. How many invite emails one account can send per day (anti-spam) |
 
 Without these, accounts, scheduling and everything else still work; the app says plainly that emails were not sent.
 

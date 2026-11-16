@@ -98,15 +98,22 @@ function toast(msg, opts = {}) {
   t.setAttribute('role', opts.err ? 'alert' : 'status');
   t.textContent = msg;
   if (opts.action) { const b = document.createElement('button'); b.type = 'button'; b.className = 'btn sm link'; b.textContent = opts.action[0]; b.onclick = () => { opts.action[1](); t.remove(); }; t.append(b); }
-  $('#toasts').append(t);
-  setTimeout(() => t.remove(), opts.ms || 3200);
+  const box = $('#toasts');
+  box.append(t);
+  // Re-show the popover each time, so it is the newest thing in the top layer and never hides behind a dialog.
+  if (box.showPopover) { try { if (box.matches(':popover-open')) box.hidePopover(); box.showPopover(); } catch {} }
+  setTimeout(() => { t.remove(); if (!box.children.length && box.hidePopover) { try { box.hidePopover(); } catch {} } }, opts.ms || 3200);
 }
+// A dialog opened after a toast would cover it; bring the toasts back on top.
+for (const d of document.querySelectorAll('dialog')) new MutationObserver(() => { const box = $('#toasts'); if (d.open && box.children.length && box.showPopover) { try { box.hidePopover(); box.showPopover(); } catch {} } }).observe(d, { attributes: true, attributeFilter: ['open'] });
 const initials = (n) => (n || '?').trim().split(/\s+/).slice(0, 2).map((w) => w[0]).join('').toUpperCase() || '?';
 const fmtTime = (ms) => { const s = Math.floor(ms / 1000); return `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`; };
 const newCode = () => 'gather-' + [...crypto.getRandomValues(new Uint8Array(6))].map((b) => b.toString(16).padStart(2, '0')).join('');
+/** The kind of gather link pasted: 's' (invite), 'c' (call-in), 'w' (watch), or '' for a bare code. */
+const linkKind = (v) => (String(v || '').match(/\/([scw])\/[a-z0-9-]+/i) || [])[1]?.toLowerCase() || '';
 function parseCode(v) {
   v = String(v || '').trim();
-  const m = v.match(/\/s\/([a-z0-9-]+)/i);
+  const m = v.match(/\/[scw]\/([a-z0-9-]+)/i);
   return (m ? m[1] : v).toLowerCase().replace(/[^a-z0-9-]/g, '').slice(0, 32);
 }
 async function copy(text, okMsg) {
@@ -540,18 +547,26 @@ function lostStudio() {
   setPhase('reconnecting');
   setTimeout(() => join(code).catch((e) => { if (e.status === 403) return kickedOut(e.message); toast(e.message, { err: true }); setPhase('offline'); }), 800);
 }
-function beaconLeave() {
+function beaconLeave(why) {
   if (!S.studio) return;
-  const body = JSON.stringify(creds());
+  const body = JSON.stringify({ ...creds(), why }); // why 'left' (the Leave button) hands the host seat over for good
   pollGen++;
   if (!(navigator.sendBeacon && navigator.sendBeacon('/api/studio?action=leave', new Blob([body], { type: 'application/json' })))) api('leave', JSON.parse(body)).catch(() => {});
 }
-addEventListener('pagehide', beaconLeave);
+addEventListener('pagehide', () => beaconLeave());
 
 async function iceConfig(serverIce) {
   const ice = [...(serverIce || [])];
   const url = sess.get('turnUrl', ''), user = sess.get('turnUser', ''), pass = sess.get('turnPass', '');
-  if (url) ice.push({ urls: url.split(',').map((s) => s.trim()).filter(Boolean), username: user || undefined, credential: pass || undefined });
+  if (url) {
+    // A bad entry makes the browser refuse to connect at all, so check it and fall back to the built-in servers.
+    const urls = url.split(',').map((s) => s.trim()).filter(Boolean);
+    const bad = urls.find((u) => !/^(stun|turns?):[^\s]+$/i.test(u));
+    const needsLogin = urls.some((u) => /^turns?:/i.test(u)) && (!user || !pass);
+    if (bad || needsLogin) toast(bad ? `Your TURN server “${bad}” isn’t a valid address (it should start with turn:, turns: or stun:), so it was skipped. Fix it in Settings.` : 'Your TURN server needs a username and password, so it was skipped. Add them in Settings.', { err: true, ms: 9000 });
+    else ice.push({ urls, username: user || undefined, credential: pass || undefined });
+  }
+  S.serverIce = serverIce || [];
   return ice;
 }
 
@@ -560,9 +575,12 @@ async function join(code, opts = {}) {
   audioCtx();
   const pass = opts.pass || S.joinPass?.[code];
   let r;
-  try { r = await api('join', { studio: code, dev: deviceId(), name: S.name || 'Guest', mic: S.local.micOn, cam: S.local.camOn, acct: acct.token || undefined, pass, callin: opts.callin || undefined }); }
+  // Only "Create studio" may open a studio; every other path (invite links, the Join box, reconnects) joins one.
+  const intent = opts.create ? 'create' : 'join';
+  try { r = await api('join', { studio: code, dev: deviceId(), name: S.name || 'Guest', mic: S.local.micOn, cam: S.local.camOn, acct: acct.token || undefined, pass, callin: opts.callin || undefined, intent }); }
   catch (e) {
     if (e.status === 423 && $('#enterDlg').open) { setPhase('offline'); startKnock(code, opts.callin); return; }
+    if (e.status === 404 && intent === 'join' && !opts.callin && !opts.noWait && $('#enterDlg').open) { setPhase('offline'); waitForHost(code, e.message); return; }
     if (e.status === 403) { setPhase('offline'); }
     throw e;
   }
@@ -624,7 +642,12 @@ async function onServer(m) {
       if (p) { sysMsg(`${p.name} left`); closePeer(p); if (p.sharing) setTimeout(autoEndPresentScene, 0); }
       const wasHost = S.host === S.id;
       S.host = m.host; S.state = m.state;
-      if (!wasHost && S.host === S.id) toast('You are now the host.');
+      if (!wasHost && S.host === S.id) {
+        // Say plainly why the host controls just appeared, and keep it up long enough to read.
+        const who = p?.name || 'The host';
+        toast(m.why === 'dropped' ? `${who}’s connection dropped. You’re hosting until they’re back.` : `${who} left and handed the studio to you. You’re the host now.`, { ms: 20000, action: ['Got it', () => {}] });
+        refreshLobby();
+      }
       renderAll();
       break;
     }
@@ -643,7 +666,14 @@ async function onServer(m) {
     case 'feed': for (const it of m.items || []) addExternal(it); break;
     case 'ai': upsertAI(m.item, false); break;
     case 'caption': showCaption(m.from, m.name, m.text, m.final); break;
-    case 'host': S.host = m.host; if (S.host === S.id) { toast('You are now the host.'); refreshLobby(); } renderAll(); break;
+    case 'host': {
+      const wasHost = S.host === S.id;
+      S.host = m.host;
+      if (S.host === S.id) { toast('You are now the host.'); refreshLobby(); }
+      else if (wasHost) toast(`${S.peers.get(m.host)?.name || 'The host'} is back and hosting again.`, { ms: 8000 });
+      renderAll();
+      break;
+    }
     case 'mute': if (S.local.micOn) { setMic(false); toast(`${m.by || 'The host'} muted you. Unmute when you’re ready to talk.`); } break;
     case 'knock': S.lobby = m.lobby || []; renderLobby(); setDeck('lobby'); chime(); toast(`${m.who?.name || 'Someone'} ${m.who?.callin ? 'is calling in' : 'is waiting to join'}.`, { action: ['Open', () => setDeck('lobby')] }); break;
     case 'lobby': S.lobby = m.lobby || []; renderLobby(); break;
@@ -666,7 +696,14 @@ function addPeer(info) {
 function createPeer(info, offerer) {
   const p = addPeer(info);
   if (p.pc) return p;
-  const pc = new RTCPeerConnection({ iceServers: S.iceServers, bundlePolicy: 'max-bundle' });
+  let pc;
+  try { pc = new RTCPeerConnection({ iceServers: S.iceServers, bundlePolicy: 'max-bundle' }); }
+  catch {
+    // The browser rejected a TURN entry: connect with the server's own list instead of not at all.
+    S.iceServers = S.serverIce || [];
+    pc = new RTCPeerConnection({ iceServers: S.iceServers, bundlePolicy: 'max-bundle' });
+    toast('Your TURN settings didn’t work, so gather is using its own servers. Check them in Settings.', { err: true, ms: 9000 });
+  }
   p.pc = pc; p.offerer = offerer;
   if (offerer) {
     p.aT = pc.addTransceiver('audio', { direction: 'sendrecv' });
@@ -744,14 +781,14 @@ function teardownPeers() { for (const p of [...S.peers.values()]) closePeer(p); 
 function playEl(el) {
   const pr = el.play();
   pr?.catch(() => {
-    if (!el.muted) { el.muted = true; el.dataset.blocked = '1'; el.play().catch(() => {}); if (!S.audioBlocked) { S.audioBlocked = true; toast('Click the stage to enable participant audio.', { ms: 6000 }); } }
+    if (!el.muted) { el.muted = true; el.dataset.blocked = '1'; el.play().catch(() => {}); if (!S.audioBlocked) { S.audioBlocked = true; $('#audioUnblock').hidden = false; } }
   });
 }
 function tryPlayAll() { for (const p of S.peers.values()) { const el = cardVideo(p.id); if (el && el.srcObject) playEl(el); } }
 document.addEventListener('pointerdown', () => {
   audioCtx();
   if (!S.audioBlocked) return;
-  S.audioBlocked = false;
+  S.audioBlocked = false; $('#audioUnblock').hidden = true;
   for (const el of $$('video[data-blocked]')) { el.muted = false; delete el.dataset.blocked; el.play().catch(() => {}); }
 }, { capture: true });
 
@@ -873,7 +910,7 @@ function drawTile(p, rect, t) {
   let tx = x + 16;
   const ty = y + h - 16 - fs * 1.9;
   if (brand.names) {
-    const label = p.me ? `${p.name} (you)` : p.name;
+    const label = p.name; // the program is recorded and streamed, so never "(you)" here
     g.font = `700 ${fs}px ${stageFont()}`; g.textAlign = 'left'; g.textBaseline = 'middle';
     const tw = Math.min(g.measureText(label).width, w - 80), bw = tw + fs * 1.4, bh = fs * 1.9;
     const style = brand.tag || 'solid';
@@ -1033,7 +1070,8 @@ function draw() {
     const bottom = tick && S.state.ticker && tick.y > .7 ? tick.y * H - 12 : H - 32;
     const rects = layoutRects(onStage.length, custom ? 'split' : S.state.layout, { x: 32, y: 44, w: W - 64, h: bottom - 44 });
     onStage.forEach((p, i) => rects[i] && drawTile(p, rects[i], t));
-  }
+    camRects = rects.slice(0, onStage.length);
+  } else camRects = [];
   let framed = false;
   for (const e of els) {
     if (!framed && TIER_Z[tierOf(e)] >= 300) { drawFrame(); framed = true; }
@@ -1041,6 +1079,14 @@ function draw() {
   }
   if (!framed) drawFrame();
   drawChrome();
+}
+let camRects = []; // where the built-in layout put cameras this frame
+/** Lift a banner off any small camera tile (Spotlight's thumbnails) so it never covers a guest's face. */
+function clearOfCams(r) {
+  const small = camRects.filter((c) => c.w * c.h < W * H * 0.25 && r.x < c.x + c.w && c.x < r.x + r.w && r.y < c.y + c.h && c.y < r.y + r.h);
+  if (!small.length) return r;
+  const top = Math.min(...small.map((c) => c.y));
+  return { ...r, y: Math.max(44, top - r.h - 12) };
 }
 function drawElement(e, t, onStage, custom) {
   switch (e.type) {
@@ -1064,12 +1110,12 @@ function drawElement(e, t, onStage, custom) {
     case 'text': drawTextEl(e); return;
     case 'image': drawImageEl(e); return;
     case 'timer': drawTimerEl(e); return;
-    case 'banner': drawBanner(t, px(e)); return;
+    case 'banner': drawBanner(t, clearOfCams(px(e))); return;
     case 'ticker': drawTicker(t, px(e)); return;
     case 'logo': drawLogo(px(e)); return;
     case 'ads': drawAds(px(e)); return;
     case 'featured': drawFeatured(t, px(e)); return;
-    case 'captions': drawCaptions(px(e)); return;
+    case 'captions': drawCaptions(clearOfCams(px(e))); return;
   }
 }
 function hexA(hex, a) { const n = parseInt(hex.slice(1), 16); return `rgba(${n >> 16},${(n >> 8) & 255},${n & 255},${a})`; }
@@ -2501,6 +2547,7 @@ function profileSoon(patch) {
 }
 function setUser(u, token) {
   acct.user = u;
+  store.set('hadAccount', true); // this browser has signed in before: greet with "Welcome back" next time
   if (token) { acct.token = token; rawSet('acctToken', token); }
   if (u) {
     if (u.name) { S.name = u.name; rawSet('name', u.name); if (document.activeElement !== $('#nameInput')) $('#nameInput').value = u.name; if (document.activeElement !== $('#enterName')) $('#enterName').value = u.name; }
@@ -2615,10 +2662,11 @@ $('#acPass').addEventListener('input', () => {
 function needAccountThen(fn) {
   if (!S.requireAccount || acct.user) return fn();
   S.afterSignIn = fn;
-  openAccount('in');
+  openAccount();
 }
 function openAccount(view) {
-  acView = view || (acct.user ? 'in' : 'in');
+  // First-timers start on Create account; anyone who has signed in on this browser before starts on Sign in.
+  acView = view || (acct.user || store.get('hadAccount', false) ? 'in' : 'up');
   $$('#acctDlg .err').forEach((e) => (e.hidden = true));
   renderAcctDlg();
   $('#acctDlg').showModal();
@@ -3166,6 +3214,8 @@ const PLATFORMS = {
 };
 S.relayOn = false;
 S.live = null;
+let L_STATUS = {}; // per destination (index in liveDests) while live: {state: 'live'|'failed', reason}
+const CONNECT_TIMEOUT = 60_000; // a free relay can take ~30–50 s to wake
 const liveDests = () => store.get('liveDests', []); // local only: never synced, never sent to gather's server
 function saveDests(list) { store.set('liveDests', list); renderLive(); }
 function pickLiveMime() {
@@ -3173,9 +3223,14 @@ function pickLiveMime() {
   const hit = opts.find(([m]) => window.MediaRecorder?.isTypeSupported?.(m));
   return hit ? { mimeType: hit[0], video: hit[1] } : null;
 }
-function renderDests() {
-  const list = liveDests(), live = !!S.live;
-  $('#destList').replaceChildren(...list.map((d, i) => {
+function renderDests(force) {
+  const list = liveDests(), live = !!S.live, box = $('#destList');
+  // Someone joining or leaving re-renders the studio; never rebuild the list under a host who is typing a key.
+  if (!force && box.contains(document.activeElement) && box.children.length === list.length) {
+    box.querySelectorAll('input, [data-del]').forEach((el) => { el.disabled = live; });
+    return;
+  }
+  box.replaceChildren(...list.map((d, i) => {
     const p = PLATFORMS[d.kind] || PLATFORMS.custom;
     const li = document.createElement('li'); li.className = 'dest' + (d.on ? '' : ' off');
     li.innerHTML = `<div class="dest-top"><span class="pill caps src-${d.kind}"></span><label class="toggle-inline"><input type="checkbox" class="toggle sm" data-k="on"><span>Send</span></label><button type="button" class="icon-btn sm" data-del aria-label="Remove"><svg class="i sm" aria-hidden="true"><use href="/icons.svg#i-trash-2"/></svg></button></div>
@@ -3189,7 +3244,14 @@ function renderDests() {
     li.querySelector('[data-k="url"]').value = d.url || '';
     li.querySelector('[data-k="key"]').value = d.key || '';
     li.querySelector('[data-k="watch"]').value = d.watch || '';
-    li.querySelectorAll('input').forEach((inp) => { inp.disabled = live; inp.addEventListener('change', () => { const all = liveDests(); all[i] = { ...all[i], [inp.dataset.k]: inp.type === 'checkbox' ? inp.checked : inp.value.trim() }; saveDests(all); }); });
+    const put = (inp) => { const all = liveDests(); all[i] = { ...all[i], [inp.dataset.k]: inp.type === 'checkbox' ? inp.checked : inp.value.trim() }; return all; };
+    li.querySelectorAll('input').forEach((inp) => {
+      inp.disabled = live;
+      // Save every keystroke (so a re-render can't lose it), and refresh the Go live button on change.
+      if (inp.type !== 'checkbox') inp.addEventListener('input', () => store.set('liveDests', put(inp)));
+      inp.addEventListener('change', () => saveDests(put(inp)));
+    });
+    if (L_STATUS[i]) { const s = document.createElement('p'); s.className = 'dest-state ' + L_STATUS[i].state; s.textContent = L_STATUS[i].state === 'failed' ? `✗ Not reaching ${p.name}: ${L_STATUS[i].reason}` : `✓ Live on ${p.name}`; li.append(s); }
     li.querySelector('[data-del]').disabled = live;
     li.querySelector('[data-del]').onclick = () => { const all = liveDests(); all.splice(i, 1); saveDests(all); };
     return li;
@@ -3218,7 +3280,12 @@ function renderLive() {
   $('#destAdd').parentElement.hidden = !S.relayOn;
   renderDests();
   const n = readyDests().length;
-  const label = !L ? (n ? `Go live on ${n} platform${n === 1 ? '' : 's'}` : 'Go live') : L.phase === 'live' ? 'End the stream' : L.phase === 'stopping' ? 'Ending…' : 'Connecting…';
+  const waking = L?.phase === 'connecting' && Date.now() - L.t1 > 6000;
+  const label = !L ? (n ? `Go live on ${n} platform${n === 1 ? '' : 's'}` : 'Go live') : L.phase === 'live' ? 'End the stream' : L.phase === 'stopping' ? 'Ending…' : waking ? 'Waking the live relay… (Cancel)' : 'Connecting… (Cancel)';
+  // Say why the button is dimmed instead of leaving the host to guess.
+  const all = liveDests();
+  $('#liveWhy').hidden = !!L || !!n || !S.relayOn;
+  $('#liveWhy').textContent = !host ? 'Only the host can go live.' : !S.studio ? 'Enter your studio first.' : !all.length ? 'Add where to stream: pick a platform above.' : !all.some((d) => d.on) ? 'Turn on Send for at least one destination.' : `${(PLATFORMS[all.find((d) => d.on)?.kind] || PLATFORMS.custom).name} needs ${all.find((d) => d.on && !/^rtmps?:\/\//i.test(d.url || '')) ? 'a server URL starting with rtmp:// or rtmps://' : 'a stream key'}. ${(PLATFORMS[all.find((d) => d.on)?.kind] || PLATFORMS.custom).hint}.`;
   $('#liveBtn').textContent = label;
   $('#liveBtn').disabled = !host || !S.studio || (!L && !n) || L?.phase === 'stopping';
   $('#liveBtn').classList.toggle('ending', on);
@@ -3226,17 +3293,28 @@ function renderLive() {
   $('#livePillText').textContent = on ? 'Live ' + fmtClock(Date.now() - L.t0) : L ? 'Starting…' : 'Go live';
   $('#liveStats').hidden = !L;
   $('#watchRow').hidden = !S.relayOn || !S.studio;
-  if (L) $('#liveStats').textContent = on && L.stats ? [`Live on ${L.names.join(', ')}`, L.stats.kbps != null && `${Math.round(L.stats.kbps).toLocaleString()} kbps`, L.stats.fps && `${Math.round(L.stats.fps)} fps`, L.slow && 'your upload is struggling'].filter(Boolean).join(' · ') : L.phase === 'connecting' ? 'Connecting to the relay…' : L.phase === 'live' ? `Live on ${L.names.join(', ')}` : '';
+  if (L) $('#liveStats').textContent = waking ? 'The live relay is starting up. This can take up to a minute the first time.' : on && L.stats ? [`Live on ${L.names.filter((x) => !(L.failed || []).includes(x)).join(', ') || 'nothing yet'}`, L.failed?.length && `${L.failed.join(', ')} failed`, L.stats.kbps != null && `${Math.round(L.stats.kbps).toLocaleString()} kbps`, L.stats.fps && `${Math.round(L.stats.fps)} fps`, L.slow && 'your upload is struggling'].filter(Boolean).join(' · ') : L.phase === 'connecting' ? 'Connecting to the relay…' : L.phase === 'live' ? `Live on ${L.names.join(', ')}` : '';
 }
 async function goLive() {
   if (S.live) return stopLive();
   if (!isHost() || !S.studio) return;
-  const dests = readyDests();
+  const all = liveDests(), ready = readyDests(), dests = ready;
+  const idx = all.map((d, i) => [d, i]).filter(([d]) => d.on && /^rtmps?:\/\//i.test(d.url || '') && (d.key || d.kind === 'custom')).map(([, i]) => i);
   if (!dests.length) { setTab('stream'); return toast('Add a destination and its stream key first.', { err: true }); }
+  L_STATUS = {};
   const mime = pickLiveMime();
   if (!mime || !canvas.captureStream) return toast('This browser can’t stream. Use Chrome or Edge.', { err: true });
-  S.live = { phase: 'connecting', names: dests.map((d) => (PLATFORMS[d.kind] || PLATFORMS.custom).name), warned: new Set() };
+  S.live = { phase: 'connecting', names: dests.map((d) => (PLATFORMS[d.kind] || PLATFORMS.custom).name), warned: new Set(), t1: Date.now() };
   renderLive();
+  const Lc = S.live;
+  // Never hang on "Connecting…": say we're waking the relay, then give up with a clear message.
+  Lc.wakeTimer = setInterval(() => { if (S.live !== Lc || Lc.phase !== 'connecting') return clearInterval(Lc.wakeTimer); renderLive(); }, 1000);
+  Lc.giveUp = setTimeout(() => {
+    if (S.live !== Lc || Lc.phase !== 'connecting') return;
+    try { Lc.ws?.close(4100); } catch {}
+    endLive(Lc);
+    toast('The live relay didn’t answer, so nothing went out. Try Go live again in a moment.', { err: true, ms: 10000, action: ['Try again', goLive] });
+  }, CONNECT_TIMEOUT);
   let url;
   try { ({ url } = await api('relay', creds())); }
   catch (e) { S.live = null; renderLive(); return toast(e.message, { err: true }); }
@@ -3247,12 +3325,21 @@ async function goLive() {
   ws.onmessage = (ev) => {
     let m; try { m = JSON.parse(ev.data); } catch { return; }
     if (m.t === 'ready') startFeed(L, mime);
+    else if (m.t === 'dest') {
+      const at = idx[m.i]; if (at == null) return;
+      L_STATUS[at] = { state: m.state, reason: m.reason || '' };
+      const nm = (PLATFORMS[all[at]?.kind] || PLATFORMS.custom).name;
+      if (m.state === 'failed') { L.failed = [...(L.failed || []), nm]; toast(`Not reaching ${nm}: ${m.reason}. The other destinations keep going.`, { err: true, ms: 10000 }); }
+      renderDests(true); renderLive();
+    }
     else if (m.t === 'live' && L.phase === 'connecting') {
-      L.phase = 'live'; L.t0 = Date.now(); L.timer = setInterval(renderLive, 1000); toast(`You’re live on ${L.names.join(' and ')}.`); renderDock();
+      clearTimeout(L.giveUp);
+      L.phase = 'live'; L.t0 = Date.now(); L.timer = setInterval(renderLive, 1000); renderDock();
+      setTimeout(() => { if (S.live !== L) return; const ok = L.names.filter((n) => !(L.failed || []).includes(n)); toast(ok.length ? `You’re live on ${ok.join(' and ')}.${L.failed?.length ? ` ${L.failed.join(' and ')} failed.` : ''}` : 'The relay is running, but no destination accepted the stream.', { err: !ok.length || !!L.failed?.length }); }, 1500);
       setStage({ live: { on: true, since: L.t0, links: dests.map((d) => ({ kind: d.kind, url: watchUrl(d) })).filter((x) => x.url) } });
     }
     else if (m.t === 'stats') { L.stats = m; renderLive(); }
-    else if (m.t === 'warn' && !L.warned.has(m.message)) { L.warned.add(m.message); toast('Relay: ' + m.message, { err: true }); }
+    else if (m.t === 'warn' && !L.warned.has(m.message)) { L.warned.add(m.message); toast('Streaming problem: ' + m.message, { err: true }); }
     else if (m.t === 'error') toast(m.message, { err: true });
   };
   ws.onclose = (ev) => {
@@ -3288,13 +3375,20 @@ function stopLive() {
   setTimeout(() => { if (S.live === L) endLive(L); }, 4000);
 }
 function endLive(L) {
-  clearInterval(L.timer);
+  clearInterval(L.timer); clearTimeout(L.giveUp); clearInterval(L.wakeTimer); L_STATUS = {};
   if (L.phase === 'live' || L.t0) setStage({ live: null });
   try { L.rec?.state !== 'inactive' && L.rec?.stop(); } catch {}
   L.vs?.getTracks().forEach((t) => t.stop());
   S.live = null; renderLive(); renderDock();
 }
 $('#liveBtn').onclick = goLive;
+let wokeAt = 0;
+/** Opening Go live wakes a sleeping relay, so it's ready by the time the host clicks. */
+function wakeRelay() {
+  if (!S.relayOn || !isHost() || !S.studio || Date.now() - wokeAt < 5 * 60_000) return;
+  wokeAt = Date.now();
+  api('relayWake', creds()).catch(() => {});
+}
 
 function pickMime() {
   const opts = ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm', 'video/mp4;codecs=avc1,mp4a', 'video/mp4'];
@@ -3320,12 +3414,14 @@ function toggleRecord() {
     const blob = new Blob(chunks, { type: recorder.mimeType || 'video/webm' });
     S.rec = null;
     wsSend({ type: 'recording', on: false });
+    if (isHost()) setStage({ rec: null });
     renderDock();
     showRecording(blob, dur);
   };
   recorder.start(1000);
   S.rec = { recorder, t0, timer: setInterval(renderDock, 500) };
   wsSend({ type: 'recording', on: true });
+  if (isHost()) setStage({ rec: { on: true, since: t0 } }); // everyone sees the REC badge for as long as it runs
   toast('Recording the stage. Everything you see is captured.');
   renderDock();
 }
@@ -3527,8 +3623,12 @@ function renderDock() {
   rec.classList.toggle('recording', !!S.rec);
   $('#recLabel').textContent = S.rec ? fmtTime(Date.now() - S.rec.t0) : 'Record';
   rec.disabled = !S.studio;
-  $('#recPill').hidden = !S.rec;
-  if (S.rec) $('#recPillText').textContent = 'Recording ' + fmtTime(Date.now() - S.rec.t0);
+  // Everyone in the studio sees when the show is recorded or live, not just the host (consent).
+  const shared = S.studio ? S.state : null, onAir = !!(S.live?.phase === 'live' || shared?.live?.on), recSince = S.rec?.t0 || (shared?.rec?.on && shared.rec.since);
+  $('#recPill').hidden = !recSince && !(onAir && !isHost());
+  $('#recPill').classList.toggle('compact', !!recSince && onAir);
+  $('#recPillText').textContent = recSince ? 'Rec ' + fmtTime(Date.now() - recSince) : 'Live';
+  $('#recPill').title = recSince ? 'This show is being recorded' : 'This show is live';
   $('#leaveBtn').disabled = !S.studio;
   renderDockNote();
 }
@@ -3627,7 +3727,7 @@ function openDlg(id) {
   const d = $('#' + id);
   if (!d.open) d.showModal();
   if (id === 'settingsDlg') listDevices();
-  if (id === 'liveDlg') renderLive();
+  if (id === 'liveDlg') { renderLive(); wakeRelay(); }
   if (id === 'helpDlg') { $('#helpSearch').value = ''; renderHelp(''); $('#helpSearch').focus(); }
 }
 function setTab(tab) {
@@ -3900,17 +4000,17 @@ $('#camBtn').onclick = () => setCam(!S.local.camOn);
 $('#recBtn').onclick = toggleRecord;
 $('#leaveBtn').onclick = () => {
   const lose = [S.live && 'end the live stream', S.rec && 'stop the recording (you can still save it)', isHost() && S.peers.size && `hand the studio to ${S.peers.size === 1 ? 'your guest' : 'a guest'}`].filter(Boolean);
-  if (!lose.length) return leave();
+  if (!lose.length) return leave('left');
   $('#leaveWhat').textContent = 'Leaving will ' + lose.join(', ') + '.';
   $('#leaveDlg').showModal();
 };
-$('#leaveGo').onclick = () => { $('#leaveDlg').close(); leave(); };
+$('#leaveGo').onclick = () => { $('#leaveDlg').close(); leave('left'); };
 
-function leave() {
+function leave(why) {
   if (!S.studio) return;
   if (S.rec) S.rec.recorder.stop();
   if (S.live) stopLive();
-  beaconLeave();
+  beaconLeave(why);
   outbox = [];
   teardownPeers();
   stopPresentation(); stopCam(); stopMic();
@@ -3926,7 +4026,7 @@ function leave() {
   setPhase('offline');
   toast('You left the studio.');
 }
-addEventListener('beforeunload', (e) => { if (S.studio && (S.rec || S.peers.size)) { e.preventDefault(); e.returnValue = ''; } });
+addEventListener('beforeunload', (e) => { if (S.studio && (S.rec || S.live || S.peers.size)) { e.preventDefault(); e.returnValue = ''; } });
 
 // Fullscreen stage
 
@@ -4192,6 +4292,7 @@ function renderCallin() {
 async function startKnock(code, callin) {
   S.knockCode = code;
   $('#enterFields').hidden = true; $('#knockWait').hidden = false;
+  $('#knockWaitH').textContent = 'Waiting for the host';
   $('#knockMsg').textContent = callin ? 'You’re in the call-in queue. The host will bring you in shortly.' : 'This studio is locked. The host has been told you’re here.';
   try {
     const r = await api('knock', { studio: code, dev: deviceId(), name: S.name || 'Caller', callin: !!callin, note: $('#knockNote')?.value || '' });
@@ -4201,13 +4302,26 @@ async function startKnock(code, callin) {
       if (!S.knock || S.knock.code !== code) return;
       const st = await api('knockPoll', { studio: code, id: r.id, tok: r.tok });
       if (st.status === 'admitted') { S.knock = null; $('#knockMsg').textContent = 'You’re in. Connecting…'; await join(code, { pass: st.pass, callin: !!callin }); return; }
-      if (st.status === 'declined') { S.knock = null; $('#knockMsg').textContent = 'The host couldn’t take you right now.'; return; }
+      if (st.status === 'declined') { S.knock = null; $('#knockWaitH').textContent = 'Not this time'; $('#knockMsg').textContent = 'The host couldn’t take you right now.'; return; }
     }
   } catch (e) { $('#knockMsg').textContent = e.message; S.knock = null; }
 }
+// A guest who arrives before the host: wait in the green room and come in as soon as the studio opens.
+async function waitForHost(code, msg) {
+  const gen = (S.waitHost = (S.waitHost || 0) + 1);
+  $('#enterFields').hidden = true; $('#knockWait').hidden = false;
+  $('#knockWaitH').textContent = 'Waiting for the host';
+  $('#knockMsg').textContent = msg || 'The host hasn’t opened this studio yet. We’ll bring you in as soon as they do.';
+  for (;;) {
+    await new Promise((res) => setTimeout(res, 4000));
+    if (S.waitHost !== gen || !$('#enterDlg').open || S.studio) return;
+    try { await join(code, { noWait: true }); if (S.studio) return; }
+    catch (e) { if (e.status !== 404) { $('#knockMsg').textContent = e.message; return; } }
+  }
+}
 $('#knockCancel').onclick = () => {
   if (S.knock) api('knockCancel', { studio: S.knock.code, id: S.knock.id, tok: S.knock.tok }).catch(() => {});
-  S.knock = null; $('#knockWait').hidden = true; $('#enterFields').hidden = false;
+  S.knock = null; S.waitHost = (S.waitHost || 0) + 1; $('#knockWait').hidden = true; $('#enterFields').hidden = false;
 };
 function kickedOut(msg) { leave(); toast(msg || 'The host removed you from this studio.', { err: true, ms: 6000 }); }
 
@@ -4463,7 +4577,7 @@ async function askProducer(text) {
   let reply = '';
   const fail = (msg) => { upsertAI({ ...ans, text: msg, error: true, done: true }); $('#cmdReply').textContent = msg; $('#cmdReply').classList.add('err'); };
   try {
-    const res = await fetch('/api/ai', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(house ? { mode: 'agent', house: true, studio: S.studio, messages: [...history, { role: 'user', text }], ctx: producerCtx() } : { mode: 'agent', provider: prov, apiKey: key, model: store.get('aiModel:' + prov, ''), messages: [...history, { role: 'user', text }], ctx: producerCtx() }) });
+    const res = await fetch('/api/ai', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(house ? { mode: 'agent', house: true, ...creds(), messages: [...history, { role: 'user', text }], ctx: producerCtx() } : { mode: 'agent', provider: prov, apiKey: key, model: store.get('aiModel:' + prov, ''), messages: [...history, { role: 'user', text }], ctx: producerCtx() }) });
     if (res.headers.get('X-AI-Left') != null) { S.houseLeft = Number(res.headers.get('X-AI-Left')); renderAIPanel(); }
     if (!res.ok) { const j = await res.json().catch(() => ({})); throw new Error(j.error || `The AI request failed (${res.status}).`); }
     const reader = res.body.getReader(), dec = new TextDecoder();
@@ -4657,7 +4771,7 @@ $('#enterForm').addEventListener('submit', async (e) => {
   if (!code) { $('#enterErr').textContent = 'Paste the studio code your host sent you.'; $('#enterErr').hidden = false; return $('#enterCode').focus(); }
   S.name = name; store.set('name', name); $('#nameInput').value = name;
   busy($('#enterGo'));
-  try { await join(code, { callin: S.callin && enterMode === 'join' }); }
+  try { await join(code, { callin: S.callin && enterMode === 'join', create: enterMode !== 'join' }); }
   catch (err) { setEnterMode(enterMode); showEnterErr(err.message); setPhase('offline'); }
   finally { busy($('#enterGo'), false); }
 });
@@ -4685,20 +4799,25 @@ $('#heroSchedule').onclick = () => openWizard();
 $('#enterStage').onclick = () => needAccountThen(() => openEnter('create'));
 $('#landJoin').addEventListener('submit', (e) => {
   e.preventDefault();
-  const code = parseCode($('#landCode').value);
+  const raw = $('#landCode').value, code = parseCode(raw), kind = linkKind(raw);
   if (!code) { $('#landCode').focus(); return toast('Paste the invite link or code you were sent.', { err: true }); }
+  if (kind === 'w') return toast('That’s a watch link, for viewers.', { action: ['Open it', () => { location.href = '/w/' + code; }], ms: 8000 });
+  if (kind === 'c') S.callin = true;
   openEnter('join', code);
 });
 $('#recDlg').addEventListener('close', () => { $('#recVideo').pause(); });
+// Close buttons inside forms are type="button", so Enter submits the form instead of closing the dialog.
+$$('button[data-close]').forEach((b) => b.addEventListener('click', () => b.closest('dialog')?.close('cancel')));
 
 // ---------------------------------------------------------------- keyboard
 addEventListener('keydown', (e) => {
   if (e.metaKey || e.ctrlKey || e.altKey) return;
-  const tag = document.activeElement?.tagName;
-  if (['INPUT', 'TEXTAREA', 'SELECT'].includes(tag) || document.querySelector('dialog[open]')) return;
+  const ae = document.activeElement, tag = ae?.tagName;
+  // Typing is never a shortcut: inputs, and any contenteditable (the show title is "plaintext-only").
+  if (['INPUT', 'TEXTAREA', 'SELECT'].includes(tag) || ae?.isContentEditable || document.querySelector('dialog[open]')) return;
   const k = e.key.toLowerCase();
   if (k === 'escape') { if (editor.on) { e.preventDefault(); setEditing(false); } return; } // never swallow Esc for menus
-  if (!store.get('keys', true) || document.activeElement?.closest?.('button, a, [role="tab"], [role="radio"], [contenteditable="true"], .popover')) return;
+  if (!store.get('keys', true) || ae?.closest?.('button, a, [role="tab"], [role="radio"], [contenteditable]:not([contenteditable="false"]), .popover')) return;
   const act = {
     m: () => setMic(!(S.local.micOn && S.local.audio)),
     v: () => setCam(!S.local.camOn),
@@ -4827,3 +4946,6 @@ if (linkCode) openEnter('join', linkCode);
 window.__gather = S; // handy for debugging in the console
 window.__acct = acct;
 window.__cap = cap;
+$('#liveOffRec').onclick = () => { $('#liveDlg').close(); if (!S.rec) toggleRecord(); };
+$('#audioUnblock').onclick = () => tryPlayAll(); // the pointerdown handler above does the unmuting
+setInterval(() => { if (S.studio && !S.rec && S.state?.rec?.on) renderDock(); }, 1000); // guests' REC timer

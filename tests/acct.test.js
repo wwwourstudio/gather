@@ -48,6 +48,11 @@ google.listen(0, async () => {
     const pat = await post(port, 'account', 'signup', { email: 'pat@example.com', password: 'correct horse', name: 'Pat', agree: true });
     const g3 = await post(port, 'account', 'google', { accessToken: 'link' });
     check('Google links to an existing account with the same email', g3.user?.id === pat.user?.id && g3.created === false);
+    // Sign-up doesn't verify email, so whoever registered it first may not own it: once Google proves the real
+    // owner, the earlier password and its sessions stop working (no pre-account takeover).
+    const oldPass = await post(port, 'account', 'login', { email: 'pat@example.com', password: 'correct horse' });
+    const oldSess = await post(port, 'account', 'me', {}, pat.token);
+    check('linking Google retires the unverified password and its sessions', oldPass.status === 401 && oldSess.status === 401, `${oldPass.status} ${oldSess.status}`);
     const bad = await post(port, 'account', 'google', { accessToken: 'wrong-aud', agree: true });
     check('a token issued for another site is refused', bad.status === 401, `${bad.status} ${bad.error}`);
     const junk = await post(port, 'account', 'google', { accessToken: 'nope', agree: true });

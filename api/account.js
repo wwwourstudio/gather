@@ -1,5 +1,5 @@
 // Vercel serverless entry: POST /api/account?action=…  (accounts + scheduled streams)
-const { handleAccount, authUser } = require('../lib/accounts');
+const { handleAccount, authUser, mailOrigin } = require('../lib/accounts');
 const { streamActions, STREAM_PUBLIC } = require('../lib/streams');
 
 function originOf(req) {
@@ -7,6 +7,12 @@ function originOf(req) {
   const host = req.headers['x-forwarded-host'] || req.headers.host;
   const proto = req.headers['x-forwarded-proto'] || (String(host).startsWith('localhost') ? 'http' : 'https');
   return `${proto}://${host}`;
+}
+
+/** The caller's address. On Vercel the platform sets these headers itself; elsewhere it's the socket's address. */
+function ipOf(req) {
+  const h = req.headers || {};
+  return String(h['x-vercel-forwarded-for'] || h['x-real-ip'] || (process.env.VERCEL ? String(h['x-forwarded-for'] || '').split(',')[0] : '') || req.socket?.remoteAddress || '').trim().slice(0, 64);
 }
 
 async function route(action, body, ctx) {
@@ -23,7 +29,10 @@ async function handler(req, res) {
   let body = req.body;
   if (typeof body === 'string') { try { body = JSON.parse(body || '{}'); } catch { body = {}; } }
   const auth = String(req.headers.authorization || '');
-  const ctx = { token: auth.startsWith('Bearer ') ? auth.slice(7) : '', origin: originOf(req) };
+  const origin = originOf(req);
+  // Links in emails only ever use the configured address; a local dev server may use its own localhost address.
+  const local = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin) && !process.env.VERCEL;
+  const ctx = { token: auth.startsWith('Bearer ') ? auth.slice(7) : '', origin, mailOrigin: mailOrigin() || (local ? origin : ''), ip: ipOf(req) };
   try {
     const out = await route(action, body || {}, ctx);
     res.statusCode = 200; res.setHeader('Content-Type', 'application/json'); res.end(JSON.stringify(out));
@@ -37,3 +46,4 @@ async function handler(req, res) {
 module.exports = handler;
 module.exports.route = route;
 module.exports.originOf = originOf;
+module.exports.ipOf = ipOf;

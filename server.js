@@ -41,7 +41,8 @@ http.createServer((req, res) => {
     });
     return;
   }
-  let p = decodeURIComponent(u.pathname);
+  let p;
+  try { p = decodeURIComponent(u.pathname); } catch { res.writeHead(400); return res.end('Bad request'); }
   if (p === '/' || p.startsWith('/s/') || p.startsWith('/c/')) p = '/index.html';
   else if (p.startsWith('/w/')) p = '/watch.html';
   else if (p === '/privacy' || p === '/terms') p += '.html';
@@ -53,3 +54,6 @@ http.createServer((req, res) => {
     res.end(data);
   });
 }).listen(PORT, () => console.log(`gather studio → http://localhost:${PORT}`));
+// One bad request must never drop every studio on a self-hosted server: log and keep serving.
+process.on('uncaughtException', (e) => console.error('Uncaught error (server kept running):', e));
+process.on('unhandledRejection', (e) => console.error('Unhandled rejection (server kept running):', e));

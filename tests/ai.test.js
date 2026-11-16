@@ -58,8 +58,14 @@ server.listen(0, async () => {
   check('JSON replies (ChatGPT, Gemini, Grok) keep only valid actions', j.reply === 'Switching now.' && JSON.stringify(j.actions) === '[{"type":"scene","name":"Solo"}]', JSON.stringify(j));
   // house allowance: hosts without a key get a daily allowance on the owner's key, then a clear message
   const fakeRes = () => { const r = { statusCode: 0, headers: {}, body: '' }; r.setHeader = (k, v) => { r.headers[k.toLowerCase()] = v; }; r.write = (d) => { r.body += d; }; r.end = (d) => { if (d) r.body += d; r.done = true; }; return r; };
-  const req = { headers: { 'x-forwarded-for': '203.0.113.9' }, socket: {} };
-  const ask = async () => { const r = fakeRes(); await handleAI(req, r, { mode: 'agent', house: true, studio: 'gather-house1', messages: [{ role: 'user', text: 'Switch to solo' }], ctx: { name: 'Sam', scenes: ['Solo'] } }); return r; };
+  const req = { headers: { 'x-forwarded-for': '203.0.113.9' }, socket: { remoteAddress: '203.0.113.9' } };
+  // The allowance belongs to the host of an open studio: seed one host in the in-memory store.
+  const { store } = require('../lib/store');
+  await store.pipe([['HSET', 'g:gather-house1:m', 'h1', JSON.stringify({ id: 'h1', tok: 'tok-house-1' })], ['SET', 'g:gather-house1:host', 'h1']]);
+  const askAs = async (who) => { const r = fakeRes(); await handleAI(req, r, { mode: 'agent', house: true, studio: 'gather-house1', ...who, messages: [{ role: 'user', text: 'Switch to solo' }], ctx: { name: 'Sam', scenes: ['Solo'] } }); return r; };
+  const ask = () => askAs({ id: 'h1', tok: 'tok-house-1' });
+  const stranger = await askAs({ studio: 'gather-made-up', id: 'x', tok: 'y' });
+  check('a made-up studio can’t spend the allowance', stranger.statusCode === 403, String(stranger.statusCode));
   check('config exposes the allowance, never the key', JSON.stringify(houseInfo()) === '{"provider":"claude","daily":2}');
   const before = calls.length;
   const h1 = await ask(), h2 = await ask(), h3 = await ask();
