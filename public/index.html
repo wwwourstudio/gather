@@ -552,6 +552,11 @@
     <form method="dialog"><button class="icon-btn sm modal-close" aria-label="Close"><svg class="i sm" aria-hidden="true"><use href="/icons.svg#i-x"/></svg></button></form>
     <h2 id="liveH">Go live</h2>
     <div class="form live-body">
+          <div class="live-page" id="livePage">
+            <span class="lp-ic"><svg class="i" aria-hidden="true"><use href="/icons.svg#i-eye"/></svg></span>
+            <div class="lp-text"><b>Your watch page is already on</b><span>While you’re in the studio, viewers can watch and chat here with no platform in between.</span><code id="livePageUrl"></code></div>
+            <div class="lp-acts"><button type="button" class="btn sm primary" id="livePageCopy">Copy link</button><button type="button" class="btn sm ghost" id="livePageOpen">Open</button></div>
+          </div>
 
           <div class="fld live-sec" id="liveSec"><span>Destinations <em>stream to several at once</em></span>
             <ul class="dest-list" id="destList"></ul>
@@ -563,7 +568,7 @@
             <p class="hint live-why" id="liveWhy" hidden></p>
             <p class="hint live-stats" id="liveStats" hidden></p>
             <div class="row" id="watchRow" hidden><button type="button" class="btn sm" id="watchCopy">Copy watch page link</button><span class="hint" style="margin:0">One page for viewers, with the live player and links to every platform.</span></div>
-            <div class="soft-card" id="liveOff" hidden><p><b>Going live isn’t available on this site yet.</b> You can record your show now and upload it to YouTube or anywhere else afterwards.</p><button type="button" class="btn sm" id="liveOffRec">Record instead</button></div>
+            <div class="soft-card" id="liveOff" hidden><p><b>Streaming to other platforms isn’t set up on this site.</b> Your watch page above works now. You can also record and upload to YouTube afterwards.</p><button type="button" class="btn sm" id="liveOffRec">Record instead</button></div>
           </div>
           <hr>
           <div class="fld"><span>Format</span>

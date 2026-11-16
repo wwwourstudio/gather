@@ -5228,7 +5228,11 @@ function renderWatchSec() {
   if (window.__shopReady) { renderShop(); renderPoll(); renderEmotes(); }
   $('#wpNoPay').hidden = !cfg.supers || Object.values(cfg.pay).some(Boolean);
   renderHandle();
+  $('#livePage').hidden = !on || !isHost();
+  if (on) $('#livePageUrl').textContent = watchLinkUrl().replace(/^https?:\/\//, '');
 }
+$('#livePageCopy').onclick = () => copy(watchLinkUrl(), 'Watch link copied. Share it anywhere.');
+$('#livePageOpen').onclick = () => window.open(watchLinkUrl(), '_blank', 'noopener');
 function renderHandle() {
   const u = acct.user, h = u?.handle || '';
   $('#wpHost').textContent = location.host + '/w/';

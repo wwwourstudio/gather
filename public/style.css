@@ -121,12 +121,14 @@ body.on-air .watch-chip .lamp { background: var(--live); }
 .deck-layer.below { transform: translateY(60%); opacity: 0; pointer-events: none; }
 .scenes, .crew-list, .lobby-list { list-style: none; margin: 0; height: 100%; display: flex; gap: var(--sp-2); overflow-x: auto; padding: 2px 2px var(--sp-1); align-items: stretch; scrollbar-width: thin; }
 .scene, .crew-card, .crew-add { flex: none; width: 136px; }
-.sc-pv { position: relative; display: block; aspect-ratio: 16 / 9; border-radius: 6px; background: linear-gradient(135deg, #18305e, #1c2459 60%, #2b2d6b); overflow: hidden; }
-.sc-pv i { position: absolute; border-radius: 2px; }
-.pv-slot { background: rgba(226, 236, 255, 0.78); }
-.pv-chat { background: rgba(145, 70, 255, 0.8); }
-.pv-media { background: rgba(56, 189, 248, 0.75); }
-.pv-ai { background: rgba(217, 119, 87, 0.85); }
+/* Scene and template thumbnails: a miniature of the stage, drawn like the landing's studio. */
+.sc-pv { position: relative; display: block; aspect-ratio: 16 / 9; border-radius: 6px; background: linear-gradient(135deg, #1d3f47, #2a3566 55%, #3c3f74); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.06); overflow: hidden; }
+.sc-pv i { position: absolute; border-radius: 3px; }
+.pv-slot { background: radial-gradient(120% 90% at 30% 20%, #4a6fc0, #1b2a55); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.14); }
+.pv-slot:nth-of-type(2n) { background: radial-gradient(120% 90% at 70% 20%, #7a5bc0, #251a4d); }
+.pv-chat { background: linear-gradient(180deg, rgba(167, 139, 250, 0.9), rgba(124, 58, 237, 0.75)); }
+.pv-media { background: linear-gradient(135deg, #e2e8f0, #94a3b8); }
+.pv-ai { background: linear-gradient(135deg, #7dd3fc, #3b82f6); }
 .pv-tip { background: rgba(255, 255, 255, 0.95); }
 .pv-image, .pv-text { background: rgba(255, 255, 255, 0.35); }
 .pv-callin { background: rgba(255, 255, 255, 0.9); }
@@ -938,3 +940,14 @@ body.on-air .wp-url::before { background: var(--live); }
 .msg.vm-msg { border-radius: var(--r-md); padding: var(--sp-2) var(--sp-3); display: grid; gap: 6px; }
 .msg.vm-msg .row { flex-wrap: wrap; }
 .code.sm { font-size: 14px; padding: var(--sp-2); overflow-wrap: anywhere; }
+
+/* Go live: your own watch page comes first, because it works with no setup. */
+.live-page { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: var(--sp-3); align-items: center; padding: var(--sp-4); border-radius: var(--r-lg); background: linear-gradient(135deg, color-mix(in srgb, var(--accent) 16%, transparent), color-mix(in srgb, #a78bfa 10%, transparent)); border: 1px solid var(--accent-line); }
+.live-page[hidden] { display: none; }
+.lp-ic { width: 40px; height: 40px; border-radius: var(--r-md); display: grid; place-items: center; background: var(--accent); color: #fff; }
+.lp-text { display: grid; gap: 2px; min-width: 0; }
+.lp-text b { font-size: var(--fs-14); }
+.lp-text span { font-size: var(--fs-12); color: var(--ink-2); }
+.lp-text code { margin-top: 4px; font: 600 12px var(--font-mono); color: var(--accent-text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lp-acts { display: flex; gap: var(--sp-1); }
+@media (max-width: 600px) { .live-page { grid-template-columns: auto minmax(0, 1fr); } .lp-acts { grid-column: 1 / -1; } }
