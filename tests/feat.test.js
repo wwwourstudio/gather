@@ -6,7 +6,13 @@ const SP = process.argv[2];
   const a = await mk(), b = await mk();
   await a.goto((process.env.GATHER_URL || 'http://localhost:8080') + '/'); await a.click('#enterStage'); await a.fill('#enterName', 'Alex Morgan'); await a.click('#enterGo');
   await a.waitForSelector('#inviteDlg[open]'); const code = await a.textContent('#inviteCode'); await a.click('#inviteDlg .modal-close');
-  await b.goto((process.env.GATHER_URL || 'http://localhost:8080') + '/s/' + code); await b.waitForSelector('#enterDlg[open]'); await b.fill('#enterName', 'Jordan Lee'); await b.click('#enterGo');
+  await b.goto((process.env.GATHER_URL || 'http://localhost:8080') + '/s/' + code); await b.waitForSelector('#enterDlg[open]');
+  // Picking a background in the green room must not turn an invited guest's "Join studio" into "Create studio".
+  await b.click('#grFx [data-fx="blur"]'); await b.click('#grFx [data-fx="none"]');
+  const goLabel = (await b.textContent('#enterGo')).trim();
+  console.log('guest still joins after picking a background:', goLabel === 'Join studio', `(${goLabel})`);
+  if (goLabel !== 'Join studio') console.log('FAIL a background chip switched the guest to', goLabel);
+  await b.fill('#enterName', 'Jordan Lee'); await b.click('#enterGo');
   await b.waitForFunction(() => [...window.__gather.peers.values()].some(p => p.conn === 'connected'), null, { timeout: 15000 });
   // 0. backstage: the guest waits off stage until the host clicks their picture; the deck folds away and back
   const bid = await b.evaluate(() => window.__gather.id);
