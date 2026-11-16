@@ -27,7 +27,12 @@ const SP = process.argv[2];
   await a.click('[data-deck="scenes"]');
   // 1. template
   await a.click('[data-tab="look"]'); await a.click('.look-seg:visible [data-look="layouts"]'); await a.click('.tpl:has-text("Chat-led show")');
-  await b.waitForFunction(() => window.__gather.state.layout === 'custom' && window.__gather.state.scene === 'p-chat' && window.__gather.state.elements.some(e => e.type === 'chat'), null, { timeout: 5000 });
+  await b.waitForFunction(() => window.__gather.state.layout === 'custom' && window.__gather.state.scene === 'p-chat' && window.__gather.state.elements.some(e => e.type === 'chat'), null, { timeout: 5000 }).catch(async (e) => {
+    // This step fails now and then in CI. Show both sides so the next failure says why (slow sync, or the host never applied it).
+    const view = (p) => p.evaluate(() => ({ layout: window.__gather.state.layout, scene: window.__gather.state.scene, els: window.__gather.state.elements.map((x) => x.type).join(','), host: window.__gather.host === window.__gather.id, phase: window.__gather.phase }));
+    console.log('  template step timed out · host:', JSON.stringify(await view(a)), '· guest:', JSON.stringify(await view(b)));
+    throw e;
+  });
   console.log('template synced to guest:', await b.evaluate(() => window.__gather.state.elements.map(e => e.type).join(',')));
   // 2. text element + edit
   await a.click('[data-add="text"]'); await a.fill('#elProps textarea', 'Episode 12: Building in public');

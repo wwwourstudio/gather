@@ -1124,11 +1124,26 @@ function hexA(hex, a) { const n = parseInt(hex.slice(1), 16); return `rgba(${n >
 function contrastInk(hex) { const n = parseInt(hex.slice(1), 16); const [r, gg, b] = [n >> 16, (n >> 8) & 255, n & 255]; return (0.299 * r + 0.587 * gg + 0.114 * b) > 170 ? '#111827' : '#ffffff'; }
 
 // Render loop: rAF while visible; a worker clock keeps recordings smooth in background tabs.
-let lastFrame = 0;
-function frame() { lastFrame = performance.now(); S.local.pres?.draw?.(); draw(); flushEditorLayers(); meters(); speakingCards(); requestAnimationFrame(frame); }
+// Frame budget: the program is captured at 30 fps, so drawing faster only burns CPU. On a slow machine (no GPU,
+// one core) a frame can cost 50–100 ms; back off so drawing never takes more than about half the main thread
+// (80 % while recording or live), leaving time for signalling, chat and clicks.
+let lastFrame = 0, nextFrame = 0, frameGap = 1000 / 30;
+function drawProgram() {
+  const t0 = performance.now();
+  lastFrame = t0; S.local.pres?.draw?.(); draw(); flushEditorLayers();
+  const cost = performance.now() - t0, onAir = !!(S.rec || S.live);
+  frameGap = Math.max(editor.on ? 0 : 1000 / 30 - 2, cost * (onAir ? 1.25 : 2));
+  nextFrame = t0 + frameGap;
+}
+function frame(now) {
+  requestAnimationFrame(frame);
+  if (now >= nextFrame - 1) drawProgram();
+  meters(); speakingCards();
+}
 requestAnimationFrame(frame);
+// rAF stops in background tabs; a worker clock keeps the program (and so recordings) drawing there.
 const clock = new Worker(URL.createObjectURL(new Blob(['setInterval(()=>postMessage(0),33)'], { type: 'text/javascript' })));
-clock.onmessage = () => { if (performance.now() - lastFrame > 120) { S.local.pres?.draw?.(); draw(); flushEditorLayers(); } };
+clock.onmessage = () => { const now = performance.now(); if (now - lastFrame > Math.max(120, frameGap + 60) && now >= nextFrame) drawProgram(); };
 
 function meters() {
   const lvl = Math.min(100, (localMeter?.level() || 0) * 400 * (S.local.micOn ? 1 : 0));
