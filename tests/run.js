@@ -65,7 +65,11 @@ async function main() {
     const why = verdict(result);
     const secs = ((Date.now() - t0) / 1000).toFixed(0);
     console.log(`${why ? '✗' : '✓'} ${name.padEnd(7)} ${secs.padStart(3)}s${why ? '  ' + why : ''}`);
-    if (why) { failures.push(name); fs.writeFileSync(path.join(OUT, `${name}.log`), result.out); }
+    if (why) {
+      failures.push(name); fs.writeFileSync(path.join(OUT, `${name}.log`), result.out);
+      // Show the end of the log inline so a CI failure can be read without downloading the artifact.
+      console.log(result.out.trim().split('\n').slice(-20).map((l) => `    ${l}`).join('\n'));
+    }
   }
   server?.kill();
   console.log(failures.length ? `\n${failures.length} of ${suites.length} failed. Logs: tests/out/<suite>.log` : `\nAll ${suites.length} suites passed. Screenshots: tests/out/`);
