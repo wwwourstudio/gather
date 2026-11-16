@@ -11,6 +11,13 @@ body { background: #05070d; }
 .wv-title { display: flex; align-items: center; gap: var(--sp-2); min-width: 0; flex: 1; }
 .wv-title h1 { font: 700 15px/1.2 var(--font-display); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 .wv-meta { color: var(--ink-3); font-size: 12px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+/* The page's own address, always visible: the thing to remember and share. */
+.wv-addr { display: inline-flex; align-items: center; gap: 8px; height: 32px; padding: 0 10px; border-radius: var(--r-sm); border: 1px solid var(--accent-line); background: color-mix(in srgb, var(--accent) 7%, transparent); font: 600 12px/1 var(--font-mono); color: var(--accent-text); white-space: nowrap; min-width: 0; max-width: 34ch; }
+.wv-addr span { overflow: hidden; text-overflow: ellipsis; }
+.wv-addr:hover { background: color-mix(in srgb, var(--accent) 14%, transparent); }
+.wv-addr .lamp { width: 7px; height: 7px; box-shadow: none; }
+.wv.on-air .wv-addr .lamp { background: var(--live); }
+@media (max-width: 700px) { .wv-addr span { display: none; } .wv-own { display: none; } }
 .wv-own { color: var(--ink-3); font-size: 12px; text-decoration: none; white-space: nowrap; }
 .wv-own:hover { color: var(--ink); }
 
@@ -29,14 +36,14 @@ body { background: #05070d; }
 
 /* waiting state */
 .wv-empty { position: absolute; inset: 0; display: grid; place-content: center; justify-items: center; text-align: center; gap: var(--sp-2); padding: var(--sp-5); background: radial-gradient(80% 80% at 50% 40%, #121a30, #05070d); }
-.wv-empty b { font: 700 19px var(--font-display); }
+.wv-empty b { font: 700 clamp(17px, 2.2cqw, 22px)/1.2 var(--font-display); letter-spacing: -0.02em; max-width: 26ch; }
 .wv-empty span { color: var(--ink-2); font-size: 14px; max-width: 44ch; }
 .wv-orb { position: relative; width: 44px; height: 44px; margin-bottom: var(--sp-2); }
 .wv-orb i { position: absolute; inset: 0; border-radius: 50%; border: 2px solid var(--accent); opacity: 0; animation: wv-ping 2s var(--ease-out) infinite; }
 .wv-orb i + i { animation-delay: 1s; }
 @keyframes wv-ping { from { transform: scale(0.3); opacity: 0.9; } to { transform: scale(1.4); opacity: 0; } }
 
-.wv-unmute { position: absolute; left: 50%; top: var(--sp-4); transform: translateX(-50%); display: inline-flex; align-items: center; gap: var(--sp-2); padding: var(--sp-2) var(--sp-4); border-radius: 999px; background: var(--accent); color: #fff; font-weight: 700; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4); z-index: 3; }
+.wv-unmute { position: absolute; left: 50%; top: var(--sp-4); transform: translateX(-50%); display: inline-flex; align-items: center; gap: var(--sp-2); padding: var(--sp-2) var(--sp-4); border-radius: 999px; background: var(--accent); color: var(--accent-ink); font-weight: 700; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4); z-index: 3; }
 
 /* player controls: fade in on hover / tap / focus */
 .wv-ctrls { position: absolute; left: 0; right: 0; bottom: 0; min-width: 0; display: flex; align-items: center; gap: 4px; padding: 28px var(--sp-3) var(--sp-2); background: linear-gradient(transparent, rgba(0, 0, 0, 0.7)); opacity: 0; transition: opacity var(--dur) var(--ease-out); z-index: 2; }
@@ -72,9 +79,11 @@ body { background: #05070d; }
 .wv-sources + .wv-links, .wv-reacts + .wv-links { margin-left: auto; }
 
 /* chat */
-.wv-chat { display: grid; grid-template-rows: auto auto minmax(0, 1fr) auto; min-height: 0; border-left: 1px solid var(--line); background: var(--surface); position: relative; }
+/* Explicit rows, so the messages always take the slack and the composer stays at the bottom even when a row is empty. */
+.wv-chat { display: grid; grid-template-rows: auto auto auto minmax(0, 1fr) auto; min-height: 0; border-left: 1px solid var(--line); background: var(--surface); position: relative; }
 .wv-chat-head { display: flex; align-items: center; justify-content: space-between; padding: 0 var(--sp-4); height: 44px; border-bottom: 1px solid var(--line); }
 .wv-chat-head h2 { font-size: 13px; font-weight: 700; }
+.wv-chat-head { grid-row: 1; } .wv-tops { grid-row: 2; } .wv-cards { grid-row: 3; } .wv-msgs { grid-row: 4; } .wv-compose { grid-row: 5; }
 .wv-tops { display: flex; gap: var(--sp-1); padding: var(--sp-2) var(--sp-3); border-bottom: 1px solid var(--line); overflow-x: auto; scrollbar-width: none; }
 .wv-tops span { flex: none; display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px 3px 3px; border-radius: 999px; background: rgba(22, 163, 74, 0.16); border: 1px solid rgba(22, 163, 74, 0.4); font-size: 12px; font-weight: 600; white-space: nowrap; }
 .wv-tops span i { font-style: normal; padding: 1px 7px; border-radius: 999px; background: #16a34a; color: #fff; font-size: 11px; }
@@ -88,12 +97,22 @@ body { background: #05070d; }
 .wv-msgs li.paid.answered::after { content: " · answered"; color: var(--ink-3); font-size: 11px; }
 .wv-msgs li.pending { opacity: 0.8; border-style: dashed; }
 .wv-msgs li.hello { color: var(--ink-3); font-size: 12px; text-align: center; }
-.wv-newer { position: absolute; left: 50%; bottom: 64px; transform: translateX(-50%); padding: 4px 12px; border-radius: 999px; background: var(--accent); color: #fff; font-size: 12px; font-weight: 600; box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35); }
+.wv-newer { position: absolute; left: 50%; bottom: 64px; transform: translateX(-50%); padding: 4px 12px; border-radius: 999px; background: var(--accent); color: var(--accent-ink); font-size: 12px; font-weight: 600; box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35); }
 .wv-compose { padding: var(--sp-2) var(--sp-3) var(--sp-3); border-top: 1px solid var(--line); display: grid; gap: 4px; }
-.wv-composer { display: flex; gap: var(--sp-2); align-items: center; }
-.wv-me { flex: none; max-width: 92px; height: 40px; padding: 0 10px; border-radius: var(--r-sm); background: var(--fill); border: 1px solid var(--glass-border); color: var(--ok); font-size: 12px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* Composer: the message gets the full width; name, question, voice, emoji and tip sit in one row underneath. */
+.wv-composer { display: grid; gap: 6px; }
+.wv-tools { display: flex; align-items: center; gap: 2px; min-width: 0; }
+.wv-tool { display: inline-flex; align-items: center; gap: 6px; height: 32px; min-width: 32px; padding: 0 7px; justify-content: center; border-radius: var(--r-sm); color: var(--ink-2); font-size: 12px; font-weight: 600; transition: background var(--dur) var(--ease-out), color var(--dur) var(--ease-out); }
+.wv-tool:hover { background: var(--fill-hover); color: var(--ink); }
+.wv-tool .i { width: 18px; height: 18px; }
+.wv-tool[aria-pressed="true"] { background: rgba(250, 204, 21, 0.16); color: #facc15; }
+.wv-tool.tip { margin-left: 4px; padding: 0 10px 0 8px; background: rgba(22, 163, 74, 0.16); color: #4ade80; box-shadow: inset 0 0 0 1px rgba(22, 163, 74, 0.45); }
+.wv-tool.tip:hover { background: rgba(22, 163, 74, 0.26); color: #86efac; }
+.wv-send { position: absolute; right: 3px; top: 3px; width: 34px; height: 34px; display: grid; place-items: center; border-radius: var(--r-sm); background: var(--accent); color: #fff; }
+.wv-send:hover { background: var(--accent-hover); }
+.wv-send .i { width: 18px; height: 18px; }
+.wv-me { flex: none; max-width: 120px; height: 28px; padding: 0 10px; border-radius: var(--r-sm); background: var(--fill); border: 1px solid var(--glass-border); color: var(--ok); font-size: 12px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .wv-composer .input { flex: 1; min-width: 0; height: 40px; font-size: 16px; }
-.wv-composer .btn { height: 40px; }
 .wv-err { margin: 0; color: var(--danger); font-size: 12px; }
 
 /* sheets */
@@ -159,7 +178,7 @@ body { background: #05070d; }
 .wv-tabs { display: flex; gap: 2px; height: 100%; }
 .wv-tabs button { padding: 0 10px; font-size: 13px; font-weight: 600; color: var(--ink-3); border-bottom: 2px solid transparent; }
 .wv-tabs button[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--accent); }
-.wv-about { grid-row: 2 / 5; overflow-y: auto; padding: var(--sp-4); display: grid; gap: var(--sp-3); align-content: start; }
+.wv-about { grid-row: 2 / 6; overflow-y: auto; padding: var(--sp-4); display: grid; gap: var(--sp-3); align-content: start; }
 .wv-about h2 { font-size: 18px; }
 .wv-about-text { margin: 0; white-space: pre-wrap; color: var(--ink-2); font-size: 14px; line-height: 1.55; }
 .wv-about-links { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--sp-2); }
@@ -168,8 +187,6 @@ body { background: #05070d; }
 .wv-about-links a span { color: var(--ink-3); font-weight: 400; font-size: 12px; }
 .wv-chat.about .wv-tops, .wv-chat.about .wv-msgs, .wv-chat.about .wv-compose, .wv-chat.about .wv-newer { display: none; }
 /* super chat lives in the chat box */
-.wv-scbtn { flex: none; width: 40px; height: 40px; border-radius: var(--r-sm); background: #16a34a; color: #fff; font: 800 18px var(--font-display); }
-.wv-scbtn:hover { background: #15803d; }
 
 /* Full-screen watch: the video fills the screen and the chat floats over it on the right. */
 .wv.theater { grid-template-rows: minmax(0, 1fr); background: #000; }
@@ -203,7 +220,8 @@ body { background: #05070d; }
 .wv-mt .at { color: var(--accent-text); font-weight: 600; }
 .wv-msgs li.mention { background: color-mix(in srgb, var(--accent) 16%, transparent); box-shadow: inset 3px 0 0 var(--accent); }
 .wv-msgs li.q { background: rgba(250, 204, 21, 0.08); box-shadow: inset 3px 0 0 #facc15; }
-.wv-qb { font-size: 11px; font-weight: 700; color: #facc15; }
+.wv-qb { display: inline-flex; align-items: center; gap: 3px; font-size: 11px; font-weight: 700; color: #facc15; }
+.wv-qb .i { width: 13px; height: 13px; }
 .wv-acts { position: absolute; right: 4px; top: 2px; display: none; gap: 2px; background: var(--surface-3); border: 1px solid var(--line-2); border-radius: 8px; padding: 2px; }
 .wv-msgs li.row:hover .wv-acts, .wv-msgs li.row:focus-within .wv-acts { display: flex; }
 @media (hover: none) { .wv-acts { position: static; display: flex; background: none; border: 0; padding: 0; grid-column: 2; } }
@@ -214,11 +232,7 @@ body { background: #05070d; }
 
 /* composer: question toggle and emoji button inside the field */
 .wv-inputwrap { position: relative; flex: 1; min-width: 0; display: flex; }
-.wv-inputwrap .input { flex: 1; padding-right: 72px; }
-.wv-ib { position: absolute; top: 4px; width: 32px; height: 32px; border-radius: 6px; font-size: 16px; }
-#wAsk { right: 36px; opacity: 0.6; } #wEmoji { right: 4px; }
-#wAsk[aria-pressed="true"] { opacity: 1; background: rgba(250, 204, 21, 0.2); }
-.wv-ib:hover { background: var(--fill-hover); }
+.wv-inputwrap .input { flex: 1; padding-right: 46px; }
 .wv-compose { position: relative; }
 .wv-picker, .wv-mentions { position: absolute; bottom: calc(100% + 6px); right: var(--sp-3); left: var(--sp-3); max-height: 260px; overflow-y: auto; padding: var(--sp-2); border-radius: var(--r-md); background: var(--surface-3); border: 1px solid var(--line-2); box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45); z-index: 6; }
 .wv-picker { display: grid; grid-template-columns: repeat(8, 1fr); gap: 2px; }
@@ -257,7 +271,7 @@ body { background: #05070d; }
 .wv-card.up { border-color: #16a34a; background: linear-gradient(135deg, rgba(22, 163, 74, 0.25), var(--surface-2)); }
 
 /* Shop tab */
-.wv-shop { grid-row: 2 / 5; overflow-y: auto; padding: var(--sp-3); display: grid; gap: var(--sp-2); align-content: start; }
+.wv-shop { grid-row: 2 / 6; overflow-y: auto; padding: var(--sp-3); display: grid; gap: var(--sp-2); align-content: start; }
 .wv-products { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: var(--sp-2); }
 .wv-products a { display: grid; gap: 4px; padding: 6px; border-radius: var(--r-md); background: var(--fill); border: 1px solid var(--glass-border); color: var(--ink); text-decoration: none; }
 .wv-products a:hover { background: var(--fill-hover); }
@@ -295,7 +309,7 @@ body { background: #05070d; }
 
 /* voice questions: raise a hand and record */
 .wv-hand { --btn-bg: rgba(250, 204, 21, 0.14); --btn-line: rgba(250, 204, 21, 0.45); flex: none; }
-#wMic { right: 68px; } .wv-inputwrap .input { padding-right: 104px; }
+
 .wv-rec { display: flex; align-items: center; gap: var(--sp-4); padding: var(--sp-3); border-radius: var(--r-md); background: var(--surface-2); }
 .wv-recbtn { width: 64px; height: 64px; border-radius: 50%; border: 3px solid rgba(255, 255, 255, 0.85); display: grid; place-items: center; flex: none; }
 .wv-recbtn span { width: 26px; height: 26px; border-radius: 50%; background: #ef4444; transition: border-radius .15s, width .15s, height .15s; }
@@ -308,3 +322,6 @@ body { background: #05070d; }
 .wv-recinfo small { color: var(--ink-3); }
 .wv-transcript { margin: 0; padding: var(--sp-2) var(--sp-3); border-left: 3px solid var(--accent); color: var(--ink-2); font-size: 14px; }
 #wRecPlay { width: 100%; }
+
+/* An empty chat says what to do instead of showing a blank panel. */
+.wv-chat.quiet .wv-msgs::before { content: "No messages yet. Say hi — the host sees every message here."; margin: auto; max-width: 24ch; text-align: center; color: var(--ink-3); font-size: 13px; line-height: 1.5; }

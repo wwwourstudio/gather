@@ -83,6 +83,8 @@ function render(info) {
   const live = !!(info.found && info.live?.on);
   const onAir = live || W.direct.state === 'live';
   $('#wLive').hidden = !onAir;
+  $('#wv').classList.toggle('on-air', onAir);
+  $('#wAddr').textContent = location.host.replace(/^www\./, '') + location.pathname;
   $('#wLiveText').textContent = live ? 'Live · ' + clockText(info.live.since) : 'On air';
   $('#wViewers').hidden = !info.found;
   $('#wViewers').textContent = info.viewers ? `${info.viewers} watching` : '';
@@ -93,6 +95,7 @@ function render(info) {
   $('#wChatState').textContent = !info.found ? '' : w.chat === false ? 'Chat is off' : w.slow ? `Slow mode · ${w.slow}s` : '';
   $('#wCompose').hidden = !info.found || w.chat === false;
   renderChat(info.chat || []);
+  $('#wChat').classList.toggle('quiet', !$('#wMsgs li.row, #wMsgs li.paid'));
   renderTops(info.chat || []);
   renderAbout(info);
   renderShopUI(info); renderPollCard(info); renderQueueCard(info); renderHype(info); renderVertical(info);
@@ -138,7 +141,7 @@ function msgEl(m) {
   const b = document.createElement('b'); b.textContent = m.name; if (!mine) b.style.color = nameColor(m.name);
   const t = document.createElement('time'); const d = new Date(m.ts || Date.now()); t.dateTime = d.toISOString(); t.textContent = d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
   head.append(b, t);
-  if (m.q) { const q = document.createElement('span'); q.className = 'wv-qb'; q.textContent = '✋ Question'; head.append(q); }
+  if (m.q) { const q = document.createElement('span'); q.className = 'wv-qb'; q.innerHTML = '<svg class="i" aria-hidden="true"><use href="/icons.svg#i-hand"/></svg>Question'; head.append(q); }
   const lk = document.createElement('span'); lk.className = 'wv-like'; lk.textContent = m.likes ? `♥ ${m.likes}` : ''; head.append(lk);
   body.append(head, richText(m.text));
   const acts = document.createElement('div'); acts.className = 'wv-acts';

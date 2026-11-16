@@ -1237,7 +1237,7 @@ function addExternal(m) {
   const badge = document.createElement('span'); badge.className = 'pill caps src-' + m.src; badge.textContent = SRC_NAME[m.src] || m.src;
   const b = document.createElement('b'); b.textContent = m.name; if (m.color) b.style.color = m.color;
   who.append(badge, b);
-  if (m.q) { const q = document.createElement('span'); q.className = 'q-badge'; q.textContent = '✋ Question'; who.append(q); }
+  if (m.q) { const q = document.createElement('span'); q.className = 'q-badge'; q.innerHTML = `${icon('hand')}Question`; who.append(q); }
   if (m.paid) { const amt = document.createElement('span'); amt.className = 'paid-amt'; amt.textContent = m.paid; who.append(amt); }
   const txt = document.createElement('div'); txt.className = 'txt'; txt.textContent = m.text;
   li.append(who, txt, msgActions(m));
@@ -2534,6 +2534,7 @@ async function uploadAvatar(force) {
 
 // ---------------------------------------------------------------- account (sign in, profile, synced settings)
 const acct = { token: store.get('acctToken', ''), user: null };
+var landPending = '', landFrom = 'land'; // a watch-page name typed before signing in (landing or Show panel); claimed once they're in
 async function acctApi(action, body = {}) {
   let res;
   try {
@@ -2591,6 +2592,11 @@ function setUser(u, token) {
     if (u.avatar) rawSet('avatar', u.avatar);
   }
   renderUser(); renderPreview(); renderStreamPanel(); renderWatchSec();
+  if (typeof renderLandSlate === 'function') renderLandSlate();
+  if (u && landPending) {
+    const h = landPending; landPending = ''; $('#acctDlg').open && $('#acctDlg').close();
+    if (landFrom === 'show') { landFrom = 'land'; $('#wpHandle').value = h; $('#wpHandleForm').requestSubmit(); } else claimLanding(h);
+  }
 }
 function signedOut(msg) {
   acct.user = null; acct.token = ''; rawSet('acctToken', '');
@@ -3331,6 +3337,7 @@ function renderLive() {
   $('#liveBtn').disabled = !host || !S.studio || (!L && !n) || L?.phase === 'stopping';
   $('#liveBtn').classList.toggle('ending', on);
   $('#liveTop').classList.toggle('on-air', !!L);
+  document.body.classList.toggle('on-air', !!L);
   $('#livePillText').textContent = on ? 'Live ' + fmtClock(Date.now() - L.t0) : L ? 'Starting…' : 'Go live';
   $('#liveStats').hidden = !L;
   $('#watchRow').hidden = !S.relayOn || !S.studio;
@@ -3573,6 +3580,7 @@ function renderHeader() {
   $('#studioTitle').title = isHost() ? 'Click to rename the show' : '';
   $('#enterTop').hidden = !S.studio;
   if ($('#watchTop')) $('#watchTop').hidden = !S.studio || !isHost();
+  if (window.__watchReady && S.studio) $('#watchTopText').textContent = '/w/' + (myHandle() || S.studio);
   $('#liveTop').hidden = !S.studio || !isHost();
   document.body.classList.toggle('pre', !S.studio && S.phase !== 'reconnecting'); // landing: just the stage hero
   // Scheduled shows: on the landing page they sit under the hero (that's where you start one); inside a studio, in Go live.
@@ -4860,6 +4868,32 @@ $('#addSlot').onclick = openInvite;
 $('#enterTop').onclick = openInvite;
 $('#heroSchedule').onclick = () => openWizard();
 $('#enterStage').onclick = () => needAccountThen(() => openEnter('create'));
+// The landing's slate: claim a permanent watch-page name (signing up if needed), then open a studio.
+$('#landHost').textContent = location.host.replace(/^www\./, '') + '/w/';
+const landNote = (msg, err) => { $('#landClaimNote').textContent = msg; $('#landClaimNote').classList.toggle('err', !!err); };
+async function claimLanding(h) {
+  $('#landClaimGo').setAttribute('aria-busy', 'true');
+  try {
+    if (acct.user.handle !== h) { const r = await acctApi('handle', { handle: h }); setUser(r.user); }
+    landNote(`${location.host}/w/${h} is yours. Opening your studio…`);
+    openEnter('create');
+  } catch (err) { landNote(err.message, true); }
+  finally { $('#landClaimGo').removeAttribute('aria-busy'); }
+}
+$('#landClaim').addEventListener('submit', (e) => {
+  e.preventDefault();
+  const h = $('#landHandle').value.trim().toLowerCase();
+  if (!/^[a-z0-9][a-z0-9-]{2,23}$/.test(h)) return landNote('Use 3–24 letters, numbers or dashes, starting with a letter or number.', true);
+  if (!acct.user) { landPending = h; landNote('Create a free account to keep this name. It takes a name, an email and a password.'); return openAccount('up'); }
+  claimLanding(h);
+});
+$('#landHandle').addEventListener('input', () => landNote('One watch page for every show. Viewers bookmark it once.'));
+function renderLandSlate() {
+  const h = acct.user?.handle;
+  if (h && document.activeElement !== $('#landHandle')) $('#landHandle').value = h;
+  $('#landClaimGo').textContent = h ? 'Start a show' : 'Claim it';
+}
+renderLandSlate();
 $('#landJoin').addEventListener('submit', (e) => {
   e.preventDefault();
   const raw = $('#landCode').value, code = parseCode(raw), kind = linkKind(raw);
@@ -5199,16 +5233,15 @@ function renderHandle() {
   const u = acct.user, h = u?.handle || '';
   $('#wpHost').textContent = location.host + '/w/';
   if (document.activeElement !== $('#wpHandle')) $('#wpHandle').value = h;
-  $('#wpHandle').disabled = $('#wpHandleSave').disabled = !u;
   $('#wpHandleSave').textContent = h ? 'Change' : 'Claim';
-  $('#wpHandleNote').textContent = !u ? 'Sign in to claim a name like /w/yourname. It’s free and always points at your current show.'
+  $('#wpHandleNote').textContent = !u ? 'Type a name and press Claim. You’ll sign in (or make a free account), then it’s yours.'
     : h ? `Viewers can bookmark ${location.host}/w/${h}. Between shows it says you’re offline, then plays by itself when you go on.`
     : 'Pick a name once; share one link forever.';
 }
 $('#wpHandleForm').addEventListener('submit', async (e) => {
   e.preventDefault();
-  if (!acct.user) return openAccount('in');
   const h = $('#wpHandle').value.trim().toLowerCase();
+  if (!acct.user) { landPending = h; landFrom = 'show'; return openAccount(store.get('hadAccount', false) ? 'in' : 'up'); }
   if (h === acct.user.handle) return;
   $('#wpHandleSave').disabled = true;
   try {
@@ -5491,7 +5524,7 @@ async function aiTranscribe(x) {
 function voiceRow(x, inChat) {
   const li = document.createElement('li'); li.className = (inChat ? 'msg ext vm-msg ' : 'sc-item ') + 'vm ' + (x.status || 'new'); li.dataset.vm = x.id;
   const top = document.createElement('div'); top.className = inChat ? 'who' : 'sc-top';
-  const badge = document.createElement('span'); badge.className = 'pill caps src-watch'; badge.textContent = '🎙 Voice question';
+  const badge = document.createElement('span'); badge.className = 'pill caps src-watch'; badge.innerHTML = `${icon('mic')}Voice question`;
   const who = document.createElement('b'); who.textContent = x.name;
   const meta = document.createElement('small'); meta.textContent = `${x.dur || '?'} s${x.status === 'aired' ? ' · played on air' : x.status === 'heard' ? ' · previewed' : ''}`;
   top.append(badge, who, meta);

@@ -9,7 +9,7 @@
 <link rel="icon" href="/icon.png" type="image/png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@600;700;800&family=JetBrains+Mono:wght@500;600;800&display=swap">
 <link rel="stylesheet" href="/tokens.css">
 <link rel="stylesheet" href="/ui.css">
 <link rel="stylesheet" href="/watch.css">
@@ -25,7 +25,7 @@
       <span class="wv-meta" id="wViewers" hidden></span>
     </div>
     <a class="wv-own" href="/" target="_blank" rel="noopener">Start your own show</a>
-    <button class="icon-btn" id="wShare" type="button" aria-label="Share this page" data-tip="Share"><svg class="i" aria-hidden="true"><use href="/icons.svg#i-link"/></svg></button>
+    <button class="wv-addr" id="wShare" type="button" aria-label="Copy this page’s link" data-tip="Copy link"><i class="lamp" aria-hidden="true"></i><span id="wAddr"></span><svg class="i sm" aria-hidden="true"><use href="/icons.svg#i-link"/></svg></button>
   </header>
 
   <main class="wv-main">
@@ -52,10 +52,10 @@
           </div>
         </div>
       <div class="wv-strip">
-          <button class="btn wv-hand" id="wHand" type="button" hidden><span aria-hidden="true">✋</span><span>Raise hand</span></button>
+          <button class="btn wv-hand" id="wHand" type="button" hidden><svg class="i" aria-hidden="true"><use href="/icons.svg#i-hand"/></svg><span>Raise hand</span></button>
           <div class="wv-reacts" id="wReacts" role="group" aria-label="React"></div>
           <div class="wv-hype" id="wHype" title="Hype: how much the room is reacting"><span>🔥</span><i><b id="wHypeBar"></b></i><em id="wHypeLvl">Warm</em></div>
-          <button class="btn" id="wClip" type="button" hidden><svg class="i" aria-hidden="true"><use href="/icons.svg#i-video"/></svg><span>Clip</span></button>
+          <button class="btn" id="wClip" type="button" hidden><svg class="i" aria-hidden="true"><use href="/icons.svg#i-scissors"/></svg><span>Clip</span></button>
           <div class="wv-sources" id="wTabs" role="tablist" aria-label="Watch on" hidden></div>
           <div class="wv-links" id="wLinks"></div>
         </div>
@@ -79,15 +79,18 @@
       <button class="wv-newer" id="wNewer" type="button" hidden>New messages ↓</button>
       <form class="wv-compose" id="wCompose" autocomplete="off">
         <div class="wv-composer">
-          <button class="wv-me" id="wMe" type="button" aria-label="Change your chat name" data-tip="Change your name"></button>
-          <button class="wv-scbtn" id="wSuperBtn" type="button" aria-label="Send a super chat" data-tip="Super chat" hidden>$</button>
           <div class="wv-inputwrap">
             <input class="input" id="wText" maxlength="300" placeholder="Say something…" aria-label="Chat message" enterkeyhint="send">
-            <button class="wv-ib" id="wAsk" type="button" aria-pressed="false" aria-label="Ask as a question" data-tip="Wave a question to the host">✋</button>
-            <button class="wv-ib" id="wMic" type="button" aria-label="Ask with your voice" data-tip="Ask with your voice" hidden>🎙</button>
-            <button class="wv-ib" id="wEmoji" type="button" aria-haspopup="true" aria-expanded="false" aria-label="Emoji" data-tip="Emoji">😊</button>
+            <button class="wv-send" id="wSend" type="submit" aria-label="Send"><svg class="i" aria-hidden="true"><use href="/icons.svg#i-send"/></svg></button>
           </div>
-          <button class="btn primary" id="wSend" type="submit" aria-label="Send">Send</button>
+          <div class="wv-tools">
+            <button class="wv-me" id="wMe" type="button" aria-label="Change your chat name" data-tip="Change your name"></button>
+            <span class="wv-sp"></span>
+            <button class="wv-tool" id="wAsk" type="button" aria-pressed="false" aria-label="Ask as a question" data-tip="Wave a question to the host"><svg class="i" aria-hidden="true"><use href="/icons.svg#i-hand"/></svg></button>
+            <button class="wv-tool" id="wMic" type="button" aria-label="Ask with your voice" data-tip="Ask with your voice" hidden><svg class="i" aria-hidden="true"><use href="/icons.svg#i-mic"/></svg></button>
+            <button class="wv-tool" id="wEmoji" type="button" aria-haspopup="true" aria-expanded="false" aria-label="Emoji" data-tip="Emoji"><svg class="i" aria-hidden="true"><use href="/icons.svg#i-smile"/></svg></button>
+            <button class="wv-tool tip" id="wSuperBtn" type="button" aria-label="Send a super chat" data-tip="Super chat: tip the host" hidden><svg class="i" aria-hidden="true"><use href="/icons.svg#i-tip"/></svg><span>Tip</span></button>
+          </div>
         </div>
         <p class="wv-err" id="wErr" role="alert" hidden></p>
         <div class="wv-picker" id="wPicker" hidden role="dialog" aria-label="Pick an emoji"></div>

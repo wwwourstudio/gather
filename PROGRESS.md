@@ -104,7 +104,7 @@ The stack is plain ES modules in the browser plus Node serverless functions on V
   - Every primitive has hover, active, focus-visible, disabled and loading (`aria-busy` via `busy()`), plus pressed or selected where it applies.
   - Primitives placed on video surfaces (`.stage`, `.on-media`) re-scope the tokens, so they read correctly in both themes.
 - **`public/style.css`:** rewritten to only arrange primitives using tokens. Every interactive control in `index.html` and `app.js` now uses a primitive class. The audit checks this ("Control not built from a primitive").
-- **Icons:** Lucide only (46 icons). `scripts/build-icons.ts` builds them into the `public/icons.svg` sprite. All 34 hand-drawn SVGs and the `✕ ↑ ↓` glyphs were replaced.
+- **Icons:** gather's own duotone set (59 icons), drawn in `scripts/icons.js`, which writes the `public/icons.svg` sprite.
 - **Fonts:** the UI loads only Inter and Plus Jakarta Sans. The stage's brand fonts (Onest, JetBrains Mono, Playfair, Bebas, DM Serif) load separately without blocking, and only the program canvas uses them.
 - **Motion:**
   - Dragged layout boxes lift while dragging and settle back with a spring when released.

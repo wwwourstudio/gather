@@ -14,10 +14,10 @@
 <link rel="icon" href="/icon.png" type="image/png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<!-- UI: one display face (Plus Jakarta Sans) + Inter. -->
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap">
+<!-- UI: one display face (Plus Jakarta Sans) + Inter, and JetBrains Mono for links and codes. -->
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@600;700;800&family=JetBrains+Mono:wght@500;600;800&display=swap">
 <!-- Stage-only brand fonts (drawn into the program canvas, never used by the interface): loaded without blocking. -->
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Onest:wght@600;700&family=JetBrains+Mono:wght@600;800&family=Playfair+Display:wght@700;800&family=Bebas+Neue&family=DM+Serif+Display&display=swap" media="print" onload="this.media='all'">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Onest:wght@600;700&family=Playfair+Display:wght@700;800&family=Bebas+Neue&family=DM+Serif+Display&display=swap" media="print" onload="this.media='all'">
 <link rel="stylesheet" href="/tokens.css">
 <link rel="stylesheet" href="/ui.css">
 <link rel="stylesheet" href="/style.css">
@@ -39,7 +39,7 @@
       <button class="btn hdr user-btn" id="userBtn" aria-label="Your account"><span class="user-av" id="userAv"></span><svg id="userIcon" class="i" aria-hidden="true"><use href="/icons.svg#i-user"/></svg><span class="user-label" id="userLabel">Sign in</span></button>
       <button class="icon-btn hdr-ic" id="helpTop" aria-label="Help" data-tip="Help"><svg class="i" aria-hidden="true"><use href="/icons.svg#i-circle-help"/></svg></button>
       <button class="icon-btn hdr-ic" id="settingsTop" aria-label="Settings" data-tip="Settings"><svg class="i" aria-hidden="true"><use href="/icons.svg#i-sliders-horizontal"/></svg></button>
-      <button class="btn hdr in-studio" id="watchTop" hidden data-tip="Your public watch page"><svg class="i" aria-hidden="true"><use href="/icons.svg#i-eye"/></svg><span>Watch page</span></button>
+      <button class="btn hdr in-studio watch-chip" id="watchTop" hidden data-tip="Your watch page: share this link"><i class="lamp" aria-hidden="true"></i><span class="wc-label">Watch page</span><span class="wc-path" id="watchTopText"></span></button>
       <button class="btn hdr in-studio" id="enterTop" hidden><svg class="i" aria-hidden="true"><use href="/icons.svg#i-user-plus"/></svg><span id="enterTopText">Invite</span></button>
       <button class="btn hdr primary host-only in-studio live-top" id="liveTop" hidden><svg class="i" aria-hidden="true"><use href="/icons.svg#i-radio"/></svg><span id="livePillText">Go live</span></button>
     </div>
@@ -51,32 +51,53 @@
       <!-- Landing: what you see before you're in a studio -->
       <div class="landing" id="landing">
         <div class="land-copy">
-          <img class="land-mark" src="/icon.png" alt="" width="56" height="56">
-          <h1>Your show, live from the browser.</h1>
-          <p class="land-sub">Bring up to five guests, switch scenes, put slides on screen and stream to YouTube, Twitch and more at once. Nothing to install, nothing to pay.</p>
+          <p class="land-kicker"><span class="lk-dot"></span>Free live studio · nothing to install</p>
+          <h1>Your show. <span>Your link.</span> Live from the browser.</h1>
+          <p class="land-sub">Bring up to five guests on stage and stream to YouTube and Twitch at once. Your viewers get their own page to watch, chat, ask and tip you directly.</p>
+          <form class="slate" id="landClaim" autocomplete="off" aria-label="Claim your watch page">
+            <label class="slate-host" for="landHandle" id="landHost">gather/w/</label>
+            <input id="landHandle" maxlength="24" spellcheck="false" autocapitalize="off" placeholder="yourname" aria-describedby="landClaimNote">
+            <button class="btn primary lg" id="landClaimGo">Claim it</button>
+          </form>
+          <p class="slate-note" id="landClaimNote">One watch page for every show. Viewers bookmark it once.</p>
           <div class="land-cta">
-            <button class="btn primary lg" id="enterStage">Create a studio</button>
+            <button class="btn lg" id="enterStage"><svg class="i" aria-hidden="true"><use href="/icons.svg#i-radio"/></svg>Start a show now</button>
             <form class="land-join" id="landJoin" autocomplete="off">
-              <input class="input" id="landCode" placeholder="Paste an invite link or code" aria-label="Invite link or studio code" spellcheck="false">
+              <input class="input" id="landCode" placeholder="Invite link or code" aria-label="Invite link or studio code" spellcheck="false">
               <button class="btn lg" id="landJoinGo">Join</button>
             </form>
           </div>
-          <button class="btn link" id="heroSchedule">Schedule a show for later</button>
-          <ul class="land-points">
-            <li><svg class="i" aria-hidden="true"><use href="/icons.svg#i-layout-dashboard"/></svg><span><b>Scenes and layouts</b>Cameras, slides, banners and your brand, one click apart.</span></li>
-            <li><svg class="i" aria-hidden="true"><use href="/icons.svg#i-sparkles"/></svg><span><b>An AI producer</b>Ask it anything on air, or tell it to switch scenes and pull things up.</span></li>
-            <li><svg class="i" aria-hidden="true"><use href="/icons.svg#i-radio"/></svg><span><b>Go live everywhere</b>Several platforms at once, plus recording to Google Drive.</span></li>
-          </ul>
-          <p class="land-legal"><a href="/privacy">Privacy</a> · <a href="/terms">Terms</a></p>
+          <div class="land-foot">
+            <button class="btn link" id="heroSchedule">Schedule a show for later</button>
+            <p class="land-legal"><a href="/privacy">Privacy</a> · <a href="/terms">Terms</a></p>
+          </div>
         </div>
         <div class="land-art" aria-hidden="true">
-          <div class="la-stage">
-            <div class="la-tile t1"><i></i><span>Maya</span></div>
-            <div class="la-tile t2"><i></i><span>Jordan</span></div>
-            <div class="la-banner"><b>Building in public</b><span>Episode 12</span></div>
-            <span class="la-live"><i></i>Live</span>
+          <div class="la-studio">
+            <div class="la-chrome"><i></i><i></i><i></i><span>Maya’s show</span><b class="la-golive"><svg class="i"><use href="/icons.svg#i-radio"/></svg>Live 12:04</b></div>
+            <div class="la-stage">
+              <div class="la-tile talking"><span class="la-mono">MO</span><span class="la-meter"><i></i><i></i><i></i><i></i></span><span class="la-name">Maya</span></div>
+              <div class="la-tile t2"><span class="la-mono">JL</span><span class="la-meter"><i></i><i></i><i></i><i></i></span><span class="la-name">Jordan</span></div>
+              <div class="la-lower"><b>Building in public</b><span>Episode 12 · Ask us anything</span></div>
+              <div class="la-badge"><svg class="i"><use href="/icons.svg#i-eye"/></svg>gather/w/maya</div>
+            </div>
+            <div class="la-scenes"><i class="on"></i><i></i><i></i><i></i><i></i></div>
           </div>
-          <div class="la-bar"><i></i><i></i><i></i><i class="rec"></i><i class="ai"></i></div>
+          <div class="la-phone">
+            <div class="la-ph-video"><span class="la-live">Live</span><span class="la-ph-url">/w/maya</span><span class="la-ph-pic"><i></i><i></i></span></div>
+            <ul class="la-ph-chat">
+              <li><b>ren</b>that demo was clean</li>
+              <li class="tip"><b>sam · $5</b>for the coffee fund</li>
+              <li class="ask"><svg class="i"><use href="/icons.svg#i-mic"/></svg><b>lee</b>asked a voice question</li>
+              <li><b>ana</b>first time here 👋</li>
+            </ul>
+            <div class="la-ph-input"><span>Say something…</span><i></i></div>
+          </div>
+          <ul class="la-feats">
+            <li><svg class="i"><use href="/icons.svg#i-users"/></svg>Guests join from a link</li>
+            <li><svg class="i"><use href="/icons.svg#i-message-square"/></svg>Chat, polls and voice questions</li>
+            <li><svg class="i"><use href="/icons.svg#i-sparkles"/></svg>An AI producer on call</li>
+          </ul>
         </div>
       </div>
       <div class="stage-card glass">
