@@ -35,7 +35,7 @@ const post = (api, action, body, token) => fetch(`${B}/api/${api}?action=${actio
     const a = await ctx.newPage(); a.on('pageerror', (e) => errs.push(e.message));
     await a.goto(B + '/'); await a.click('#enterStage'); await a.click('#enterGo');
     await a.waitForSelector('#inviteDlg[open]'); const code = (await a.textContent('#inviteCode')).trim(); await a.keyboard.press('Escape');
-    await a.click('[data-tab="show"]');
+    await a.click('[data-tab="show"]'); await a.click('[data-showsub="page"]');
     check('Show panel offers to claim a name', await wait(a, () => !document.querySelector('#wpHandle').disabled && /Claim/.test(document.querySelector('#wpHandleSave').textContent)));
     await a.fill('#wpHandle', name.toUpperCase()); await a.click('#wpHandleSave');
     check('claimed: the watch link is now /w/<name>', await wait(a, () => document.querySelector('#wpUrl').textContent.endsWith('/w/' + document.querySelector('#wpHandle').value)));

@@ -84,6 +84,8 @@ function render(info) {
   const onAir = live || W.direct.state === 'live';
   $('#wLive').hidden = !onAir;
   $('#wv').classList.toggle('on-air', onAir);
+  // Came in on the long studio code? Show (and switch the address bar to) the short link, so it's what people copy.
+  if (info.short && /^\/w\/gather-/.test(location.pathname)) history.replaceState(null, '', '/w/' + info.short + location.search);
   $('#wAddr').textContent = location.host.replace(/^www\./, '') + location.pathname;
   $('#wLiveText').textContent = live ? 'Live · ' + clockText(info.live.since) : 'On air';
   $('#wViewers').hidden = !info.found;
@@ -434,7 +436,7 @@ $$('button[data-close]').forEach((b) => b.addEventListener('click', () => b.clos
 
 // ---------------------------------------------------------------- share
 $('#wShare').onclick = async () => {
-  const url = location.origin + '/w/' + code;
+  const url = location.origin + location.pathname; // the short link or name once known
   try { if (navigator.share) await navigator.share({ title: document.title, url }); else { await navigator.clipboard.writeText(url); toast('Link copied.'); } }
   catch {}
 };

@@ -25,7 +25,7 @@ const fakeTwitch = () => {
   await a.waitForSelector('#inviteDlg[open]'); const code = await a.textContent('#inviteCode'); await a.click('#inviteDlg .modal-close');
   await b.goto((process.env.GATHER_URL || 'http://localhost:8080') + '/s/' + code); await b.waitForSelector('#enterDlg[open]'); await b.fill('#enterName', 'Jordan Lee'); await b.click('#enterGo');
   await b.waitForFunction(() => window.__gather.studio, null, { timeout: 10000 });
-  await a.click('#settingsTop'); await a.fill('#twitchInput', 'somechannel'); await a.click('#twitchGo'); await a.keyboard.press('Escape'); await a.click('[data-tab="show"]');
+  await a.click('#userBtn'); await a.click('#settingsTop'); await a.fill('#twitchInput', 'somechannel'); await a.click('#twitchGo'); await a.keyboard.press('Escape'); await a.click('[data-tab="show"]');
   await b.waitForFunction(() => window.__gather.feed.length >= 3, null, { timeout: 8000 });
   console.log('guest feed:', await b.evaluate(() => window.__gather.feed.map(m => m.name).join(', ')));
   // overlay switch

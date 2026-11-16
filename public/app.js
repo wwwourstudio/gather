@@ -547,7 +547,7 @@ function lostStudio() {
   const code = S.studio;
   pollGen++; outbox = [];
   teardownPeers();
-  S.studio = null; S.id = null; S.tok = null;
+  S.studio = null; S.id = null; S.tok = null; S.short = "";
   setPhase('reconnecting');
   setTimeout(() => join(code).catch((e) => { if (e.status === 403) return kickedOut(e.message); toast(e.message, { err: true }); setPhase('offline'); }), 800);
 }
@@ -596,7 +596,7 @@ async function onServer(m) {
   switch (m.type) {
     case 'joined': {
       const wasHosting = isHost() && !S.studio;
-      S.id = m.id; S.tok = m.tok; S.studio = m.studio; S.host = m.host;
+      S.id = m.id; S.tok = m.tok; S.studio = m.studio; S.host = m.host; S.short = m.short || "";
       S.local.joinedAt = Date.now();
       S.iceServers = await iceConfig(m.iceServers);
       const pre = S.state;
@@ -2592,6 +2592,8 @@ function setUser(u, token) {
     if (u.avatar) rawSet('avatar', u.avatar);
   }
   renderUser(); renderPreview(); renderStreamPanel(); renderWatchSec();
+  $('#acctOpenLabel').textContent = u ? (u.name || 'Your account') : 'Sign in';
+  $('#acctOpenSub').textContent = u ? (u.handle ? `${location.host}/w/${u.handle}` : u.email) : 'Keep your name, link and settings';
   if (typeof renderLandSlate === 'function') renderLandSlate();
   if (u && landPending) {
     const h = landPending; landPending = ''; $('#acctDlg').open && $('#acctDlg').close();
@@ -2715,7 +2717,10 @@ function openAccount(view) {
   $('#acctDlg').showModal();
 }
 const acErr = (id, msg) => { const e = $(id); e.textContent = msg; e.hidden = !msg; };
-$('#userBtn').onclick = () => openAccount();
+// The avatar opens a small menu (account, settings, help). On the landing page there's nothing else in it, so it
+// goes straight to the account dialog.
+$('#userBtn').onclick = (ev) => { if (document.body.classList.contains('pre')) return openAccount(); togglePopover($('#acctMenu'), ev.currentTarget, 'bottom'); };
+$('#acctOpen').onclick = () => { $('#acctMenu').hidePopover(); openAccount(); };
 $$('#acTabs button').forEach((b) => b.addEventListener('click', () => { acView = b.dataset.ac; acErr('#acErr', ''); renderAcctDlg(); }));
 $('#acForm').addEventListener('submit', async (e) => {
   e.preventDefault();
@@ -3579,8 +3584,7 @@ function renderHeader() {
   $('#studioTitle').classList.toggle('editable', isHost());
   $('#studioTitle').title = isHost() ? 'Click to rename the show' : '';
   $('#enterTop').hidden = !S.studio;
-  if ($('#watchTop')) $('#watchTop').hidden = !S.studio || !isHost();
-  if (window.__watchReady && S.studio) $('#watchTopText').textContent = '/w/' + (myHandle() || S.studio);
+  if (window.__watchReady && S.studio) $('#watchTopText').textContent = '/w/' + watchSlug();
   $('#liveTop').hidden = !S.studio || !isHost();
   document.body.classList.toggle('pre', !S.studio && S.phase !== 'reconnecting'); // landing: just the stage hero
   // Scheduled shows: on the landing page they sit under the hero (that's where you start one); inside a studio, in Go live.
@@ -3773,7 +3777,7 @@ function renderPresets() {
 
 // ---------------------------------------------------------------- panels & controls
 // Four tabs in the rail (Chat, Show, Look, AI). Go live, Settings and Help are dialogs; older names still work.
-const TAB_ALIAS = { banners: 'show', stream: 'dlg:liveDlg', settings: 'dlg:settingsDlg', help: 'dlg:helpDlg', layouts: 'look:layouts', brand: 'look:brand', look: 'look:' };
+const TAB_ALIAS = { banners: 'show:stage', inbox: 'chat:inbox', stream: 'dlg:liveDlg', settings: 'dlg:settingsDlg', help: 'dlg:helpDlg', layouts: 'look:layouts', brand: 'look:brand', look: 'look:' };
 function openDlg(id) {
   for (const other of ['liveDlg', 'settingsDlg', 'helpDlg']) if (other !== id && $('#' + other).open) $('#' + other).close();
   const d = $('#' + id);
@@ -3787,6 +3791,8 @@ function setTab(tab) {
   if (a.startsWith('dlg:')) return openDlg(a.slice(4));
   let panel = a, rail = a;
   if (a.startsWith('look:')) { S.lookSub = a.slice(5) || S.lookSub || 'layouts'; panel = S.lookSub; rail = 'look'; }
+  if (a.startsWith('show:')) { setShowSub(a.slice(5)); panel = rail = 'show'; }
+  if (a === 'chat:inbox') { panel = rail = 'chat'; $('#inbox').open = true; }
   S.tab = rail;
   document.body.classList.remove('panel-closed'); $('#panelToggle').setAttribute('aria-expanded', 'true');
   $$('.rail-btn').forEach((b) => { const on = b.dataset.tab === rail; b.classList.toggle('on', on); if (on) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current'); });
@@ -3796,6 +3802,23 @@ function setTab(tab) {
   if (panel !== 'layouts' && editor.on) setEditing(false);
 }
 $$('.rail-btn').forEach((b) => b.addEventListener('click', () => setTab(b.dataset.tab)));
+// Show's sub-tabs (On stage / Engage / Watch page). The last one is remembered.
+function setShowSub(sub) {
+  if (!['stage', 'engage', 'page'].includes(sub)) sub = 'stage';
+  S.showSub = sub; store.set('showSub', sub);
+  $$('.show-sub').forEach((el) => (el.hidden = el.dataset.sub !== sub));
+  $$('.show-seg [data-showsub]').forEach((b) => { const on = b.dataset.showsub === sub; b.classList.toggle('on', on); b.setAttribute('aria-selected', String(on)); });
+}
+$$('.show-seg [data-showsub]').forEach((b) => b.addEventListener('click', () => setShowSub(b.dataset.showsub)));
+setShowSub(store.get('showSub', 'stage'));
+// "Waiting for you" in Chat: shown while voice questions or unconfirmed super chats are waiting, with a count.
+function renderInbox() {
+  const vm = $$('#vmList > li').length, sc = $$('#scList > li.pending').length, n = vm + sc;
+  $('#inbox').hidden = !n || !isHost();
+  $('#inboxCount').textContent = n;
+}
+new MutationObserver(renderInbox).observe($('#vmList'), { childList: true });
+new MutationObserver(renderInbox).observe($('#scList'), { childList: true, subtree: true, attributes: true, attributeFilter: ['class'] });
 // Hide the panel to give the stage the room; any tab brings it back.
 $('#panelToggle').onclick = () => {
   const closed = document.body.classList.toggle('panel-closed');
@@ -3804,8 +3827,8 @@ $('#panelToggle').onclick = () => {
   if (closed) $$('.rail-btn').forEach((x) => { x.classList.remove('on'); x.removeAttribute('aria-current'); }); else setTab(S.tab);
 };
 $$('.look-seg [data-look]').forEach((b) => b.addEventListener('click', () => setTab(b.dataset.look)));
-$('#helpTop').onclick = () => openDlg('helpDlg');
-$('#settingsTop').onclick = () => openDlg('settingsDlg');
+$('#helpTop').onclick = () => { $('#acctMenu').hidePopover(); openDlg('helpDlg'); };
+$('#settingsTop').onclick = () => { $('#acctMenu').hidePopover(); openDlg('settingsDlg'); };
 $('#liveTop').onclick = () => openDlg('liveDlg');
 
 function sceneList() {
@@ -4955,8 +4978,8 @@ const TOUR = [
   ['.rail-btn[data-tab="show"]', 'Show', 'Banners, a scrolling ticker, live captions, the chat overlay and the call-in card.'],
   ['.rail-btn[data-tab="look"]', 'Look', 'Arrange the stage and set your brand: colours, logo, backgrounds and fonts.'],
   ['#aiDock', 'Your AI producer', 'Ask it anything on air, or tell it to switch scenes, show a banner or find a video. Press / any time.'],
-  ['#enterTop', 'Invite', 'Send guests the link. They don’t need an account. The footer has a copy button too.'],
-  ['#liveTop', 'Go live', 'Stream to YouTube, Twitch and more at once, and get a watch page for viewers.'],
+  ['#enterTop', 'Share', 'Invite guests to the stage, or send viewers your watch page. Both links are in here.'],
+  ['#liveTop', 'Go live', 'Next to Record: stream to YouTube, Twitch and more at once. Your watch page is always on.'],
 ];
 const tour = { i: 0, steps: [] };
 const visible = (el) => !!el && el.getClientRects().length > 0 && getComputedStyle(el).visibility !== 'hidden';
@@ -5055,7 +5078,11 @@ const WATCH_DEFAULTS = { chat: true, supers: false, join: false, queue: false, v
 const watchCfg = () => ({ ...WATCH_DEFAULTS, ...(S.state.watch || {}), pay: { ...WATCH_DEFAULTS.pay, ...(S.state.watch?.pay || {}) } });
 // Signed-in hosts with a watch-page name share gather…/w/<name>, which follows them from show to show.
 const myHandle = () => (isHost() && acct.user?.handle) || '';
-const watchLinkUrl = () => `${location.origin}/w/${myHandle() || S.studio}`;
+// Your name if you've claimed one, else this studio's short link (/w/k7m2x); the long studio code is the fallback.
+const watchSlug = () => myHandle() || S.short || S.studio;
+const watchLinkUrl = () => `${location.origin}/w/${watchSlug()}`;
+/** The link as people read it: no https://, no www. */
+const watchLinkText = () => watchLinkUrl().replace(/^https?:\/\/(www\.)?/, '');
 const VIEW = new Map(); // viewer id -> { pc }
 S.viewers = VIEW; // for the console and tests
 let programStream = null;
@@ -5141,7 +5168,7 @@ function gotSuperchat(item, fresh) {
   S.supers.set(item.id, item);
   if (fresh && !had && item.status === 'pending') {
     chime();
-    toast(`${money(item.amount)} super chat from ${item.name} on ${PAY_NAME[item.method]}. Check it arrived, then confirm.`, { ms: 12000, action: ['Review', () => { setTab('show'); $('#watchSec')?.scrollIntoView({ block: 'start', behavior: smooth() }); }] });
+    toast(`${money(item.amount)} super chat from ${item.name} on ${PAY_NAME[item.method]}. Check it arrived, then confirm.`, { ms: 12000, action: ['Review', () => { setTab('chat:inbox'); $('#scList')?.scrollIntoView({ block: 'start', behavior: smooth() }); }] });
   }
   renderSupers();
   superInChat(item);
@@ -5214,7 +5241,7 @@ function setWatch(patch) {
 function renderWatchSec() {
   if (!window.__watchReady || !$('#watchSec')) return; // renderAll can run before this part of the module loads
   const cfg = watchCfg(), on = !!S.studio;
-  $('#wpUrl').textContent = on ? watchLinkUrl().replace(/^https?:\/\//, '') : 'Enter your studio to get its watch link';
+  $('#wpUrl').textContent = on ? watchLinkText() : 'Enter your studio to get its watch link';
   for (const id of ['#wpCopy', '#wpCard', '#wpOpen']) $(id).disabled = !on;
   $('#wpCount').textContent = on && cfg.direct ? `${VIEW.size} of ${cfg.cap} watching directly` : '';
   for (const [id, k] of [['#wpChat', 'chat'], ['#wpSupers', 'supers'], ['#wpJoin', 'join'], ['#wpDirect', 'direct'], ['#wpVoice', 'voice'], ['#wpBadge', 'badge']]) if ($(id) && document.activeElement !== $(id)) $(id).checked = cfg[k] !== false && !!(cfg[k] ?? true);
@@ -5229,7 +5256,7 @@ function renderWatchSec() {
   $('#wpNoPay').hidden = !cfg.supers || Object.values(cfg.pay).some(Boolean);
   renderHandle();
   $('#livePage').hidden = !on || !isHost();
-  if (on) $('#livePageUrl').textContent = watchLinkUrl().replace(/^https?:\/\//, '');
+  if (on) $('#livePageUrl').textContent = watchLinkText();
 }
 $('#livePageCopy').onclick = () => copy(watchLinkUrl(), 'Watch link copied. Share it anywhere.');
 $('#livePageOpen').onclick = () => window.open(watchLinkUrl(), '_blank', 'noopener');
@@ -5428,7 +5455,7 @@ function drawPoll() {
 
 // ---------------------------------------------------------------- play with me: the viewer queue
 S.queue = [];
-function gotQueue(m) { chime(); toast(`${m.name}${m.tag ? ' (' + m.tag + ')' : ''} wants to play.`, { action: ['Open', () => { setTab('show'); $('#queueSec').open = true; }] }); S.queue.push({ name: m.name, tag: m.tag, status: 'waiting', ts: Date.now() }); renderQueue(S.queue); }
+function gotQueue(m) { chime(); toast(`${m.name}${m.tag ? ' (' + m.tag + ')' : ''} wants to play.`, { action: ['Open', () => { setTab('show:engage'); $('#queueSec').open = true; }] }); S.queue.push({ name: m.name, tag: m.tag, status: 'waiting', ts: Date.now() }); renderQueue(S.queue); }
 function renderQueue(items) {
   if (items) S.queue = items;
   if (!$('#queueList')) return;
@@ -5487,7 +5514,7 @@ function gotVoice(item, fresh) {
   if (!item?.id) return;
   const had = S.vms.has(item.id);
   S.vms.set(item.id, { ...(S.vms.get(item.id) || {}), ...item });
-  if (fresh && !had) { chime(); toast(`🎙 ${item.name} raised a hand with a voice question.`, { ms: 9000, action: ['Review', () => { setTab('show'); $('#vmList')?.scrollIntoView({ block: 'center', behavior: smooth() }); }] }); }
+  if (fresh && !had) { chime(); toast(`🎙 ${item.name} raised a hand with a voice question.`, { ms: 9000, action: ['Review', () => { setTab('chat:inbox'); $('#vmList')?.scrollIntoView({ block: 'center', behavior: smooth() }); }] }); }
   renderVoice();
 }
 function dropVoice(id) { S.vms.delete(id); vmAudio.delete(id); renderVoice(); }
@@ -5560,20 +5587,14 @@ function renderVoice() {
 }
 
 // ---------------------------------------------------------------- where viewers find the watch page
-$('#watchTop').onclick = (ev) => {
-  if (!S.studio) return;
-  const url = watchLinkUrl();
-  copy(url, 'Watch link copied. Share it anywhere.');
-  if (ev.shiftKey || ev.metaKey) window.open(url, '_blank', 'noopener');
-};
 $('#copyWatch').onclick = () => copy(watchLinkUrl(), 'Watch link copied.');
 $('#openWatch').onclick = () => window.open(watchLinkUrl(), '_blank', 'noopener');
-$('#inviteDlg').addEventListener('toggle', () => { if ($('#inviteDlg').open && S.studio) $('#inviteWatch').textContent = watchLinkUrl().replace(/^https?:\/\//, ''); });
+$('#inviteDlg').addEventListener('toggle', () => { if ($('#inviteDlg').open && S.studio) $('#inviteWatch').textContent = watchLinkText(); });
 /** On stream: "Watch & chat live · host/w/code", bottom right, unless the host turned it off or placed the QR card. */
 function drawWatchBadge() {
   if (!S.studio || watchCfg().badge === false) return;
   if ((S.state.elements || []).some((e) => e.type === 'callin' && !e.hidden)) return;
-  const text = `${location.host}/w/${S.studio}`, label = 'WATCH & CHAT LIVE';
+  const text = watchLinkText(), label = 'WATCH & CHAT LIVE';
   g.save();
   g.font = '700 15px Inter, sans-serif'; const tw = g.measureText(text).width;
   g.font = '800 11px Inter, sans-serif'; const lw = g.measureText(label).width;

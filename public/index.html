@@ -36,12 +36,13 @@
     </div>
     <div class="top-actions">
       <span class="rec-chip" id="recPill" hidden><i class="dot"></i><span id="recPillText">Recording</span></span>
-      <button class="btn hdr user-btn" id="userBtn" aria-label="Your account"><span class="user-av" id="userAv"></span><svg id="userIcon" class="i" aria-hidden="true"><use href="/icons.svg#i-user"/></svg><span class="user-label" id="userLabel">Sign in</span></button>
-      <button class="icon-btn hdr-ic" id="helpTop" aria-label="Help" data-tip="Help"><svg class="i" aria-hidden="true"><use href="/icons.svg#i-circle-help"/></svg></button>
-      <button class="icon-btn hdr-ic" id="settingsTop" aria-label="Settings" data-tip="Settings"><svg class="i" aria-hidden="true"><use href="/icons.svg#i-sliders-horizontal"/></svg></button>
-      <button class="btn hdr in-studio watch-chip" id="watchTop" hidden data-tip="Your watch page: share this link"><i class="lamp" aria-hidden="true"></i><span class="wc-label">Watch page</span><span class="wc-path" id="watchTopText"></span></button>
-      <button class="btn hdr in-studio" id="enterTop" hidden><svg class="i" aria-hidden="true"><use href="/icons.svg#i-user-plus"/></svg><span id="enterTopText">Invite</span></button>
-      <button class="btn hdr primary host-only in-studio live-top" id="liveTop" hidden><svg class="i" aria-hidden="true"><use href="/icons.svg#i-radio"/></svg><span id="livePillText">Go live</span></button>
+      <button class="btn hdr in-studio share-btn" id="enterTop" hidden data-tip="Invite guests and share your watch page"><svg class="i" aria-hidden="true"><use href="/icons.svg#i-link"/></svg><span id="enterTopText">Share</span><code class="share-path" id="watchTopText"></code></button>
+      <button class="btn hdr user-btn" id="userBtn" aria-label="Your account, settings and help" aria-haspopup="menu" aria-expanded="false" aria-controls="acctMenu"><span class="user-av" id="userAv"></span><svg id="userIcon" class="i" aria-hidden="true"><use href="/icons.svg#i-user"/></svg><span class="user-label" id="userLabel">Sign in</span></button>
+      <div class="popover glass raised acct-menu" id="acctMenu" popover role="menu" aria-label="Account, settings and help"><div class="menu">
+        <button class="menu-item" role="menuitem" id="acctOpen"><svg class="i" aria-hidden="true"><use href="/icons.svg#i-user"/></svg><b id="acctOpenLabel">Sign in</b><span id="acctOpenSub">Keep your name, link and settings</span></button>
+        <button class="menu-item in-studio" role="menuitem" id="settingsTop"><svg class="i" aria-hidden="true"><use href="/icons.svg#i-sliders-horizontal"/></svg><b>Settings</b><span>Camera, mic, chat sources, appearance</span></button>
+        <button class="menu-item in-studio" role="menuitem" id="helpTop"><svg class="i" aria-hidden="true"><use href="/icons.svg#i-circle-help"/></svg><b>Help</b><span>Search answers or take the walk-through</span></button>
+      </div></div>
     </div>
   </header>
 
@@ -166,10 +167,28 @@
 
     <!-- ================= SIDE PANEL ================= -->
     <aside class="side glass" id="side">
+      <nav class="rail side-tabs" aria-label="Studio panels">
+      <button class="icon-btn stacked rail-btn on" data-tab="chat"><svg class="i" aria-hidden="true"><use href="/icons.svg#i-message-square"/></svg><span class="caption">Chat</span><b class="dot-badge" id="chatBadge" hidden></b></button>
+      <button class="icon-btn stacked rail-btn host-only" data-tab="show"><svg class="i" aria-hidden="true"><use href="/icons.svg#i-flag"/></svg><span class="caption">Show</span></button>
+      <button class="icon-btn stacked rail-btn host-only" data-tab="look"><svg class="i" aria-hidden="true"><use href="/icons.svg#i-palette"/></svg><span class="caption">Look</span></button>
+      <button class="icon-btn stacked rail-btn host-only" data-tab="ai"><svg class="i" aria-hidden="true"><use href="/icons.svg#i-sparkles"/></svg><span class="caption">AI</span></button>
+      <button class="icon-btn panel-toggle" id="panelToggle" aria-expanded="true" aria-controls="side" aria-label="Hide the panel" data-tip="Hide the panel"><svg class="i" aria-hidden="true"><use href="/icons.svg#i-chevron-right"/></svg></button>
+    </nav>
       <!-- Chat -->
       <section class="panel" data-panel="chat">
-        <header class="panel-head"><h2>Chat</h2></header>
+        <header class="panel-head"><h2 class="sr-only">Chat</h2></header>
         <div class="panel-body chat-body">
+          <details class="inbox host-only" id="inbox" hidden open><summary><b>Waiting for you</b><span class="inbox-count" id="inboxCount"></span></summary>
+            <div class="inbox-body">
+            <div class="row between"><b>Voice questions</b><span class="hint" id="vmCount" style="margin:0"></span></div>
+              <ul class="sc-list" id="vmList"></ul>
+              <p class="hint" id="vmEmpty" style="margin:0">None yet. Raised hands chime and appear here and in the chat.</p>
+              <div class="row between"><b>Super chats</b><span class="hint" id="scTotal" style="margin:0"></span></div>
+              <ul class="sc-list" id="scList"></ul>
+              <p class="hint" id="scEmpty" style="margin:0">None yet. New ones chime and appear here.</p>
+
+            </div>
+          </details>
           <div class="feat-bar" id="featBar" hidden>
             <span class="feat-label">On stage</span>
             <span class="feat-text" id="featText"></span>
@@ -245,9 +264,9 @@
 
       <!-- Show: what you put up live -->
       <section class="panel" data-panel="show" hidden>
-        <header class="panel-head"><h2>Show</h2></header>
+        <header class="panel-head"><h2 class="sr-only">Show</h2><div class="seg block sm show-seg" role="tablist" aria-label="Show"><button type="button" role="tab" data-showsub="stage">On stage</button><button type="button" role="tab" data-showsub="engage">Engage</button><button type="button" role="tab" data-showsub="page">Watch page</button></div></header>
         <div class="panel-body form">
-          <div class="watch-sec" id="watchSec">
+          <div class="watch-sec show-sub" id="watchSec" data-sub="page">
             <div class="row between"><b>Your watch page</b><span class="hint" id="wpCount" style="margin:0"></span></div>
             <p class="hint" style="margin:0">Send viewers here instead of YouTube: the show straight from your studio, live chat, super chats paid to you, and a button to ask to join.</p>
             <code class="wp-url" id="wpUrl"></code>
@@ -271,13 +290,8 @@
               <label class="fld"><span>Stripe payment link <em>adds card, Apple Pay and Google Pay</em></span><input id="wpPay-stripe" maxlength="120" placeholder="https://buy.stripe.com/…" spellcheck="false"></label>
               <p class="hint warn-note" id="wpNoPay" hidden>Add at least one way to pay, or viewers won’t see the Super chat button.</p>
             </div>
-            <div class="row between"><b>Voice questions</b><span class="hint" id="vmCount" style="margin:0"></span></div>
-            <ul class="sc-list" id="vmList"></ul>
-            <p class="hint" id="vmEmpty" style="margin:0">None yet. Raised hands chime and appear here and in the chat.</p>
-            <div class="row between"><b>Super chats</b><span class="hint" id="scTotal" style="margin:0"></span></div>
-            <ul class="sc-list" id="scList"></ul>
-            <p class="hint" id="scEmpty" style="margin:0">None yet. New ones chime and appear here.</p>
-
+          </div>
+          <div class="form show-sub" id="engageSec" data-sub="engage">
             <!-- Shop: products sold live; checkout happens on the store's own site -->
             <details class="sec-fold" id="shopSec"><summary><b>Shop</b><span class="hint" id="shopCount" style="margin:0"></span></summary>
               <p class="hint" style="margin:0">Pin a product and it pops up on stage and on your watch page. Buyers check out on your store.</p>
@@ -315,7 +329,7 @@
               <div class="emote-list" id="emoteList"></div>
             </details>
           </div>
-          <hr>
+          <div class="form show-sub" id="stageSec" data-sub="stage">
           <label class="fld"><span>Banner text</span><textarea id="bannerText" rows="3" maxlength="120">Welcome to the conversation</textarea></label>
           <label class="fld"><span>Second line <em>optional</em></span><input id="bannerSub" maxlength="120" placeholder="Episode 12 · Live from the studio"></label>
           <div class="row">
@@ -357,6 +371,7 @@
           </label>
           <hr>
           <label class="toggle-row"><span><b>Guests go straight on stage</b><small>Off: new guests wait backstage until you click their picture</small></span><input type="checkbox" class="toggle" id="autoStage" role="switch"></label>
+          </div>
         </div>
       </section>
 
@@ -498,13 +513,6 @@
 
     </aside>
 
-    <nav class="rail glass" aria-label="Studio panels">
-      <button class="icon-btn stacked rail-btn on" data-tab="chat"><svg class="i" aria-hidden="true"><use href="/icons.svg#i-message-square"/></svg><span class="caption">Chat</span><b class="dot-badge" id="chatBadge" hidden></b></button>
-      <button class="icon-btn stacked rail-btn host-only" data-tab="show"><svg class="i" aria-hidden="true"><use href="/icons.svg#i-flag"/></svg><span class="caption">Show</span></button>
-      <button class="icon-btn stacked rail-btn host-only" data-tab="look"><svg class="i" aria-hidden="true"><use href="/icons.svg#i-palette"/></svg><span class="caption">Look</span></button>
-      <button class="icon-btn stacked rail-btn host-only" data-tab="ai"><svg class="i" aria-hidden="true"><use href="/icons.svg#i-sparkles"/></svg><span class="caption">AI</span></button>
-      <button class="icon-btn panel-toggle" id="panelToggle" aria-expanded="true" aria-controls="side" aria-label="Hide the panel" data-tip="Hide the panel"><svg class="i" aria-hidden="true"><use href="/icons.svg#i-chevron-right"/></svg></button>
-    </nav>
   </main>
 
   <!-- ================= DOCK ================= -->
@@ -525,6 +533,7 @@
       </div>
       <span class="dock-sep" aria-hidden="true"></span>
       <button class="icon-btn stacked rec-tool host-only" id="recBtn"><svg class="i rec-ic" viewBox="0 0 24 24" aria-hidden="true"><circle class="rec-ring" cx="12" cy="12" r="9"/><circle class="rec-dot" cx="12" cy="12" r="5"/><rect class="rec-stop" x="7.5" y="7.5" width="9" height="9" rx="2"/></svg><span class="caption" id="recLabel">Record</span></button>
+      <button class="btn primary host-only in-studio live-top live-dock" id="liveTop" hidden><svg class="i" aria-hidden="true"><use href="/icons.svg#i-radio"/></svg><span id="livePillText">Go live</span></button>
       <button class="icon-btn stacked host-only ai-dock" id="aiDock" aria-expanded="false" aria-controls="cmdBar" data-status="idle" hidden><span class="orb-i" aria-hidden="true"></span><span class="caption" id="aiDockName">Sam</span></button>
     </div>
     <div class="guide host-only" id="guide" hidden role="status" aria-label="Getting started">
@@ -932,8 +941,8 @@
 <dialog class="modal" id="inviteDlg" aria-labelledby="inviteH">
   <form method="dialog" class="modal-card glass raised">
     <button type="button" class="icon-btn sm modal-close" value="cancel" data-close aria-label="Close"><svg class="i sm" aria-hidden="true"><use href="/icons.svg#i-x"/></svg></button>
-    <h2 id="inviteH">Invite guests</h2>
-    <p class="sub">Send the link: guests land in the green room, check their camera and join.</p>
+    <h2 id="inviteH">Share</h2>
+    <p class="sub"><b>Guests on stage:</b> they land in the green room, check their camera and join.</p>
     <output class="code" id="inviteCode">—</output>
     <button type="button" class="btn primary lg block" id="copyLink">Copy invite link</button>
     <button type="button" class="btn lg block" id="copyCode">Copy the code instead</button>
