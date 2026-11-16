@@ -23,6 +23,7 @@
 <link rel="stylesheet" href="/style.css">
 </head>
 <body>
+<a class="skip-link" id="skipDock" href="#dock" hidden>Skip to studio controls</a>
 <div class="backdrop" aria-hidden="true"></div>
 <div class="app" id="app">
 
@@ -30,7 +31,7 @@
   <header class="top glass">
     <a class="logo" href="/" aria-label="gather home"><span class="logo-word">gather<i>.</i></span></a>
     <div class="top-title" id="topTitle" hidden>
-      <strong id="studioTitle"></strong>
+      <strong id="studioTitle" role="heading" aria-level="1"></strong>
       <span class="status" id="statusPill" data-state="offline"><i class="dot"></i><span id="statusText">Offline</span></span>
     </div>
     <div class="top-actions">
@@ -130,7 +131,7 @@
           <button type="button" class="icon-btn sm deck-toggle" id="deckToggle" aria-expanded="true" aria-controls="deckBody" aria-label="Hide scenes and people" data-tip="Hide"><svg class="i sm" aria-hidden="true"><use href="/icons.svg#i-chevron-down"/></svg></button>
         </div>
         <div class="deck-body" id="deckBody">
-          <div class="deck-layer" data-layer="scenes"><div class="scenes" id="sceneStrip" role="group" aria-label="Scenes"></div></div>
+          <div class="deck-layer" data-layer="scenes"><div class="scenes" id="sceneStrip" role="toolbar" aria-label="Scenes (arrow keys to move)"></div></div>
           <div class="deck-layer" data-layer="people">
             <ul class="crew-list" id="crewList">
               <li class="crew-add"><button class="tile dashed" id="addSlot" aria-label="Invite a guest"><svg class="i" aria-hidden="true"><use href="/icons.svg#i-plus"/></svg><span>Invite</span></button></li>
@@ -424,7 +425,7 @@
   </main>
 
   <!-- ================= DOCK ================= -->
-  <footer class="dock glass">
+  <footer class="dock glass" id="dock" tabindex="-1" aria-label="Studio controls">
     <div class="dock-tools">
       <button class="icon-btn stacked mutes" id="micBtn" aria-pressed="false"><span class="swap"><svg class="i when-off" aria-hidden="true"><use href="/icons.svg#i-mic"/></svg><svg class="i when-on" aria-hidden="true"><use href="/icons.svg#i-mic-off"/></svg></span><span class="caption" id="micLabel">Microphone</span></button>
       <button class="icon-btn stacked mutes" id="camBtn" aria-pressed="false"><span class="swap"><svg class="i when-off" aria-hidden="true"><use href="/icons.svg#i-video"/></svg><svg class="i when-on" aria-hidden="true"><use href="/icons.svg#i-video-off"/></svg></span><span class="caption" id="camLabel">Camera</span></button>
