@@ -2590,7 +2590,7 @@ function setUser(u, token) {
     if (u.name) { S.name = u.name; rawSet('name', u.name); if (document.activeElement !== $('#nameInput')) $('#nameInput').value = u.name; if (document.activeElement !== $('#enterName')) $('#enterName').value = u.name; }
     if (u.avatar) rawSet('avatar', u.avatar);
   }
-  renderUser(); renderPreview(); renderStreamPanel();
+  renderUser(); renderPreview(); renderStreamPanel(); renderWatchSec();
 }
 function signedOut(msg) {
   acct.user = null; acct.token = ''; rawSet('acctToken', '');
@@ -5019,7 +5019,9 @@ setInterval(() => { if (S.studio && !S.rec && S.state?.rec?.on) renderDock(); },
 // for a handful of viewers, so the host sets a cap; past it, viewers fall back to the platform players.
 const WATCH_DEFAULTS = { chat: true, supers: false, join: false, queue: false, voice: true, badge: true, direct: true, cap: 6, slow: 0, min: 2, about: '', links: [], pay: { paypal: '', venmo: '', cashapp: '', stripe: '' } };
 const watchCfg = () => ({ ...WATCH_DEFAULTS, ...(S.state.watch || {}), pay: { ...WATCH_DEFAULTS.pay, ...(S.state.watch?.pay || {}) } });
-const watchLinkUrl = () => `${location.origin}/w/${S.studio}`;
+// Signed-in hosts with a watch-page name share gather…/w/<name>, which follows them from show to show.
+const myHandle = () => (isHost() && acct.user?.handle) || '';
+const watchLinkUrl = () => `${location.origin}/w/${myHandle() || S.studio}`;
 const VIEW = new Map(); // viewer id -> { pc }
 S.viewers = VIEW; // for the console and tests
 let programStream = null;
@@ -5191,7 +5193,31 @@ function renderWatchSec() {
   if (document.activeElement !== $('#wpQueue')) $('#wpQueue').checked = !!cfg.queue;
   if (window.__shopReady) { renderShop(); renderPoll(); renderEmotes(); }
   $('#wpNoPay').hidden = !cfg.supers || Object.values(cfg.pay).some(Boolean);
+  renderHandle();
 }
+function renderHandle() {
+  const u = acct.user, h = u?.handle || '';
+  $('#wpHost').textContent = location.host + '/w/';
+  if (document.activeElement !== $('#wpHandle')) $('#wpHandle').value = h;
+  $('#wpHandle').disabled = $('#wpHandleSave').disabled = !u;
+  $('#wpHandleSave').textContent = h ? 'Change' : 'Claim';
+  $('#wpHandleNote').textContent = !u ? 'Sign in to claim a name like /w/yourname. It’s free and always points at your current show.'
+    : h ? `Viewers can bookmark ${location.host}/w/${h}. Between shows it says you’re offline, then plays by itself when you go on.`
+    : 'Pick a name once; share one link forever.';
+}
+$('#wpHandleForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  if (!acct.user) return openAccount('in');
+  const h = $('#wpHandle').value.trim().toLowerCase();
+  if (h === acct.user.handle) return;
+  $('#wpHandleSave').disabled = true;
+  try {
+    const r = await acctApi('handle', { handle: h, studio: S.studio });
+    setUser(r.user); toast(`Your watch page is now ${location.host}/w/${h}`);
+    renderWatchSec();
+  } catch (err) { $('#wpHandleNote').textContent = err.message; }
+  finally { $('#wpHandleSave').disabled = false; }
+});
 $('#wpCopy').onclick = () => copy(watchLinkUrl(), 'Watch link copied. Share it anywhere.');
 $('#wpOpen').onclick = () => window.open(watchLinkUrl(), '_blank', 'noopener');
 $('#wpCard').onclick = () => {
