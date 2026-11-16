@@ -1,7 +1,8 @@
 // The public watch page (/w/<studio>): while the host is live, the platform player plus links to every platform
 // the show is on. Reads only the studio's public watch info; checks again every 15 seconds.
 const $ = (s) => document.querySelector(s);
-const code = decodeURIComponent(location.pathname.split('/')[2] || '').toLowerCase().replace(/[^a-z0-9-]/g, '');
+const safeDecode = (s) => { try { return decodeURIComponent(s); } catch { return ''; } };
+const code = safeDecode(location.pathname.split('/')[2] || '').toLowerCase().replace(/[^a-z0-9-]/g, '');
 const NAMES = { youtube: 'YouTube', twitch: 'Twitch', kick: 'Kick', facebook: 'Facebook', x: 'X', rumble: 'Rumble', custom: 'Watch' };
 let since = 0, shown = '';
 const HOSTS = { 'youtube.com': 'YouTube', 'youtu.be': 'YouTube', 'twitch.tv': 'Twitch', 'kick.com': 'Kick', 'facebook.com': 'Facebook', 'x.com': 'X', 'twitter.com': 'X', 'rumble.com': 'Rumble' };

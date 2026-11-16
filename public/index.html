@@ -475,9 +475,10 @@
             </div>
             <p class="hint" id="liveNote">Stream keys stay in this browser. Copy each one from the platform’s live dashboard.</p>
             <button type="button" class="btn live block" id="liveBtn">Go live</button>
+            <p class="hint live-why" id="liveWhy" hidden></p>
             <p class="hint live-stats" id="liveStats" hidden></p>
             <div class="row" id="watchRow" hidden><button type="button" class="btn sm" id="watchCopy">Copy watch page link</button><span class="hint" style="margin:0">One page for viewers, with the live player and links to every platform.</span></div>
-            <div class="soft-card" id="liveOff" hidden><p><b>Live streaming isn’t switched on for this site yet.</b> You can still record your show and upload it afterwards.</p><p class="fine">Site owner: deploy the relay in <code>relay/</code> (see its README) and set RELAY_URL and RELAY_SECRET.</p></div>
+            <div class="soft-card" id="liveOff" hidden><p><b>Going live isn’t available on this site yet.</b> You can record your show now and upload it to YouTube or anywhere else afterwards.</p><button type="button" class="btn sm" id="liveOffRec">Record instead</button></div>
           </div>
           <hr>
           <div class="fld"><span>Format</span>
@@ -494,7 +495,7 @@
           </div>
           <div class="fld up-block" id="upBlock"><span>Upcoming</span>
             <div id="upSignin" class="soft-card"><p>Sign in to schedule streams, email invites and keep them here.</p><button type="button" class="btn sm" id="upSigninBtn">Create an account or sign in</button></div>
-            <div id="upWrap" hidden><ul class="up-list" id="upList"></ul><p class="hint" id="upEmpty">Nothing scheduled. Use Start a stream to plan one.</p></div>
+            <div id="upWrap" hidden><ul class="up-list" id="upList"></ul><p class="hint" id="upEmpty">Nothing scheduled. Use Plan a stream to add one.</p></div>
           </div>
     </div>
   </div>
@@ -636,7 +637,7 @@
 <!-- ================= ENTER STUDIO ================= -->
 <dialog class="modal" id="enterDlg" aria-labelledby="enterH">
   <form method="dialog" class="modal-card glass raised wide" id="enterForm">
-    <button class="icon-btn sm modal-close" value="cancel" aria-label="Close" formnovalidate><svg class="i sm" aria-hidden="true"><use href="/icons.svg#i-x"/></svg></button>
+    <button type="button" class="icon-btn sm modal-close" value="cancel" data-close aria-label="Close" formnovalidate><svg class="i sm" aria-hidden="true"><use href="/icons.svg#i-x"/></svg></button>
     <div class="enter-head"><h2 id="enterH">Step into the studio.</h2><p class="sub">Check how you look and sound. Nobody sees you until you go in.</p></div>
     <div class="green-room">
       <div class="gr-col">
@@ -656,7 +657,7 @@
       </div>
       <div class="knock-wait" id="knockWait" hidden>
         <div class="knock-orb"><i></i><i></i><i></i></div>
-        <h3>Waiting for the host</h3>
+        <h3 id="knockWaitH">Waiting for the host</h3>
         <p id="knockMsg">The host has been told you’re here.</p>
         <button type="button" class="btn ghost" id="knockCancel">Cancel</button>
       </div>
@@ -840,7 +841,7 @@
 <!-- ================= INVITE ================= -->
 <dialog class="modal" id="inviteDlg" aria-labelledby="inviteH">
   <form method="dialog" class="modal-card glass raised">
-    <button class="icon-btn sm modal-close" value="cancel" aria-label="Close"><svg class="i sm" aria-hidden="true"><use href="/icons.svg#i-x"/></svg></button>
+    <button type="button" class="icon-btn sm modal-close" value="cancel" data-close aria-label="Close"><svg class="i sm" aria-hidden="true"><use href="/icons.svg#i-x"/></svg></button>
     <h2 id="inviteH">Invite guests</h2>
     <p class="sub">Send the link: guests land in the green room, check their camera and join.</p>
     <output class="code" id="inviteCode">—</output>
@@ -873,7 +874,7 @@
 <!-- ================= RECORDING SAVED ================= -->
 <dialog class="modal" id="recDlg" aria-labelledby="recH">
   <form method="dialog" class="modal-card glass raised">
-    <button class="icon-btn sm modal-close" value="cancel" aria-label="Close"><svg class="i sm" aria-hidden="true"><use href="/icons.svg#i-x"/></svg></button>
+    <button type="button" class="icon-btn sm modal-close" value="cancel" data-close aria-label="Close"><svg class="i sm" aria-hidden="true"><use href="/icons.svg#i-x"/></svg></button>
     <h2 id="recH">Recording ready.</h2>
     <p class="sub" id="recInfo">—</p>
     <video id="recVideo" controls playsinline></video>
@@ -884,7 +885,8 @@
   </form>
 </dialog>
 
-<div class="toasts" id="toasts" role="status" aria-live="polite"></div>
+<button type="button" class="audio-unblock glass raised" id="audioUnblock" hidden><svg class="i" aria-hidden="true"><use href="/icons.svg#i-play"/></svg>Your browser paused your guests’ sound. Click to hear them.</button>
+<div class="toasts" id="toasts" role="status" aria-live="polite" popover="manual"></div>
 <div class="media-sink" id="mediaSink" aria-hidden="true"></div>
 
 <script src="/app.js" type="module"></script>
