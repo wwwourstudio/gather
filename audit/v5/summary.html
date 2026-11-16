@@ -1,0 +1,222 @@
+<title>gather V5 Audit</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;700;800&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: one reading column like a broadcast run sheet; severity carried by tally-light chips, red reserved for P0 */
+:root{
+  --bg:#f6f7f9; --surface:#ffffff; --fg:#151a22; --muted:#5b6474; --line:#dde1e8;
+  --accent:#2f6bf0; --p0:#d0322b; --p1:#b86e00; --p2:#2f6bf0; --p3:#6b7586;
+  --p0bg:#fde9e8; --p1bg:#fff1dc; --p2bg:#e7eefe; --p3bg:#eceef2; --ok:#1f8a4c; --okbg:#e3f4ea;
+  --display:"Archivo",system-ui,sans-serif; --body:"Inter",system-ui,sans-serif; --mono:"JetBrains Mono",ui-monospace,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0d1118; --surface:#151b25; --fg:#e7ebf2; --muted:#9aa4b5; --line:#263041;
+  --accent:#6f9bff; --p0:#ff6b63; --p1:#f0a640; --p2:#7fa6ff; --p3:#9aa4b5;
+  --p0bg:#3a1513; --p1bg:#35250c; --p2bg:#17264a; --p3bg:#222a37; --ok:#4fd08a; --okbg:#123222; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0d1118; --surface:#151b25; --fg:#e7ebf2; --muted:#9aa4b5; --line:#263041;
+  --accent:#6f9bff; --p0:#ff6b63; --p1:#f0a640; --p2:#7fa6ff; --p3:#9aa4b5;
+  --p0bg:#3a1513; --p1bg:#35250c; --p2bg:#17264a; --p3bg:#222a37; --ok:#4fd08a; --okbg:#123222; color-scheme:dark}
+body{background:var(--bg);color:var(--fg);font:15px/1.6 var(--body);
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:40px 64px}
+.wrap{max-width:880px;margin:0 auto;display:flex;flex-direction:column;gap:44px}
+h1,h2,h3{font-family:var(--display);text-wrap:balance;margin:0;line-height:1.2}
+h1{font-size:34px;font-weight:800;letter-spacing:-.01em}
+h2{font-size:22px;font-weight:700}
+h3{font-size:16px;font-weight:700}
+p{margin:0;max-width:68ch}
+.eyebrow{font:500 12px var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+header{display:flex;flex-direction:column;gap:12px}
+.lede{color:var(--muted);font-size:16px}
+section{display:flex;flex-direction:column;gap:16px}
+.board{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px}
+.cell{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:14px 16px;display:flex;flex-direction:column;gap:8px;min-width:0}
+.cell .name{font-weight:600}
+.cell .tot{font:700 26px var(--display);font-variant-numeric:tabular-nums}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{font:500 12px var(--mono);padding:2px 8px;border-radius:999px;font-variant-numeric:tabular-nums;white-space:nowrap}
+.c0{color:var(--p0);background:var(--p0bg)} .c1{color:var(--p1);background:var(--p1bg)}
+.c2{color:var(--p2);background:var(--p2bg)} .c3{color:var(--p3);background:var(--p3bg)} .cok{color:var(--ok);background:var(--okbg)}
+ol.items,ul.items{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;border-top:1px solid var(--line)}
+.items li{display:grid;grid-template-columns:44px 1fr;gap:12px;padding:12px 0;border-bottom:1px solid var(--line)}
+.items li > div{min-width:0;display:flex;flex-direction:column;gap:4px}
+.items .t{font-weight:600}
+.items .d{color:var(--muted)}
+code,.where{font:13px var(--mono);overflow-wrap:anywhere}
+.where{color:var(--muted)}
+.cols{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:24px}
+.cols > div{min-width:0;display:flex;flex-direction:column;gap:10px}
+.plain{margin:0;padding-left:18px;display:flex;flex-direction:column;gap:6px}
+.tablewrap{overflow-x:auto;border:1px solid var(--line);border-radius:10px;background:var(--surface)}
+table{border-collapse:collapse;width:100%;min-width:560px;font-size:14px}
+th,td{text-align:left;padding:10px 14px;border-bottom:1px solid var(--line);vertical-align:top}
+th{font:500 12px var(--mono);letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+tr:last-child td{border-bottom:0}
+td.num{font-variant-numeric:tabular-nums;white-space:nowrap}
+.note{background:var(--surface);border:1px solid var(--line);border-left:3px solid var(--accent);border-radius:8px;padding:12px 16px;color:var(--muted)}
+a{color:var(--accent)}
+a:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+</style>
+
+<div class="wrap">
+<header>
+  <span class="eyebrow">Audit · 16 Nov 2026 · 4 auditors</span>
+  <h1>gather V5 audit</h1>
+  <p class="lede">Four agents tested every link and function of gather with real browsers and fake cameras: landing and accounts, the studio, the panels and going live, and the overall UX. They ran against the code on <code>main</code> locally, because the sandbox cannot reach the live site. Each finding below was reproduced. Full reports and 200+ screenshots are in <code>audit/v5/</code> on the <a href="https://github.com/wwwourstudio/gather/pull/1">audit pull request</a>.</p>
+</header>
+
+<section>
+  <h2>Scoreboard</h2>
+  <div class="board">
+    <div class="cell"><span class="name">Landing &amp; accounts</span><span class="tot">25</span>
+      <div class="chips"><span class="chip c0">2 P0</span><span class="chip c1">3 P1</span><span class="chip c2">5 P2</span><span class="chip c3">15 P3</span></div></div>
+    <div class="cell"><span class="name">Studio core</span><span class="tot">11</span>
+      <div class="chips"><span class="chip c0">1 P0</span><span class="chip c1">2 P1</span><span class="chip c2">5 P2</span><span class="chip c3">3 P3</span></div></div>
+    <div class="cell"><span class="name">Panels &amp; going live</span><span class="tot">15</span>
+      <div class="chips"><span class="chip c1">6 P1</span><span class="chip c2">4 P2</span><span class="chip c3">5 P3</span></div></div>
+    <div class="cell"><span class="name">Security</span><span class="tot">11</span>
+      <div class="chips"><span class="chip c1">1 P1</span><span class="chip c2">5 P2</span><span class="chip c3">5 P3</span></div></div>
+    <div class="cell"><span class="name">UX &amp; design</span><span class="tot">19</span>
+      <div class="chips"><span class="chip c0">2 P0</span><span class="chip c1">7 P1</span><span class="chip c2">7 P2</span><span class="chip c3">3 P3</span></div></div>
+  </div>
+  <p class="d" style="color:var(--muted)">P0 blocks or harms users · P1 major breakage or confusion · P2 friction · P3 polish. Some issues were found by more than one auditor; they are merged in the lists below.</p>
+</section>
+
+<section>
+  <h2>Fix first</h2>
+  <p>These break the main path for real people. Most are small code changes.</p>
+  <ol class="items">
+    <li><span class="chip c0">P0</span><div><span class="t">Invited guests can't join after touching a background option</span><span class="d">Clicking any background chip in the green room flips "Join studio" to "Create studio", so the guest hits sign-in or lands in an empty new studio. The join/create toggle selector also matches the background buttons.</span><span class="where">public/app.js:4644, 4649</span></div></li>
+    <li><span class="chip c0">P0</span><div><span class="t">Pressing Enter in the green room closes it and turns the camera off</span><span class="d">The close button is the form's first submit button, so Enter "cancels". Same pattern in the invite and recording dialogs.</span><span class="where">public/index.html:639 · public/app.js:4650</span></div></li>
+    <li><span class="chip c0">P0</span><div><span class="t">Typing the show title fires keyboard shortcuts</span><span class="d">"Mars Rover Vlog 3" saved as "a oe log" while it muted the mic, started a screen share, started and stopped a recording and switched scenes. The shortcut guard misses <code>contenteditable="plaintext-only"</code>.</span><span class="where">public/app.js:3739 vs 4701</span></div></li>
+    <li><span class="chip c0">P0</span><div><span class="t">Going live is a dead end for first-time hosts</span><span class="d">Hosts must fetch a stream key from YouTube Studio; the Go live button greys out with no reason; without the relay, hosts see developer instructions.</span><span class="where">public/index.html:465–482 · renderLive</span></div></li>
+    <li><span class="chip c0">P0</span><div><span class="t">One malformed URL crashes a self-hosted server</span><span class="d"><code>/%E0%A4%A</code> throws in an unguarded <code>decodeURIComponent</code> and kills every studio on the process. Vercel is likely unaffected.</span><span class="where">server.js:44 · public/watch.js:4</span></div></li>
+  </ol>
+</section>
+
+<section>
+  <h2>Serious problems by theme</h2>
+  <div class="cols">
+    <div>
+      <h3>Who is host</h3>
+      <ul class="plain">
+        <li>The first person into an empty studio becomes host, so an early guest takes the seat.</li>
+        <li>If the host reloads or drops for 20 s, a guest is promoted and the host returns as a guest.</li>
+        <li>When the host leaves, a guest silently gets the full host interface.</li>
+      </ul>
+      <p class="where">lib/studio.js:306–321 · public/app.js:627</p>
+    </div>
+    <div>
+      <h3>Going live</h3>
+      <ul class="plain">
+        <li>The stream-key field clears while typing whenever someone joins or leaves.</li>
+        <li>Errors appear behind the Go live dialog; a failed destination is still reported as live.</li>
+        <li>"Connecting…" hangs forever if the relay doesn't answer, likely on Render's free plan while it wakes.</li>
+        <li>The watch page can show "Live" forever after the host leaves.</li>
+      </ul>
+      <p class="where">public/app.js:3176</p>
+    </div>
+    <div>
+      <h3>Recording and consent</h3>
+      <ul class="plain">
+        <li>Guests get a 3-second notice, then no recording indicator.</li>
+        <li>The host's name tag reads "Alex Host (you)" in the recording and stream.</li>
+        <li>Banners cover the guest's camera in Spotlight.</li>
+        <li>Recorded files have no duration, so they can't be seeked.</li>
+      </ul>
+      <p class="where">public/app.js:650, 876 · public/layout.js</p>
+    </div>
+    <div>
+      <h3>Connection and audio</h3>
+      <ul class="plain">
+        <li>An invalid TURN entry silently breaks all video for that person.</li>
+        <li>Guest audio can start blocked until someone clicks the stage.</li>
+        <li>Blur and replace drop to about 2 fps without a GPU, with no fallback.</li>
+        <li>Each person polls the server 45–60 times a minute: about 12–14k Vercel calls for a 4-person, 1-hour show.</li>
+      </ul>
+      <p class="where">public/fx.js:461 · public/app.js:747</p>
+    </div>
+  </div>
+</section>
+
+<section>
+  <h2>Security</h2>
+  <ol class="items">
+    <li><span class="chip c1">P1</span><div><span class="t">Invite emails can be used to send spam</span><span class="d">Sign-up doesn't verify email, and each scheduled show can email 20 addresses with no limit on shows.</span></div></li>
+    <li><span class="chip c2">P2</span><div><span class="t">Password-reset links can be pointed at another site</span><span class="d">The link is built from the request's Host header when <code>APP_URL</code> is unset. Set <code>APP_URL</code> in Vercel now.</span></div></li>
+    <li><span class="chip c2">P2</span><div><span class="t">Account takeover through Google sign-in linking</span><span class="d">Someone can register your email first, then be linked when you sign in with Google.</span></div></li>
+    <li><span class="chip c2">P2</span><div><span class="t">The free AI allowance can be drained</span><span class="d">No account needed, and the limit trusts a spoofable <code>X-Forwarded-For</code> header.</span></div></li>
+    <li><span class="chip c2">P2</span><div><span class="t">Knock and relay-slot flooding; account lockout</span><span class="d">300 anonymous knocks were all accepted; one relay token can fill every relay slot; 11 wrong passwords lock anyone out of any account.</span></div></li>
+    <li><span class="chip cok">OK</span><div><span class="t">What held up</span><span class="d">Guests were refused every host-only action. Chat and banner XSS attempts were inert. Stream keys never reached gather's server or the relay logs, and the relay rejected missing, forged and expired tokens.</span></div></li>
+  </ol>
+</section>
+
+<section>
+  <h2>What works</h2>
+  <p>Video calls connect for every participant, with roughly 10 MB of memory per person. All 11 landscape and 8 vertical scenes render. Screen share, recording, invite links, backstage, removing guests, the 10-step tour, sign-up and sign-in, and every public link work. Going live was verified end to end: a local copy of the relay sent real H.264 and AAC to an RTMP receiver. Landing pages load in about half a second with almost no layout shift.</p>
+  <div class="note">Tests: 9 of 13 suites passed on the first run. The other four failed because of the sandbox (one missing package, three timeouts while four auditors shared the machine) and pass alone. Separately, the <code>feat</code> suite fails intermittently in CI and should be investigated.</div>
+</section>
+
+<section>
+  <h2>Making it look better</h2>
+  <div class="cols">
+    <div>
+      <h3>Today</h3>
+      <ul class="plain">
+        <li>The video covers 43% of a laptop screen and 24% of a phone. StreamYard gives it 55–60%.</li>
+        <li>25 pieces of text are 9–11 px; phone name tags draw at about 6 px.</li>
+        <li>Twelve scene tiles scroll sideways and get cut off; Settings is one sheet of about 60 controls.</li>
+        <li>On phones, the recording pill pushes Go live off the screen.</li>
+      </ul>
+    </div>
+    <div>
+      <h3>Quick wins (about a week)</h3>
+      <ul class="plain">
+        <li>Stage first: drop the frame, collapsible panel, size from screen height. Target 65% of the work area.</li>
+        <li>One type scale: 12 px minimum, 14 px controls, 16 px inputs.</li>
+        <li>A vertical scene rail with six thumbnails and "More".</li>
+        <li>Red only for recording and live, shown to everyone.</li>
+        <li>A 44 px phone header and bottom bar; Settings in four sections.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section>
+  <h2>V5: what "50× better" means</h2>
+  <div class="tablewrap"><table>
+    <thead><tr><th>Measure</th><th>Today</th><th>V5 target</th></tr></thead>
+    <tbody>
+      <tr><td>Clicks from landing to live (new host)</td><td class="num">≈10 + 5 fields + YouTube Studio</td><td class="num">3</td></tr>
+      <tr><td>Time to first live</td><td class="num">3–5 min</td><td class="num">under 45 s</td></tr>
+      <tr><td>Guest from link to on stage</td><td class="num">~8 s, Enter-key failure</td><td class="num">under 5 s, no dead ends</td></tr>
+      <tr><td>Recordings lost when a tab closes</td><td class="num">all of them</td><td class="num">none</td></tr>
+      <tr><td>End of show to a postable clip</td><td class="num">no editor</td><td class="num">under 2 min</td></tr>
+      <tr><td>Video share of screen (1440 / 1024 / 390)</td><td class="num">43 / 26 / 24%</td><td class="num">65 / 55 / 45%</td></tr>
+      <tr><td>Controls on the main screen</td><td class="num">~40</td><td class="num">15 or fewer</td></tr>
+    </tbody>
+  </table></div>
+  <div class="cols">
+    <div><h3>Go live without stream keys</h3><p>Sign in to YouTube, Twitch or Facebook once, then go live in 3 clicks. A 10-second test stream runs before the first show.</p></div>
+    <div><h3>Recordings that can't be lost</h3><p>Each person records locally and uploads every 5 seconds, which also gives separate tracks per person. Sam, the AI producer, makes a transcript and three vertical clips afterwards.</p></div>
+    <div><h3>A run of show that runs the show</h3><p>An ordered list of segments drives scenes, media and banners. Prepare mode shows the panels; On-air mode gives the stage about 65% and Space moves to the next segment.</p></div>
+  </div>
+</section>
+
+<section>
+  <h2>Build order</h2>
+  <div class="tablewrap"><table>
+    <thead><tr><th>Phase</th><th>Scope</th><th>Effort</th><th>Done when</th></tr></thead>
+    <tbody>
+      <tr><td>0 · Fix the floor</td><td>Every P0 and P1 above, the security fixes, the quick visual wins</td><td class="num">1–2 weeks</td><td>No P0/P1 open; keyboard journey passes in CI</td></tr>
+      <tr><td>1 · First five minutes</td><td>Landing page as the green room, Google sign-in, stage-first layout, themes</td><td class="num">3 weeks</td><td>3 clicks or fewer to the studio</td></tr>
+      <tr><td>2 · Zero-key Go live</td><td>YouTube, Twitch and Facebook sign-in, managed relay, test stream, health</td><td class="num">4 weeks</td><td>Live in under 45 s; 98% success</td></tr>
+      <tr><td>3 · Never-lose recording</td><td>Per-person tracks, chunked upload, crash recovery</td><td class="num">4 weeks</td><td>No lost recordings in a tab-closing test</td></tr>
+      <tr><td>4 · Run of show</td><td>Segments, Prepare and On-air modes, producer bar, undo, phone sheet</td><td class="num">3 weeks</td><td>First-show completion up 30%</td></tr>
+      <tr><td>5 · After the show</td><td>Transcript, auto highlights with captions, publish to YouTube</td><td class="num">4–5 weeks</td><td>Clip ready in under 2 min</td></tr>
+    </tbody>
+  </table></div>
+  <p style="color:var(--muted)">About 5 months for 2–3 engineers and a designer. Phases 0–2 (about 2 months) close the gap with StreamYard; phases 3 and 5 are where gather pulls ahead.</p>
+</section>
+</div>
