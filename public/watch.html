@@ -37,18 +37,21 @@
           <button class="wv-unmute" id="wUnmute" type="button" hidden><svg class="i" aria-hidden="true"><use href="/icons.svg#i-play"/></svg><span class="long">Tap to turn on sound</span><span class="short">Tap for sound</span></button>
           <div class="wv-floats" id="wFloats" aria-hidden="true"></div>
           <div class="wv-combo" id="wCombo" aria-hidden="true" hidden></div>
+          <div class="wv-caps" id="wCaps" aria-live="polite" hidden></div>
           <div class="wv-ctrls" id="wCtrls">
             <button class="wv-c" id="wMute" type="button" aria-label="Mute (M)" data-tip="Mute (M)"><svg class="i" aria-hidden="true"><use href="/icons.svg#i-volume-2"/></svg></button>
             <input class="wv-vol" id="wVol" type="range" min="0" max="1" step="0.05" value="1" aria-label="Volume">
             <span class="wv-badge" id="wDelay" hidden></span>
             <span class="wv-sp"></span>
+            <button class="wv-c wv-txt" id="wCC" type="button" aria-pressed="false" aria-label="Captions" data-tip="Captions">CC</button>
+            <button class="wv-c wv-txt" id="wQual" type="button" aria-label="Quality" data-tip="Quality">Auto</button>
+            <button class="wv-c wv-txt" id="wFill" type="button" aria-pressed="false" aria-label="Fill the screen" data-tip="Fill the screen (vertical phones)">Fill</button>
             <button class="wv-c" id="wPip" type="button" aria-label="Picture in picture" data-tip="Picture in picture"><svg class="i" aria-hidden="true"><use href="/icons.svg#i-pip"/></svg></button>
             <button class="wv-c" id="wChatToggle" type="button" aria-label="Hide chat (C)" data-tip="Hide chat (C)" aria-pressed="false"><svg class="i" aria-hidden="true"><use href="/icons.svg#i-message-square"/></svg></button>
             <button class="wv-c" id="wFull" type="button" aria-label="Fullscreen (F)" data-tip="Fullscreen (F)"><svg class="i" aria-hidden="true"><use href="/icons.svg#i-maximize"/></svg></button>
           </div>
         </div>
       <div class="wv-strip">
-          <button class="btn primary wv-sc" id="wSuperBtn" type="button" hidden><span class="wv-sc-ic" aria-hidden="true">$</span>Super chat</button>
           <a class="btn" id="wJoin" target="_blank" rel="noopener" hidden><svg class="i" aria-hidden="true"><use href="/icons.svg#i-user-plus"/></svg><span>Ask to join</span></a>
           <div class="wv-reacts" id="wReacts" role="group" aria-label="React"></div>
           <div class="wv-sources" id="wTabs" role="tablist" aria-label="Watch on" hidden></div>
@@ -59,13 +62,21 @@
     </section>
 
     <aside class="wv-chat" id="wChat" aria-label="Live chat">
-      <header class="wv-chat-head"><h2>Live chat</h2><span class="wv-meta" id="wChatState"></span></header>
+      <header class="wv-chat-head"><div class="wv-tabs" role="tablist"><button type="button" role="tab" id="wTabChat" aria-selected="true">Live chat</button><button type="button" role="tab" id="wTabAbout" aria-selected="false">About</button></div><span class="wv-meta" id="wChatState"></span></header>
+      <section class="wv-about" id="wAbout" hidden aria-label="About this show">
+        <h2 id="wAboutTitle"></h2>
+        <p class="wv-meta" id="wAboutMeta"></p>
+        <p class="wv-about-text" id="wAboutText"></p>
+        <ul class="wv-about-links" id="wAboutLinks"></ul>
+        <div class="wv-about-acts"><button type="button" class="btn sm" id="wAboutShare">Share this show</button></div>
+      </section>
       <div class="wv-tops" id="wTops" hidden aria-label="Top supporters"></div>
       <ol class="wv-msgs" id="wMsgs" aria-live="polite"></ol>
       <button class="wv-newer" id="wNewer" type="button" hidden>New messages ↓</button>
       <form class="wv-compose" id="wCompose" autocomplete="off">
         <div class="wv-composer">
           <button class="wv-me" id="wMe" type="button" aria-label="Change your chat name" data-tip="Change your name"></button>
+          <button class="wv-scbtn" id="wSuperBtn" type="button" aria-label="Send a super chat" data-tip="Super chat" hidden>$</button>
           <input class="input" id="wText" maxlength="300" placeholder="Say something…" aria-label="Chat message" enterkeyhint="send">
           <button class="btn primary" id="wSend" type="submit" aria-label="Send">Send</button>
         </div>

@@ -189,6 +189,20 @@ export const PRESETS = [
     ],
   },
   {
+    // For gamers: the game edge to edge, the facecam in the corner, super chats and chat cards over the game.
+    id: 'p-game', name: 'Game + facecam', desc: 'The game full screen, your camera in a corner, alerts on top.',
+    els: [
+      P('media', 0, 0, 1280, 720, { radius: 0, stack: true }),
+      P('slot', 1000, 24, 256, 192, { index: 0, radius: 14, pip: true, stack: true }),
+      P('slot', 1000, 232, 256, 192, { index: 1, radius: 14, pip: true, stack: true, hidden: true }),
+      P('featured', 24, 528, 520, 160, { stack: true }),
+      P('banner', 24, 24, 560, 96, { stack: true, hidden: true }),
+      P('captions', 160, 640, 960, 56, { stack: true }),
+      P('logo', 24, 24, 112, 40, { stack: true, hidden: true }),
+      P('ticker', 0, 672, 1280, 48, { hidden: true }),
+    ],
+  },
+  {
     id: 'p-pip', name: 'Slides + speaker', desc: 'Full presentation with the speaker in a picture-in-picture corner.',
     els: [
       P('media', 32, 32, 1216, 656, { radius: 12, stack: true }),

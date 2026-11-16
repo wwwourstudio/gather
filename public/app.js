@@ -330,19 +330,20 @@ function stopPresentation() {
   syncMedia();
   autoEndPresentScene();
 }
-async function presentScreen() {
+/** Share a screen, or (game) a game window: 60 fps, up to 1080p, encoded for motion rather than sharp text. */
+async function presentScreen(game = false) {
   if (!media?.getDisplayMedia) return toast('Screen sharing is not supported in this browser.', { err: true });
   try {
-    const s = await media.getDisplayMedia({ video: { frameRate: { ideal: 30 } }, audio: true, systemAudio: 'include' });
+    const s = await media.getDisplayMedia({ video: game ? { frameRate: { ideal: 60, max: 60 }, width: { ideal: 1920 }, height: { ideal: 1080 } } : { frameRate: { ideal: 30 } }, audio: true, systemAudio: 'include' });
     const track = s.getVideoTracks()[0];
-    track.contentHint = 'detail';
+    track.contentHint = game ? 'motion' : 'detail';
     const v = document.createElement('video'); v.muted = true; v.playsInline = true; v.srcObject = new MediaStream([track]);
     $('#mediaSink').append(v); v.play().catch(() => {});
     const at = s.getAudioTracks()[0];
     const audio = at ? mixInMedia(audioCtx().createMediaStreamSource(new MediaStream([at]))) : null;
     track.onended = stopPresentation;
-    startPresentation({ kind: 'screen', name: track.label || 'Screen', track, source: v, stop() { s.getTracks().forEach((t) => t.stop()); v.remove(); audio?.dispose(); } });
-    toast(at ? 'Sharing your screen with its sound.' : 'Sharing your screen.');
+    startPresentation({ kind: 'screen', game, name: track.label || (game ? 'Game' : 'Screen'), track, source: v, stop() { s.getTracks().forEach((t) => t.stop()); v.remove(); audio?.dispose(); } });
+    toast(game ? `Game mode: 60 fps${at ? ' with game sound' : ''}. Pick “Game + facecam” for your camera in the corner.` : at ? 'Sharing your screen with its sound.' : 'Sharing your screen.');
   } catch (e) { if (e?.name !== 'NotAllowedError') toast('Screen share: ' + mediaErr(e), { err: true }); }
 }
 function presCanvas() { const c = document.createElement('canvas'); c.width = PRES_W; c.height = PRES_H; return c; }
@@ -433,6 +434,7 @@ $('#presentMenu').addEventListener('click', (ev) => {
   $('#presentMenu').hidePopover();
   const kind = b.dataset.present;
   if (kind === 'screen') presentScreen();
+  if (kind === 'game') presentScreen(true);
   if (kind === 'video') $('#videoFile').click();
   if (kind === 'pdf') $('#pdfFile').click();
   if (kind === 'image') $('#imageFile').click();
@@ -1137,7 +1139,8 @@ function drawProgram() {
   const t0 = performance.now();
   lastFrame = t0; S.local.pres?.draw?.(); draw(); flushEditorLayers();
   const cost = performance.now() - t0, onAir = !!(S.rec || S.live || S.viewers?.size); // direct watch-page viewers count as on air
-  frameGap = Math.max(editor.on ? 0 : 1000 / 30 - 2, cost * (onAir ? 1.25 : 2));
+  // Game mode draws at 60 fps; everything else at 30 (what recordings and streams capture).
+  frameGap = Math.max(editor.on || S.local.pres?.game ? 0 : 1000 / 30 - 2, cost * (onAir ? 1.25 : 2));
   nextFrame = t0 + frameGap;
 }
 function frame(now) {
@@ -3111,7 +3114,11 @@ function sendCaption(text, final) {
   const go = () => { capLast = Date.now(); wsSend({ type: 'caption', text, final }); };
   if (final || Date.now() - capLast > 400) go(); else capTimer = setTimeout(go, 400);
 }
-function showCaption(id, name, text, final) { cap.lines.set(id, { name, text, final, t: Date.now() }); }
+function showCaption(id, name, text, final) {
+  cap.lines.set(id, { name, text, final, t: Date.now() });
+  // Watch-page viewers can turn CC on: the host passes each finished line along (one small write per line).
+  if (final && isHost() && S.studio && text) wsSend({ type: 'wcap', name, text });
+}
 function drawCaptions(r) {
   const c = S.state.captions;
   if (!c?.on) return;
@@ -5012,7 +5019,7 @@ setInterval(() => { if (S.studio && !S.rec && S.state?.rec?.on) renderDock(); },
 // Viewers watch the program straight from this browser over WebRTC (no platform in between), chat, react, send
 // super chats paid directly to the host, and ask to join the stage. A laptop can encode and upload the program
 // for a handful of viewers, so the host sets a cap; past it, viewers fall back to the platform players.
-const WATCH_DEFAULTS = { chat: true, supers: false, join: true, direct: true, cap: 6, slow: 0, min: 2, pay: { paypal: '', venmo: '', cashapp: '', stripe: '' } };
+const WATCH_DEFAULTS = { chat: true, supers: false, join: true, direct: true, cap: 6, slow: 0, min: 2, about: '', links: [], pay: { paypal: '', venmo: '', cashapp: '', stripe: '' } };
 const watchCfg = () => ({ ...WATCH_DEFAULTS, ...(S.state.watch || {}), pay: { ...WATCH_DEFAULTS.pay, ...(S.state.watch?.pay || {}) } });
 const watchLinkUrl = () => `${location.origin}/w/${S.studio}`;
 const VIEW = new Map(); // viewer id -> { pc }
@@ -5027,7 +5034,8 @@ function hwH264() {
 }
 function programTracks() {
   audioCtx();
-  if (!programStream || programStream.getVideoTracks()[0]?.readyState !== 'live') programStream = canvas.captureStream(30);
+  const fps = S.local.pres?.game ? 60 : 30;
+  if (!programStream || programStream.fps !== fps || programStream.getVideoTracks()[0]?.readyState !== 'live') { programStream = canvas.captureStream(fps); programStream.fps = fps; }
   return [programStream.getVideoTracks()[0], recDest?.stream.getAudioTracks()[0]].filter(Boolean);
 }
 async function viewerWant(vid) {
@@ -5050,7 +5058,7 @@ async function viewerWant(vid) {
           if (h264.length) tr?.setCodecPreferences([...h264, ...rest]);
         }
       } catch {}
-      try { const p = sender.getParameters(); p.encodings = [{ ...(p.encodings?.[0] || {}), maxBitrate: 2_500_000, maxFramerate: 30 }]; p.degradationPreference = 'balanced'; sender.setParameters(p).catch(() => {}); } catch {}
+      tuneViewerSender(sender);
     }
   }
   pc.onicecandidate = (e) => { if (e.candidate) wsSend({ type: 'vsignal', to: vid, data: { candidate: e.candidate } }); };
@@ -5062,9 +5070,30 @@ async function viewerWant(vid) {
 async function viewerSignal(vid, d) {
   const v = VIEW.get(vid);
   if (!v || !d) return;
+  // A viewer picked a quality on their player: scale only their stream.
+  if (d.quality) { v.q = d.quality; for (const s of v.pc.getSenders()) if (s.track?.kind === 'video') tuneViewerSender(s, v.q); return; }
   try { if (d.sdp) await v.pc.setRemoteDescription(d.sdp); else if (d.candidate) await v.pc.addIceCandidate(d.candidate).catch(() => {}); }
   catch (e) { console.warn('viewer signal', e); }
 }
+/** Viewer encoding: 2.5 Mbps at 30 fps; in game mode 60 fps (4 Mbps), keeping motion smooth over sharpness. */
+function tuneViewerSender(sender, q) {
+  const game = !!S.local.pres?.game;
+  try {
+    const p = sender.getParameters();
+    const scale = { 720: 1, 480: 1.5, 360: 2 }[q] || 1;
+    p.encodings = [{ ...(p.encodings?.[0] || {}), maxBitrate: Math.round((game ? 4_000_000 : 2_500_000) / scale / scale), maxFramerate: game ? 60 : 30, scaleResolutionDownBy: scale }];
+    p.degradationPreference = game ? 'maintain-framerate' : 'balanced';
+    sender.setParameters(p).catch(() => {});
+  } catch {}
+}
+// Game mode on or off: hand every direct viewer the program at the new frame rate.
+setInterval(() => {
+  if (!VIEW.size || !programStream) return;
+  const want = S.local.pres?.game ? 60 : 30;
+  if (programStream.fps === want) return;
+  const [video] = programTracks();
+  for (const v of VIEW.values()) for (const s of v.pc.getSenders()) if (s.track?.kind === 'video') { s.replaceTrack(video).catch(() => {}); tuneViewerSender(s, v.q); }
+}, 1000);
 function closeViewer(vid) { const v = VIEW.get(vid); if (!v) return; VIEW.delete(vid); try { v.pc.close(); } catch {} renderWatchSec(); }
 function closeAllViewers() { for (const vid of [...VIEW.keys()]) closeViewer(vid); }
 
@@ -5157,6 +5186,8 @@ function renderWatchSec() {
   for (const [id, k] of [['#wpChat', 'chat'], ['#wpSupers', 'supers'], ['#wpJoin', 'join'], ['#wpDirect', 'direct']]) if (document.activeElement !== $(id)) $(id).checked = !!cfg[k];
   for (const k of Object.keys(PAY_NAME)) { const el = $('#wpPay-' + k); if (document.activeElement !== el) el.value = cfg.pay[k] || ''; }
   if (document.activeElement !== $('#wpCap')) $('#wpCap').value = String(cfg.cap);
+  if (document.activeElement !== $('#wpAbout')) $('#wpAbout').value = cfg.about || '';
+  if (document.activeElement !== $('#wpLinks')) $('#wpLinks').value = (cfg.links || []).map((l) => `${l.label} | ${l.url}`).join('\n');
   if (document.activeElement !== $('#wpMin')) $('#wpMin').value = String(cfg.min);
   $('#wpPayBox').hidden = !cfg.supers;
   $('#wpNoPay').hidden = !cfg.supers || Object.values(cfg.pay).some(Boolean);
@@ -5171,6 +5202,11 @@ $('#wpCard').onclick = () => {
 };
 for (const [id, k] of [['#wpChat', 'chat'], ['#wpSupers', 'supers'], ['#wpJoin', 'join'], ['#wpDirect', 'direct']]) $(id).onchange = (e) => setWatch({ [k]: e.target.checked });
 $('#wpCap').onchange = (e) => setWatch({ cap: Number(e.target.value) });
+$('#wpAbout').onchange = (e) => setWatch({ about: e.target.value.trim() });
+$('#wpLinks').onchange = (e) => {
+  const links = e.target.value.split('\n').map((line) => { const [a, b] = line.includes('|') ? line.split('|') : ['', line]; let url = (b || '').trim(); if (url && !/^https?:\/\//i.test(url)) url = 'https://' + url; return { label: a.trim() || url.replace(/^https?:\/\/(www\.)?/, '').split('/')[0], url }; }).filter((l) => /^https:\/\//.test(l.url)).slice(0, 6);
+  setWatch({ links });
+};
 $('#wpMin').onchange = (e) => setWatch({ min: Math.max(1, Number(e.target.value) || 2) });
 for (const k of Object.keys(PAY_NAME)) $('#wpPay-' + k).addEventListener('change', (e) => setWatch({ pay: { [k]: e.target.value.trim().replace(/^@|^\$/, '').replace(/^https?:\/\/(www\.)?paypal\.me\//i, '') } }));
 setInterval(() => { if ($('#watchSec') && !$('#watchSec').closest('[hidden]')) renderWatchSec(); }, 3000);
