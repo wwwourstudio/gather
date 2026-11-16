@@ -1,11 +1,13 @@
 const { chromium } = require('playwright');
 const SP = process.argv[2];
+let pages = []; // for the timing dump on failure
 (async () => {
   const browser = await chromium.launch({ args: ['--use-fake-ui-for-media-stream', '--use-fake-device-for-media-stream', '--autoplay-policy=no-user-gesture-required'] });
   // Every studio request is timed in the page, so a slow step can show which side was late (see the template step).
   const NET = () => { const f = window.fetch; window.__net = []; window.fetch = function (u, o) { const a = (String(u).match(/action=(\w+)/) || [])[1]; if (!a) return f.apply(this, arguments); const t0 = performance.now(), row = { a, t0: Math.round(t0) }; window.__net.push(row); if (window.__net.length > 80) window.__net.shift(); return f.apply(this, arguments).then((r) => { row.ms = Math.round(performance.now() - t0); return r; }, (e) => { row.ms = -1; throw e; }); }; };
   const mk = async () => { const c = await browser.newContext({ viewport: { width: 1600, height: 1000 } }); await c.addInitScript(NET); const p = await c.newPage(); p.errs = []; p.on('pageerror', e => p.errs.push(e.message)); p.on('console', m => m.type() === 'error' && p.errs.push(m.text())); return p; };
   const a = await mk(), b = await mk();
+  pages = [['host', a], ['guest', b]];
   await a.goto((process.env.GATHER_URL || 'http://localhost:8080') + '/'); await a.click('#enterStage'); await a.fill('#enterName', 'Alex Morgan'); await a.click('#enterGo');
   await a.waitForSelector('#inviteDlg[open]'); const code = await a.textContent('#inviteCode'); await a.click('#inviteDlg .modal-close');
   await b.goto((process.env.GATHER_URL || 'http://localhost:8080') + '/s/' + code); await b.waitForSelector('#enterDlg[open]');
@@ -92,4 +94,12 @@ const SP = process.argv[2];
   if (steps < 8 || !(await a.isHidden('#tour'))) console.log('FAIL the walk-through did not run through');
   console.log('errors A', a.errs, 'B', b.errs);
   await browser.close();
-})().catch(e => { console.error('FAIL', e.message); process.exit(1); });
+})().catch(async (e) => {
+  console.error('FAIL', e.message);
+  // Any step can be the slow one in CI: show every studio request from the last 12 s on both sides (time ago, + duration).
+  for (const [who, p] of pages) {
+    const rows = await p.evaluate(() => { const now = performance.now(); return (window.__net || []).filter((r) => now - r.t0 < 12000).map((r) => `${r.a}@-${Math.round(now - r.t0)}${r.ms == null ? '…' : '+' + r.ms}`).join(' '); }).catch(() => 'n/a');
+    console.error(`  ${who} requests:`, rows);
+  }
+  process.exit(1);
+});
