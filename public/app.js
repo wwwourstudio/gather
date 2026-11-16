@@ -4910,10 +4910,15 @@ $('#landClaim').addEventListener('submit', (e) => {
   if (!acct.user) { landPending = h; landNote('Create a free account to keep this name. It takes a name, an email and a password.'); return openAccount('up'); }
   claimLanding(h);
 });
-$('#landHandle').addEventListener('input', () => landNote('One watch page for every show. Viewers bookmark it once.'));
+$('#landHandle').addEventListener('input', () => {
+  landNote('One watch page for every show. Viewers bookmark it once.');
+  // The preview below updates as you type: your page's link appears on the stream badge and the viewer's phone.
+  const h = $('#landHandle').value.trim().toLowerCase().replace(/[^a-z0-9-]/g, '').slice(0, 24) || 'yourname';
+  $$('.la-handle').forEach((el) => (el.textContent = h));
+});
 function renderLandSlate() {
   const h = acct.user?.handle;
-  if (h && document.activeElement !== $('#landHandle')) $('#landHandle').value = h;
+  if (h && document.activeElement !== $('#landHandle')) { $('#landHandle').value = h; $$('.la-handle').forEach((el) => (el.textContent = h)); }
   $('#landClaimGo').textContent = h ? 'Start a show' : 'Claim it';
 }
 renderLandSlate();
