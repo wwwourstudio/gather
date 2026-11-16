@@ -2,7 +2,9 @@ const { chromium } = require('playwright');
 const SP = process.argv[2];
 (async () => {
   const browser = await chromium.launch({ args: ['--use-fake-ui-for-media-stream', '--use-fake-device-for-media-stream', '--autoplay-policy=no-user-gesture-required'] });
-  const mk = async () => { const c = await browser.newContext({ viewport: { width: 1600, height: 1000 } }); const p = await c.newPage(); p.errs = []; p.on('pageerror', e => p.errs.push(e.message)); p.on('console', m => m.type() === 'error' && p.errs.push(m.text())); return p; };
+  // Every studio request is timed in the page, so a slow step can show which side was late (see the template step).
+  const NET = () => { const f = window.fetch; window.__net = []; window.fetch = function (u, o) { const a = (String(u).match(/action=(\w+)/) || [])[1]; if (!a) return f.apply(this, arguments); const t0 = performance.now(), row = { a, t0: Math.round(t0) }; window.__net.push(row); if (window.__net.length > 80) window.__net.shift(); return f.apply(this, arguments).then((r) => { row.ms = Math.round(performance.now() - t0); return r; }, (e) => { row.ms = -1; throw e; }); }; };
+  const mk = async () => { const c = await browser.newContext({ viewport: { width: 1600, height: 1000 } }); await c.addInitScript(NET); const p = await c.newPage(); p.errs = []; p.on('pageerror', e => p.errs.push(e.message)); p.on('console', m => m.type() === 'error' && p.errs.push(m.text())); return p; };
   const a = await mk(), b = await mk();
   await a.goto((process.env.GATHER_URL || 'http://localhost:8080') + '/'); await a.click('#enterStage'); await a.fill('#enterName', 'Alex Morgan'); await a.click('#enterGo');
   await a.waitForSelector('#inviteDlg[open]'); const code = await a.textContent('#inviteCode'); await a.click('#inviteDlg .modal-close');
@@ -26,11 +28,18 @@ const SP = process.argv[2];
   if (!folded) console.log('FAIL the deck did not fold');
   await a.click('[data-deck="scenes"]');
   // 1. template
-  await a.click('[data-tab="look"]'); await a.click('.look-seg:visible [data-look="layouts"]'); await a.click('.tpl:has-text("Chat-led show")');
+  await a.click('[data-tab="look"]'); await a.click('.look-seg:visible [data-look="layouts"]');
+  const tClick = await a.evaluate(() => Math.round(performance.now()));
+  await a.click('.tpl:has-text("Chat-led show")');
+  const tClickB = await b.evaluate(() => Math.round(performance.now()));
   await b.waitForFunction(() => window.__gather.state.layout === 'custom' && window.__gather.state.scene === 'p-chat' && window.__gather.state.elements.some(e => e.type === 'chat'), null, { timeout: 5000 }).catch(async (e) => {
     // This step fails now and then in CI. Show both sides so the next failure says why (slow sync, or the host never applied it).
     const view = (p) => p.evaluate(() => ({ layout: window.__gather.state.layout, scene: window.__gather.state.scene, els: window.__gather.state.elements.map((x) => x.type).join(','), host: window.__gather.host === window.__gather.id, phase: window.__gather.phase }));
     console.log('  template step timed out · host:', JSON.stringify(await view(a)), '· guest:', JSON.stringify(await view(b)));
+    // Requests since the click, relative to it (ms): host sends and polls, guest polls. A long gap shows the culprit.
+    const since = (p, t) => p.evaluate((t) => window.__net.filter((r) => r.t0 >= t - 1500).map((r) => `${r.a}@${r.t0 - t}${r.ms == null ? '…' : '+' + r.ms}`).join(' '), t);
+    console.log('  host requests:', await since(a, tClick));
+    console.log('  guest requests:', await since(b, tClickB));
     throw e;
   });
   console.log('template synced to guest:', await b.evaluate(() => window.__gather.state.elements.map(e => e.type).join(',')));
