@@ -54,10 +54,12 @@ function toast(msg, err) {
 async function ensureSession() {
   if (sess) return sess;
   const r = await api('whello', { name: 'Viewer ' + Math.floor(1000 + Math.random() * 9000) });
-  sess = { ...r, named: false }; store.set('sess:' + code, sess);
+  sess = { ...r, named: false }; store.set(skey(), sess);
   return sess;
 }
-async function renew() { sess = null; store.set('sess:' + code, null); return ensureSession(); }
+async function renew() { sess = null; store.set(skey(), null); return ensureSession(); }
+// On a named page (/w/maya) the studio behind it changes from show to show; a chat session belongs to one studio.
+const skey = () => 'sess:' + (W.code || code);
 
 // ---------------------------------------------------------------- feed (one cached GET shared by every viewer)
 async function poll() {
@@ -74,7 +76,8 @@ function clockText(since) {
 }
 function render(info) {
   W.info = info;
-  const title = info.found ? info.title || 'Live show' : 'Show not found';
+  if (info.code && info.code !== W.code) { W.code = info.code; sess = store.get(skey(), null); }
+  const title = info.found ? info.title || 'Live show' : info.offline ? `${info.name} · offline` : info.unclaimed ? 'Nobody here yet' : 'Show not found';
   $('#wTitle').textContent = title; document.title = `${title} · Watch live`;
   if (info.color) document.documentElement.style.setProperty('--accent', info.color);
   const live = !!(info.found && info.live?.on);
@@ -198,8 +201,8 @@ function showPlayer(info) {
     box.hidden = !playing; W.iframe = '';
     $('#wCtrls').hidden = !playing; $('#wUnmute').hidden = !playing || !v.muted;
     $('#wEmpty').hidden = !!playing;
-    $('#wEmptyH').textContent = !info.found ? 'This show isn’t on right now.' : W.direct.state === 'connecting' ? 'Connecting to the studio…' : W.direct.state === 'full' ? 'The direct stream is full right now.' : 'Waiting for the show to start.';
-    $('#wEmptyP').textContent = !info.found ? 'Check the link with the host.' : W.direct.state === 'full' ? 'Watch on one of the platforms below, or try again in a minute.' : 'This page starts playing by itself.';
+    $('#wEmptyH').textContent = info.offline ? `${info.name} isn’t live right now.` : info.unclaimed ? `${location.host}/w/${info.handle} isn’t anyone’s page yet.` : !info.found ? 'This show isn’t on right now.' : W.direct.state === 'connecting' ? 'Connecting to the studio…' : W.direct.state === 'full' ? 'The direct stream is full right now.' : 'Waiting for the show to start.';
+    $('#wEmptyP').textContent = info.offline ? 'Keep this page open — it starts playing by itself the moment they go on.' : info.unclaimed ? 'Claim it for free in the gather studio: Show → Your watch page.' : !info.found ? 'Check the link with the host.' : W.direct.state === 'full' ? 'Watch on one of the platforms below, or try again in a minute.' : 'This page starts playing by itself.';
   } else if (W.iframe !== W.source) {
     W.iframe = W.source;
     const f = document.createElement('iframe');
