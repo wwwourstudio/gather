@@ -1427,3 +1427,10 @@ body.editing .badge-hit { pointer-events: none; }
 @media (hover: none) { #msgs.is-host .msg.has-av .mact { position: static; opacity: 1; pointer-events: auto; transform: none; background: none; border: 0; box-shadow: none; padding: 0; margin-top: 4px; } }
 #msgs.is-host .msg.has-av .mact { top: -14px; right: 8px; }
 #msgs.is-host { padding-top: 14px; }
+
+/* The stage keeps its shape: on desktop it's sized from the space it actually has (the stage card's height and
+   width), never from the window height, so a short window can't squash it out of 16:9 / 9:16. */
+@media (min-width: 901px) {
+  body:not(.pre) .stage { width: min(100cqw, 100cqh * 16 / 9); height: auto; max-height: 100cqh; aspect-ratio: 16 / 9; }
+  body:not(.pre) .stage.vertical { width: min(100cqw, 100cqh * 9 / 16); aspect-ratio: 9 / 16; }
+}
