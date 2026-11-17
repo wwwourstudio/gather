@@ -77,10 +77,18 @@ function clockText(since) {
   return [Math.floor(s / 3600), Math.floor(s / 60) % 60, s % 60].map((n, i) => (i ? String(n).padStart(2, '0') : n)).join(':').replace(/^0:/, '');
 }
 function render(info) {
+  // A show that was on and now isn't has ended: keep its name and host, stop the frozen picture, say so.
+  if (info.found) { if (W.ended) setTimeout(startDirect, 0); W.last = { title: info.title, host: info.host, watch: info.watch }; W.ended = false; }
+  else if (W.last && !info.unclaimed && !info.offline) {
+    if (!W.ended) { W.ended = true; stopDirect(); W.direct.state = 'idle'; }
+    info = { ...info, ended: true, title: W.last.title, host: W.last.host };
+  }
   W.info = info;
+  $('#wv').classList.toggle('ended', !!info.ended);
+  $('#wv').classList.toggle('nofeed', !info.found && !info.ended);
   if ($('#wv').classList.contains('sk-wait')) { $('#wv').classList.remove('sk-wait'); $$('#wMsgs .sk-row').forEach((r) => r.remove()); window.gatherBoot?.done(); }
   if (info.code && info.code !== W.code) { W.code = info.code; sess = store.get(skey(), null); }
-  const title = info.found ? info.title || 'Live show' : info.offline ? `${info.name} · offline` : info.unclaimed ? 'Nobody here yet' : 'Show not found';
+  const title = info.found ? info.title || 'Live show' : info.ended ? `${info.title || 'The show'} · ended` : info.offline ? `${info.name} · offline` : info.unclaimed ? 'Nobody here yet' : 'Show not found';
   $('#wTitle').textContent = title; document.title = `${title} · Watch live`;
   if (info.color) document.documentElement.style.setProperty('--accent', info.color);
   const live = !!(info.found && info.live?.on);
@@ -223,8 +231,9 @@ function showPlayer(info) {
     box.hidden = !playing; W.iframe = '';
     $('#wCtrls').hidden = !playing; $('#wUnmute').hidden = !playing || !v.muted;
     $('#wEmpty').hidden = !!playing;
-    $('#wEmptyH').textContent = info.offline ? `${info.name} isn’t live right now.` : info.unclaimed ? `${location.host}/w/${info.handle} isn’t anyone’s page yet.` : !info.found ? 'This show isn’t on right now.' : W.direct.state === 'connecting' ? 'Connecting to the studio…' : W.direct.state === 'full' ? 'The direct stream is full right now.' : 'Waiting for the show to start.';
-    $('#wEmptyP').textContent = info.offline ? 'Keep this page open — it starts playing by itself the moment they go on.' : info.unclaimed ? 'Claim it for free in the gather studio: Show → Your watch page.' : !info.found ? 'Check the link with the host.' : W.direct.state === 'full' ? 'Watch on one of the platforms below, or try again in a minute.' : 'This page starts playing by itself.';
+    $('#wEmptyActs').hidden = !!info.found;
+    $('#wEmptyH').textContent = info.ended ? 'That’s a wrap.' : info.offline ? `${info.name} isn’t live right now.` : info.unclaimed ? `${location.host}/w/${info.handle} isn’t anyone’s page yet.` : !info.found ? 'This show isn’t on right now.' : W.direct.state === 'connecting' ? 'Connecting to the studio…' : W.direct.state === 'full' ? 'The direct stream is full right now.' : 'Waiting for the show to start.';
+    $('#wEmptyP').textContent = info.ended ? `${info.host?.name || 'The host'} ended the show. Keep this page open: it starts playing by itself the next time they go live.` : info.offline ? 'Keep this page open — it starts playing by itself the moment they go on.' : info.unclaimed ? 'Claim it for free in the gather studio: Show → Your watch page.' : !info.found ? 'Check the link with the host.' : W.direct.state === 'full' ? 'Watch on one of the platforms below, or try again in a minute.' : 'This page starts playing by itself.';
   } else if (W.iframe !== W.source) {
     W.iframe = W.source;
     const f = document.createElement('iframe');
@@ -689,13 +698,14 @@ function renderHype(info) {
   $('#wHypeBar').style.width = lv + '%';
   $('#wHypeLvl').textContent = lv >= 100 ? 'MAX' : lv >= 60 ? 'Hot' : lv >= 25 ? 'Warm' : 'Chill';
   $('#wHype').classList.toggle('max', lv >= 100);
+  $('#wHype').hidden = lv === 0;
 }
 
 // ---------------------------------------------------------------- vertical: 9:16 on upright phones, framed on the speaker
 function renderVertical(info) {
   const native = info.aspect === '9:16', upright = innerHeight > innerWidth && innerWidth <= 900;
   $('#wv').classList.toggle('native916', native);
-  $('#wv').classList.toggle('vertical', !native && upright && W.vertical !== false);
+  $('#wv').classList.toggle('vertical', !native && upright && W.vertical === true);
   const v = $('#wDirect'); if (v) v.style.objectPosition = `${Math.round((info.focus ?? 0.5) * 100)}% 50%`;
   $('#wFill').setAttribute('aria-pressed', String($('#wv').classList.contains('vertical')));
 }
@@ -906,14 +916,14 @@ $('#wMe').onclick = () => {
 function initialsOf(n) { return String(n || '?').trim().split(/\s+/).slice(0, 2).map((w) => w[0] || '').join('').toUpperCase() || '?'; }
 function renderHost(info) {
   const card = $('#wHost');
-  if (!info.found) { card.hidden = true; return; }
+  if (!info.found && !info.ended) { card.hidden = true; return; }
   card.hidden = false;
   const h = info.host || {}, w = info.watch || {};
   $('#wHostTitle').textContent = info.title || 'Live show';
   $('#wHostName').textContent = h.name || 'The host';
   $('#wHostHandle').textContent = h.handle ? '@' + h.handle : '';
   const live = info.live?.on || W.direct.state === 'live';
-  $('#wHostMeta').textContent = [live ? (info.live?.on ? `Live for ${clockText(info.live.since)}` : 'On air now') : 'Not on air', info.viewers ? `${info.viewers} watching` : ''].filter(Boolean).join(' · ');
+  $('#wHostMeta').textContent = info.ended ? 'Show ended' : [live ? (info.live?.on ? `Live for ${clockText(info.live.since)}` : 'On air now') : 'Not on air', info.viewers ? `${info.viewers} watching` : ''].filter(Boolean).join(' · ');
   const av = $('#wHostAv');
   if (!av.dataset.done) {
     av.textContent = initialsOf(h.name); av.style.background = nameColor(h.name || '?');
@@ -942,3 +952,5 @@ document.querySelectorAll('[data-share]').forEach((b) => b.addEventListener('cli
   window.open(SHARE[b.dataset.share](u, t), 'share', 'width=620,height=640,noopener');
 }));
 $('#wShareTop').onclick = () => { if (navigator.share) navigator.share({ title: document.title, url: location.origin + location.pathname }).catch(() => {}); else $('#wHost').scrollIntoView({ behavior: 'smooth', block: 'center' }); };
+
+$('#wEmptyShare').onclick = () => $('#wShareTop').click();

@@ -76,10 +76,14 @@ const signUp = async (page, name) => {
     await v2.hover('#wMsgs li.row'); await v2.click('#wMsgs li.row .wv-acts button[aria-label="Report spam"]');
     await v.screenshot({ path: SP + '/store-viewer-chat.png' });
 
-    // Phones held upright get the vertical 9:16 view.
+    // Phones held upright show the whole 16:9 picture; Fill turns it into the vertical 9:16 view.
     const ph = await mk(bv, { width: 390, height: 844 });
     await ph.goto(B + '/w/' + code);
-    const vert = await wait(ph, () => document.querySelector('#wv').classList.contains('vertical'), null, 15000);
+    await wait(ph, () => document.querySelector('#wDirect')?.videoWidth > 0, null, 30000);
+    const wide = await ph.evaluate(() => { const r = document.querySelector('#wPlayerWrap').getBoundingClientRect(); return r.width > r.height * 1.5; });
+    check('phone: shows the whole 16:9 picture by default', wide);
+    await ph.click('#wFill');
+    const vert = await wait(ph, () => document.querySelector('#wv').classList.contains('vertical'), null, 5000);
     const box = await ph.evaluate(() => { const r = document.querySelector('#wPlayerWrap').getBoundingClientRect(); return { w: Math.round(r.width), h: Math.round(r.height) }; });
     check('phone: vertical 9:16 player', vert && box.h > box.w * 1.5, JSON.stringify(box));
     check('phone: the direct picture plays in the vertical view', await wait(ph, () => document.querySelector('#wDirect')?.videoWidth > 0, null, 30000));
