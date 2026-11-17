@@ -68,7 +68,7 @@ async function poll() {
   try {
     const r = await fetch(`/api/studio?action=wfeed&studio=${encodeURIComponent(code)}`);
     render(r.ok ? await r.json() : { found: false });
-  } catch { $('#wEmptyH').textContent = 'Can’t reach gather right now. Retrying…'; }
+  } catch { $('#wv').classList.remove('sk-wait'); window.gatherBoot?.done(); $('#wEmptyH').textContent = 'Can’t reach gather right now. Retrying…'; }
   setTimeout(poll, document.hidden ? 8000 : 2000);
 }
 
@@ -78,6 +78,7 @@ function clockText(since) {
 }
 function render(info) {
   W.info = info;
+  if ($('#wv').classList.contains('sk-wait')) { $('#wv').classList.remove('sk-wait'); $$('#wMsgs .sk-row').forEach((r) => r.remove()); window.gatherBoot?.done(); }
   if (info.code && info.code !== W.code) { W.code = info.code; sess = store.get(skey(), null); }
   const title = info.found ? info.title || 'Live show' : info.offline ? `${info.name} · offline` : info.unclaimed ? 'Nobody here yet' : 'Show not found';
   $('#wTitle').textContent = title; document.title = `${title} · Watch live`;

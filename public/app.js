@@ -3638,6 +3638,7 @@ $('#chatForm').addEventListener('submit', (e) => {
 // ---------------------------------------------------------------- rendering
 function setPhase(p) {
   S.phase = p;
+  document.body.classList.toggle('syncing', p === 'connecting' || p === 'reconnecting'); // skeletons until the studio arrives
   const pill = $('#statusPill');
   pill.dataset.state = p === 'online' ? 'online' : p === 'offline' ? 'offline' : 'connecting';
   $('#statusText').textContent = { offline: 'Offline', connecting: 'Connecting…', online: '', reconnecting: 'Reconnecting…' }[p];
@@ -5754,4 +5755,99 @@ addEventListener('pointerdown', () => document.body.classList.remove('kbd'), tru
     requestAnimationFrame(place);
   };
   requestAnimationFrame(place);
+}
+
+// The page loader leaves once the page has its fonts and styles (the studio's own data shows as skeletons).
+if (document.readyState === 'complete') window.gatherBoot?.done(); else addEventListener('load', () => window.gatherBoot?.done(), { once: true });
+
+// Landing preview: the mock chat plays like a real one. Messages arrive one by one, a super chat lands with an alert
+// on the stage, the AI types its answer, reactions float up, and the viewer count ticks. Paused when off screen.
+{
+  const win = $('.hz-win'), feed = $('.hz-feed');
+  const quiet = matchMedia('(prefers-reduced-motion: reduce)');
+  if (win && feed && !quiet.matches) {
+    const POOL = [
+      { n: 'Dev', h: 20, t: 'What camera is that?' },
+      { n: 'Ana', h: 200, t: 'Hi from Lisbon 👋' },
+      { n: 'Kai', h: 300, t: 'The new layout looks so clean' },
+      { n: 'Jason', h: 140, t: 'Love this format!', paid: '$10' },
+      { ai: 1, t: 'A Sony ZV-E10. Link’s on screen.' },
+      { n: 'Lena', h: 260, t: '🔥🔥🔥' },
+      { n: 'Marco', h: 40, t: 'Watching from Austin 🤠' },
+      { n: 'Noah', h: 170, t: '@Sam can we get the slides after?' },
+      { ai: 1, t: 'Yes. They go out by email right after the show.' },
+      { n: 'Zoe', h: 330, t: 'Best setup I’ve seen on a stream', paid: '$5' },
+      { n: 'Omar', h: 90, t: 'First time here, this is great' },
+      { n: 'Kai', h: 300, t: 'gg 👏' },
+    ];
+    const REACT = ['❤️', '🔥', '👏', '😂', '🎉', '💙'];
+    const stage = $('.hz-stage'), floats = $('.hz-floats'), views = $('.hz-views'), typing = $('.hz-typing');
+    const tiles = $$('.hz-tile');
+    let i = 0, visible = true, count = 1284, first = true;
+    const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+    const running = () => visible && !document.hidden && document.body.classList.contains('pre') && !document.documentElement.classList.contains('booting');
+    const el = (tag, cls, txt) => { const e = document.createElement(tag); if (cls) e.className = cls; if (txt != null) e.textContent = txt; return e; };
+    const drop = (node, ms) => setTimeout(() => node.remove(), ms);
+
+    function bubble(m) {
+      const li = el('div', 'hz-msg in' + (m.paid ? ' paid' : '') + (m.ai ? ' ai' : ''));
+      const av = el('span', 'hz-mav' + (m.ai ? ' orb' : ''), m.ai ? '' : m.n[0]);
+      if (!m.ai) av.style.setProperty('--h', m.h);
+      const body = el('div'), name = el('b', '', m.ai ? 'Sam ' : m.n + ' ');
+      if (m.paid || m.ai) name.append(el('em', '', m.ai ? 'AI' : m.paid));
+      body.append(name, el('p', '', m.t)); li.append(av, body);
+      return li;
+    }
+    function push(li) {
+      feed.append(li);
+      const h = li.offsetHeight; // grow into place so everything above glides up instead of jumping
+      li.animate([{ height: '0px', marginTop: '-8px' }, { height: h + 'px', marginTop: '0px' }], { duration: 380, easing: 'cubic-bezier(.2,.8,.2,1)' });
+      while (feed.children.length > 8) feed.firstElementChild.remove();
+    }
+    function float(n = 1) {
+      for (let k = 0; k < n; k++) {
+        const f = el('span', 'hz-float', REACT[Math.floor(Math.random() * REACT.length)]);
+        f.style.setProperty('--dx', (Math.random() * -90 - 10).toFixed(0) + 'px');
+        f.style.setProperty('--r', (Math.random() * 40 - 20).toFixed(0) + 'deg');
+        f.style.setProperty('--t', (2.4 + Math.random() * 1.2).toFixed(2) + 's');
+        f.style.right = (5 + Math.random() * 6).toFixed(1) + '%';
+        f.style.animationDelay = (k * 0.12).toFixed(2) + 's';
+        floats.append(f); drop(f, 4200);
+      }
+    }
+    function alertPaid(m) {
+      const t = el('div', 'hz-toast'); t.append(el('b', '', m.paid), document.createTextNode(`${m.n} sent a super chat`));
+      stage.append(t); drop(t, 3300);
+    }
+    async function say(m) {
+      if (m.ai) {
+        typing.hidden = false;
+        const li = bubble({ ...m, t: '' }); const p = li.querySelector('p');
+        const dots = el('span', 'hz-dots'); dots.append(el('i'), el('i'), el('i')); p.replaceChildren(dots);
+        push(li); await sleep(1100);
+        typing.hidden = true;
+        const txt = document.createTextNode(''), cur = el('span', 'cur'); p.replaceChildren(txt, cur);
+        for (const ch of m.t) { txt.data += ch; await sleep(22); }
+        await sleep(500); cur.remove();
+        return;
+      }
+      push(bubble(m));
+      if (m.paid) { alertPaid(m); float(5); }
+      else if (/🔥|👏|👋|🤠/u.test(m.t)) float(2);
+    }
+    async function loop() {
+      for (;;) {
+        if (!running()) { await sleep(600); continue; }
+        if (first) { first = false; feed.replaceChildren(); await sleep(350); }
+        const m = POOL[i++ % POOL.length];
+        await say(m);
+        if (Math.random() < 0.55) float(1 + Math.floor(Math.random() * 2));
+        if (Math.random() < 0.6) { count += 1 + Math.floor(Math.random() * 9); views.textContent = count.toLocaleString('en-US'); views.classList.remove('tick'); void views.offsetWidth; views.classList.add('tick'); }
+        if (i % 3 === 0) tiles.forEach((t) => t.classList.toggle('talk')); // the speaker changes now and then
+        await sleep(i <= 3 ? 700 : 1500 + Math.random() * 900);
+      }
+    }
+    new IntersectionObserver(([e]) => { visible = e.isIntersecting; }).observe(win);
+    loop();
+  }
 }

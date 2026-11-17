@@ -118,7 +118,7 @@ async function main(): Promise<void> {
   // ---- the app uses only primitives' icon set and fonts
   await p.goto(`${BASE}/`); await p.waitForTimeout(800);
   const app = await p.evaluate(() => ({
-    rawSvgs: [...document.querySelectorAll('svg:not(.i):not(.g-logo)')].filter((s) => !s.closest('.media-sink')).length, // .g-logo: Google's required brand mark on the sign-in button
+    rawSvgs: [...document.querySelectorAll('svg:not(.i):not(.g-logo):not(.brand-mark)')].filter((s) => !s.closest('.media-sink')).length, // .g-logo: Google's required brand mark on the sign-in button; .brand-mark: gather's own logo
     sprite: document.querySelectorAll('svg.i use[href^="/icons.svg#i-"]').length,
     fonts: [...new Set([...document.querySelectorAll('body *')].filter((e) => (e as HTMLElement).checkVisibility?.()).map((e) => getComputedStyle(e).fontFamily.split(',')[0].replace(/"/g, '').trim()))],
   }));

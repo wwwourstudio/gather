@@ -323,3 +323,20 @@ input[type="checkbox"]:not(.toggle), input[type="radio"] { width: var(--icon-sm)
 
 /* Focus must survive every variant that clears box-shadow (ghost, danger, header buttons). */
 .btn:is(.ghost, .danger, .hdr, .link):focus-visible, .icon-btn:focus-visible, .plat-body input:focus-visible { box-shadow: var(--ring); outline: 2px solid transparent; }
+
+/* ---------------------------------------------------------------- skeletons
+   Placeholders in the shape of what's coming, with one soft light passing over them. .sk is the surface;
+   .sk-line (width from --w), .sk-circle and .sk-card are the shapes; .sk-row is a chat or list row. */
+:root { --sk-a: rgba(148, 163, 184, 0.09); --sk-b: rgba(148, 163, 184, 0.2); }
+:root[data-theme="light"] { --sk-a: rgba(15, 23, 42, 0.06); --sk-b: rgba(15, 23, 42, 0.12); }
+.sk { display: block; border-radius: 8px; background: linear-gradient(100deg, var(--sk-a) 35%, var(--sk-b) 50%, var(--sk-a) 65%) 0 0 / 300% 100%; animation: sk-shine 1.6s ease-in-out infinite; }
+.sk-line { width: var(--w, 60%); height: 10px; border-radius: 999px; }
+.sk-line.sm { height: 8px; }
+.sk-circle { border-radius: 50%; aspect-ratio: 1; }
+.sk-card { border-radius: 14px; }
+.sk-row { list-style: none; display: grid; grid-template-columns: 30px minmax(0, 1fr); grid-template-rows: auto auto; column-gap: 10px; row-gap: 8px; align-items: center; padding: 8px 4px; }
+.sk-row .sk-circle { grid-row: span 2; width: 30px; }
+.sk-row:nth-child(2) .sk { animation-delay: 0.08s; } .sk-row:nth-child(3) .sk { animation-delay: 0.16s; } .sk-row:nth-child(4) .sk { animation-delay: 0.24s; }
+.sk-row:nth-child(5) .sk { animation-delay: 0.32s; } .sk-row:nth-child(6) .sk { animation-delay: 0.4s; } .sk-row:nth-child(7) .sk { animation-delay: 0.48s; }
+@keyframes sk-shine { from { background-position: 100% 0; } to { background-position: 0 0; } }
+@media (prefers-reduced-motion: reduce) { .sk { animation: none; background: var(--sk-b); } }
