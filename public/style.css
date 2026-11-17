@@ -1263,3 +1263,34 @@ body:not(.kbd) button:focus-visible, body:not(.kbd) [role="tab"]:focus-visible {
 @media (max-width: 720px) { .set-nav { grid-column: 1; grid-row: 1; } #settingsDlg .settings-body { grid-column: 1; grid-row: 2; } }
 #settingsDlg .settings-body { padding-top: 56px; }
 #settingsDlg .settings-card > form .modal-close { background: var(--surface-2); border: 1px solid var(--glass-border); box-shadow: 0 4px 14px -6px rgba(0, 0, 0, 0.6); }
+
+/* ================================================================ V6: people in the studio
+   One status chip on the picture (On stage / Backstage, plus Presenting), Host as a tag after the name, a mic-off
+   badge in the corner, and a clean two-line caption. */
+body:not(.pre) .crew-card, body:not(.pre) .crew-add { width: 168px; }
+.deck-body:has(.deck-layer.on .crew-list) { height: 136px; }
+.crew-card { padding: 6px 6px 8px; gap: 7px; border-radius: 12px; background: var(--glass-bg); border-color: var(--glass-border); -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur); }
+.crew-card.on-stage { border-color: color-mix(in srgb, #22c55e 45%, transparent); box-shadow: inset 0 0 0 1px color-mix(in srgb, #22c55e 25%, transparent); }
+.crew-card.speaking { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
+.crew-thumb { border-radius: 8px; }
+.crew-card:not(.on-stage) .crew-thumb { opacity: 1; }
+.crew-card:not(.on-stage) .crew-thumb video { filter: saturate(0.6) brightness(0.8); }
+.crew-thumb .tagrow { left: 6px; top: 6px; right: 6px; flex-wrap: nowrap; gap: 4px; overflow: hidden; }
+.cstate { display: inline-flex; align-items: center; gap: 5px; height: 20px; padding: 0 8px 0 7px; border-radius: 999px; background: rgba(8, 12, 24, 0.62); -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); color: rgba(255, 255, 255, 0.85); font: 600 10.5px/1 var(--font-ui); white-space: nowrap; flex: none; }
+.cstate i { width: 6px; height: 6px; border-radius: 50%; background: rgba(255, 255, 255, 0.45); }
+.cstate.on { color: #fff; }
+.cstate.on i { background: #22c55e; box-shadow: 0 0 6px #22c55e; }
+.cstate.pres { padding: 0 8px; background: color-mix(in srgb, var(--accent) 70%, transparent); color: #fff; }
+.crew-thumb .mic-off { position: absolute; left: 6px; bottom: 6px; width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; background: var(--danger); color: #fff; }
+.crew-thumb .mic-off .i { width: 12px; height: 12px; }
+.crew-info { gap: 1px; padding: 0 2px; }
+.crew-name { font-size: var(--fs-13); line-height: 18px; gap: 6px; }
+.crew-name .nm { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.crew-name .muted-ic { display: none; }
+.host-tag { flex: none; height: 16px; padding: 0 6px; border-radius: 5px; background: color-mix(in srgb, var(--accent) 20%, transparent); color: var(--accent-text); font: 700 9.5px/16px var(--font-ui); letter-spacing: 0.04em; text-transform: uppercase; }
+.crew-sub { font-size: var(--fs-12); }
+.crew-add > .tile { border-radius: 12px; }
+body:not(.pre) .crew-card, body:not(.pre) .crew-add { width: 160px; }
+body:not(.pre) .deck-body:has(.deck-layer.on .crew-list) { height: 150px; }
+.crew-card { grid-template-rows: auto auto; align-content: start; }
+.host-tag.you { background: var(--fill-active); color: var(--ink-2); }

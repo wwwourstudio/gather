@@ -3695,10 +3695,13 @@ function renderCrew() {
       list.insertBefore(li, add);
     }
     list.insertBefore(li, add); // keep join order
-    $('.nm', li).textContent = p.me ? `${p.name} (you)` : p.name;
+    $('.nm', li).textContent = p.name; li.classList.toggle('me', !!p.me);
     const nameRow = $('.crew-name', li);
-    nameRow.querySelector('.muted-ic')?.remove();
-    if (!p.mic) nameRow.insertAdjacentHTML('beforeend', `<span class="muted-ic" role="img" aria-label="Muted">${icon('mic-off', { size: 'sm' })}</span>`);
+    nameRow.querySelector('.muted-ic')?.remove(); nameRow.querySelector('.host-tag')?.remove();
+    if (p.id === S.host) nameRow.insertAdjacentHTML('beforeend', '<span class="host-tag">Host</span>');
+    else if (p.me) nameRow.insertAdjacentHTML('beforeend', '<span class="host-tag you">You</span>');
+    $('.crew-thumb .mic-off', li)?.remove();
+    if (!p.mic) $('.crew-thumb', li).insertAdjacentHTML('beforeend', `<span class="mic-off" role="img" aria-label="Muted">${icon('mic-off', { size: 'sm' })}</span>`);
     const ini = $('.ini', li); ini.hidden = !!p.cam;
     const bg = assetImg(p.offbg);
     ini.style.backgroundImage = bg ? `url("${bg.src}")` : '';
@@ -3707,11 +3710,10 @@ function renderCrew() {
     else { span.textContent = initials(p.name); span.style.backgroundImage = ''; span.classList.remove('has-av'); }
     const tags = $('.tagrow', li); tags.replaceChildren();
     const on = S.state.stage.includes(p.id);
-    if (p.id === S.host) tags.insertAdjacentHTML('beforeend', '<span class="pill caps on-media">Host</span>');
-    tags.insertAdjacentHTML('beforeend', on ? '<span class="pill caps accent">On stage</span>' : '<span class="pill caps on-media">Backstage</span>'); // "Live" only ever means broadcasting
+    tags.insertAdjacentHTML('beforeend', on ? '<span class="cstate on"><i></i>On stage</span>' : '<span class="cstate"><i></i>Backstage</span>'); // "Live" only ever means broadcasting
     $('.crew-thumb', li).classList.toggle('pickable', host);
     $('.crew-thumb', li).title = host ? (on ? `Click to send ${p.me ? 'yourself' : p.name} backstage` : `Click to put ${p.me ? 'yourself' : p.name} on stage`) : '';
-    if (p.sharing) tags.insertAdjacentHTML('beforeend', '<span class="pill caps on-media">Presenting</span>');
+    if (p.sharing) tags.insertAdjacentHTML('beforeend', '<span class="cstate pres">Presenting</span>');
     li.classList.toggle('on-stage', on);
     $('.crew-tools', li).hidden = !host;
     const st = $('.ct-stage', li); st.setAttribute('aria-label', on ? 'Take off stage' : 'Put on stage'); st.setAttribute('aria-pressed', String(on));
