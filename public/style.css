@@ -974,3 +974,47 @@ body:not(.pre) .top-actions > #settingsTop { order: 5; }
 body:not(.pre) .top-actions > #userBtn { order: 6; }
 /* The focus ring is for keyboard users: after a mouse click (or a dialog closing) the header doesn't keep a ring. */
 body:not(.kbd) .top :focus-visible { box-shadow: none; outline: none; }
+
+/* ================================================================ V6: glass studio
+   The studio floats on a blurred copy of the show itself, so the room takes on the colours on stage.
+   Header, side panel, rail and dock are frosted islands with space between them; the stage and the
+   scene strip sit straight on the light. Fewer hairlines, fewer boxes. */
+.backdrop { overflow: hidden; }
+.backdrop .amb { position: absolute; inset: -12%; width: 124%; height: 124%; filter: blur(90px) saturate(170%); opacity: 0; transition: opacity 1.2s var(--ease-out); }
+body:not(.pre) .backdrop .amb.on { opacity: 0.42; }
+.backdrop::after { content: ""; position: absolute; inset: 0; background: radial-gradient(120% 90% at 50% 40%, transparent 30%, color-mix(in srgb, var(--bg) 85%, transparent) 100%); }
+:root[data-theme="light"] body:not(.pre) .backdrop .amb.on { opacity: 0.4; }
+
+body:not(.pre) .app { gap: 10px; padding: 10px; }
+body:not(.pre) .main { gap: 10px; }
+body:not(.pre) .app > .top, body:not(.pre) .main > .side, body:not(.pre) .main > .rail, body:not(.pre) .app > .dock { border-radius: 16px; border-width: 1px; }
+body:not(.pre) .main > .side { overflow: hidden; }
+body:not(.pre) .main > .rail { padding: var(--sp-2) 4px; }
+body:not(.pre) .rail-btn.on::before { display: none; }
+body:not(.pre) .rail-btn.on { background: var(--fill-active); box-shadow: inset 0 0 0 1px var(--glass-border); }
+
+/* The stage and the scenes sit on the light, not in another box. */
+body:not(.pre) .stage-card { background: transparent; border: 0; box-shadow: none; -webkit-backdrop-filter: none; backdrop-filter: none; padding: var(--sp-2) var(--sp-3) var(--sp-3); }
+body:not(.pre) .stage { border-radius: 14px; box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.10), 0 30px 80px -30px rgba(0, 0, 0, 0.85); }
+body:not(.pre) .deck { background: transparent; border: 0; padding: 0 var(--sp-3) var(--sp-1); -webkit-backdrop-filter: none; backdrop-filter: none; }
+body:not(.pre) .deck-body { height: 96px; }
+body:not(.pre) .scene { background: var(--glass-bg); -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur); border-color: var(--glass-border); }
+
+/* Inside the side panel: no rules between header and body; section cards are a lighter frost. */
+.panel-head { border-bottom: 0; }
+.psec, .sec-fold { background: var(--fill); border-color: var(--glass-border); }
+.panel-body input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]), .panel-body select, .panel-body textarea, .composer-row { background: color-mix(in srgb, var(--surface-2) 60%, transparent); }
+
+/* Quieter exits: Leave is a red word, not a red box. */
+#leaveBtn.btn.danger { --btn-bg: transparent; border-color: transparent; color: var(--danger); }
+#leaveBtn.btn.danger:hover { --btn-bg: var(--danger-soft); }
+
+@media (max-width: 900px) {
+  body:not(.pre) .app { gap: 0; padding: 0; }
+  body:not(.pre) .main { gap: 0; }
+  body:not(.pre) .app > .top, body:not(.pre) .main > .side, body:not(.pre) .main > .rail, body:not(.pre) .app > .dock { border-radius: 0; }
+}
+@media (prefers-reduced-transparency: reduce) {
+  .backdrop .amb { display: none; }
+  .glass { background: var(--surface); -webkit-backdrop-filter: none; backdrop-filter: none; }
+}

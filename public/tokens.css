@@ -40,11 +40,11 @@
 
   /* ---- glass ---- */
   /* glass only where something moves underneath: controls over video and transient overlays */
-  --glass-bg: var(--surface);
+  --glass-bg: rgba(13, 19, 34, 0.62);         /* docked regions: frosted over the show's light */
   --glass-bg-raised: rgba(17, 23, 38, 0.86);   /* popovers, modals, tooltips: legible over anything */
-  --glass-border: var(--line);
-  --glass-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.05);
-  --glass-blur: blur(16px) saturate(120%);
+  --glass-border: rgba(255, 255, 255, 0.08);
+  --glass-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  --glass-blur: blur(28px) saturate(160%);
   --glass-noise: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 1 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.02'/%3E%3C/svg%3E");
 
   /* ---- elevation ---- */
@@ -109,9 +109,9 @@
   --ok: #15965f;
   --warn-bg: #fdf6e3; --warn-line: #ecd9a4; --warn-ink: #7a5a17;
   --focus: #1d6fe0;
-  --glass-bg: var(--surface);
+  --glass-bg: rgba(255, 255, 255, 0.66);
   --glass-bg-raised: rgba(255, 255, 255, 0.92);
-  --glass-border: var(--line);
+  --glass-border: rgba(20, 40, 90, 0.10);
   --glass-highlight: none;
   --shadow-glass: none;
   --shadow-pop: 0 12px 32px rgba(30, 50, 100, 0.18), 0 0 0 1px var(--line-2);

@@ -177,15 +177,18 @@ button.pill:disabled { opacity: 0.45; cursor: not-allowed; }
 @keyframes blink { 50% { opacity: 0.35; } }
 
 /* ---------------------------------------------------------------- GlassPanel */
-.glass { /* a docked region: flat, opaque, separated by hairlines. Real glass is reserved for .raised and .on-media. */
+.glass { /* a docked region: frosted glass over the studio's light (a blurred copy of the show). */
   position: relative; border-radius: var(--r-lg);
-  background: var(--surface);
-  border: 1px solid var(--line);
+  background: var(--glass-bg);
+  -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur);
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--glass-highlight);
 }
 .glass.raised, .glass.on-media { -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur); }
 .glass.raised { background: var(--glass-bg-raised); border-color: var(--line-2); box-shadow: var(--glass-highlight), var(--shadow-pop); }
 .glass.on-media { background: var(--on-media); border-color: var(--on-media-line); color: #fff; }
 @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .glass { background: var(--surface); }
   .glass.raised { background: var(--surface); }
   .glass.on-media, .btn.on-media, .icon-btn.on-media, .pill.on-media { background: rgb(10, 16, 34); }
 }

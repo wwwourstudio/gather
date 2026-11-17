@@ -5576,3 +5576,15 @@ function drawWatchBadge() {
 // Keyboard users get focus rings everywhere; pointer users don't see a ring left on a header button after a click.
 addEventListener('keydown', (e) => { if (e.key === 'Tab' || e.key.startsWith('Arrow')) document.body.classList.add('kbd'); }, true);
 addEventListener('pointerdown', () => document.body.classList.remove('kbd'), true);
+
+// The studio's light: a tiny copy of the stage, blurred huge behind the glass, so the room takes on the show's colours.
+{
+  const amb = document.createElement('canvas'); amb.className = 'amb'; amb.width = 48; amb.height = 27;
+  document.querySelector('.backdrop')?.append(amb);
+  const cx = amb.getContext('2d', { alpha: false });
+  const quiet = matchMedia('(prefers-reduced-transparency: reduce)');
+  setInterval(() => {
+    if (document.hidden || quiet.matches || document.body.classList.contains('pre')) return;
+    try { cx.drawImage(canvas, 0, 0, amb.width, amb.height); amb.classList.add('on'); } catch {}
+  }, 400);
+}
