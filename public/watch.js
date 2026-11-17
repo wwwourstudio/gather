@@ -88,7 +88,7 @@ function render(info) {
   $('#wv').classList.toggle('on-air', onAir);
   // Came in on the long studio code? Show (and switch the address bar to) the short link, so it's what people copy.
   if (info.short && /^\/w\/gather-/.test(location.pathname)) history.replaceState(null, '', '/w/' + info.short + location.search);
-  $('#wAddr').textContent = location.host.replace(/^www\./, '') + location.pathname;
+  renderHost(info);
   $('#wLiveText').textContent = live ? 'Live · ' + clockText(info.live.since) : 'On air';
   $('#wViewers').hidden = !info.found;
   $('#wViewers').textContent = info.viewers ? `${info.viewers} watching` : '';
@@ -153,15 +153,16 @@ function msgEl(m) {
   lk.setAttribute('aria-label', 'Like'); lk.setAttribute('aria-pressed', String(W.liked?.has(m.id) || false));
   lk.innerHTML = '<svg class="i" aria-hidden="true"><use href="/icons.svg#i-heart"/></svg><span></span>'; lk.querySelector('span').textContent = m.likes ? String(m.likes) : '';
   if (String(m.id).startsWith('mine-')) lk.disabled = true; else lk.onclick = () => likeMsg(m.id, lk);
-  const gap = document.createElement('span'); gap.className = 'wv-sp'; head.append(gap, lk);
-  body.append(head, richText(m.text));
-  const acts = document.createElement('div'); acts.className = 'wv-acts';
-  const mk = (txt, label, fn) => { const k = document.createElement('button'); k.type = 'button'; k.textContent = txt; k.setAttribute('aria-label', label); k.title = label; k.onclick = fn; return k; };
+  const gap = document.createElement('span'); gap.className = 'wv-sp';
+  const acts = document.createElement('span'); acts.className = 'wv-acts';
+  const mk = (icon, label, fn) => { const k = document.createElement('button'); k.type = 'button'; k.innerHTML = `<svg class="i" aria-hidden="true"><use href="/icons.svg#i-${icon}"/></svg>`; k.setAttribute('aria-label', label); k.title = label; k.onclick = fn; return k; };
   if (!String(m.id).startsWith('mine-')) {
-    acts.append(mk('↩', 'Reply', () => { const x = $('#wText'); x.value = `@${m.name} ` + x.value.replace(/^@\S+\s/, ''); x.focus(); }));
-    if (!mine) acts.append(mk('⚑', 'Report spam', () => reportMsg(m.id, li)), mk('🔇', `Mute ${m.name} for me`, () => muteName(m.name)));
+    acts.append(mk('reply', 'Reply', () => { const x = $('#wText'); x.value = `@${m.name} ` + x.value.replace(/^@\S+\s/, ''); x.focus(); }));
+    if (!mine) acts.append(mk('flag', 'Report spam', () => reportMsg(m.id, li)), mk('volume-x', `Mute ${m.name} for me`, () => muteName(m.name)));
   }
-  li.append(av, body, acts);
+  head.append(gap, acts, lk);
+  body.append(head, richText(m.text));
+  li.append(av, body);
   return li;
 }
 /** Message text with :emotes: as the host's images and @names highlighted. Built from text nodes, never HTML. */
@@ -456,8 +457,7 @@ $$('button[data-close]').forEach((b) => b.addEventListener('click', () => b.clos
 // ---------------------------------------------------------------- share
 $('#wShare').onclick = async () => {
   const url = location.origin + location.pathname; // the short link or name once known
-  try { if (navigator.share) await navigator.share({ title: document.title, url }); else { await navigator.clipboard.writeText(url); toast('Link copied.'); } }
-  catch {}
+  try { await navigator.clipboard.writeText(url); toast('Link copied.'); } catch { toast(url); }
 };
 
 renderMe();
@@ -892,3 +892,45 @@ $('#wMe').onclick = () => {
   if (!ACCT.user) return openSignIn();
   if (confirm(`Signed in as ${ACCT.user.name}. Sign out of the chat?`)) { localStorage.removeItem('gather:acctToken'); ACCT.user = null; ACCT.av = ''; renew().then(renderMe).catch(() => {}); toast('Signed out.'); }
 };
+
+
+// ---------------------------------------------------------------- the streamer, under the video
+function initialsOf(n) { return String(n || '?').trim().split(/\s+/).slice(0, 2).map((w) => w[0] || '').join('').toUpperCase() || '?'; }
+function renderHost(info) {
+  const card = $('#wHost');
+  if (!info.found) { card.hidden = true; return; }
+  card.hidden = false;
+  const h = info.host || {}, w = info.watch || {};
+  $('#wHostTitle').textContent = info.title || 'Live show';
+  $('#wHostName').textContent = h.name || 'The host';
+  $('#wHostHandle').textContent = h.handle ? '@' + h.handle : '';
+  const live = info.live?.on || W.direct.state === 'live';
+  $('#wHostMeta').textContent = [live ? (info.live?.on ? `Live for ${clockText(info.live.since)}` : 'On air now') : 'Not on air', info.viewers ? `${info.viewers} watching` : ''].filter(Boolean).join(' · ');
+  const av = $('#wHostAv');
+  if (!av.dataset.done) {
+    av.textContent = initialsOf(h.name); av.style.background = nameColor(h.name || '?');
+    if (h.photo) { av.dataset.done = '1'; api('havatar', {}).then((r) => { if (r.avatar) { const im = document.createElement('img'); im.src = r.avatar; im.alt = ''; av.replaceChildren(im); av.style.background = 'none'; } }).catch(() => {}); }
+  }
+  $('#wHostAbout').textContent = w.about || '';
+  $('#wHostAbout').hidden = !w.about;
+  const links = [...(w.links || []), ...((info.live?.on && info.live.links) || []).map((l) => ({ label: 'Also live on ' + nameOf(l), url: l.url }))];
+  const key = JSON.stringify(links);
+  if (W.hostLinks !== key) {
+    W.hostLinks = key;
+    $('#wHostLinks').replaceChildren(...links.map((l) => { const li = document.createElement('li'), a = document.createElement('a'); a.href = l.url; a.target = '_blank'; a.rel = 'noopener nofollow'; a.textContent = l.label; li.append(a); return li; }));
+  }
+  $('#wHostLinks').hidden = !links.length;
+}
+// Share: each network's own share page, opened in a small window; Copy link copies the short link.
+const SHARE = {
+  x: (u, t) => `https://twitter.com/intent/tweet?url=${u}&text=${t}`,
+  facebook: (u) => `https://www.facebook.com/sharer/sharer.php?u=${u}`,
+  linkedin: (u) => `https://www.linkedin.com/sharing/share-offsite/?url=${u}`,
+  reddit: (u, t) => `https://www.reddit.com/submit?url=${u}&title=${t}`,
+  whatsapp: (u, t) => `https://wa.me/?text=${t}%20${u}`,
+};
+document.querySelectorAll('[data-share]').forEach((b) => b.addEventListener('click', () => {
+  const u = encodeURIComponent(location.origin + location.pathname), t = encodeURIComponent(`Watch ${W.info?.title || 'this show'} live`);
+  window.open(SHARE[b.dataset.share](u, t), 'share', 'width=620,height=640,noopener');
+}));
+$('#wShareTop').onclick = () => { if (navigator.share) navigator.share({ title: document.title, url: location.origin + location.pathname }).catch(() => {}); else $('#wHost').scrollIntoView({ behavior: 'smooth', block: 'center' }); };
