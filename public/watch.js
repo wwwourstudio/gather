@@ -322,7 +322,7 @@ addEventListener('pagehide', () => { if (sess && W.direct.pc) navigator.sendBeac
 
 // ---------------------------------------------------------------- reactions
 function floatOne(e) {
-  const s = document.createElement('span'); s.textContent = e; s.style.left = 8 + Math.random() * 84 + '%';
+  const s = document.createElement('span'); s.textContent = e; s.style.right = 14 + Math.random() * 46 + 'px'; // rise from the reaction rail
   $('#wFloats').append(s); setTimeout(() => s.remove(), 2600);
 }
 function floatReacts(r) {

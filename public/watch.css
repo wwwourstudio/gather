@@ -363,3 +363,30 @@ body { background: #05070d; }
 .wv-stagecol { position: relative; }
 .wv-unread { min-width: 18px; height: 18px; padding: 0 5px; border-radius: 999px; background: var(--accent); color: #fff; font-size: 11px; line-height: 18px; text-align: center; }
 @media (max-width: 900px) { .wv-collapse, .wv-chat-reopen { display: none !important; } }
+
+/* ================================================================ V6: the watch page, calmer
+   Reactions live on the video (a frosted rail on the right, hearts rising from it). Under the video, one quiet bar:
+   how hyped the room is and where else it's live on the left; Clip, Raise hand and Super chat on the right. */
+.wv-reacts { position: absolute; right: 12px; bottom: 64px; z-index: 3; flex-direction: column; gap: 2px; padding: 4px; border-radius: 999px; background: rgba(10, 14, 28, 0.42); border: 1px solid rgba(255, 255, 255, 0.12); -webkit-backdrop-filter: blur(16px) saturate(160%); backdrop-filter: blur(16px) saturate(160%); opacity: 0.85; transition: opacity var(--dur) var(--ease-out); }
+.wv-player:hover .wv-reacts, .wv-reacts:focus-within { opacity: 1; }
+.wv-reacts button { width: 38px; height: 38px; font-size: 19px; }
+.wv-reacts button:hover { transform: scale(1.18); background: rgba(255, 255, 255, 0.12); }
+.wv-floats span { bottom: 120px; left: auto; font-size: 28px; }
+.wv-combo { right: 64px; bottom: 120px; }
+.wv-strip { gap: var(--sp-2); padding: 0 2px; background: none; border: 0; border-radius: 0; -webkit-backdrop-filter: none; backdrop-filter: none; }
+.wv-strip .wv-sp { flex: 1; }
+.wv-strip .btn { height: 38px; border-radius: 999px; padding: 0 14px; gap: 7px; background: rgba(255, 255, 255, 0.06); border: 1px solid rgba(255, 255, 255, 0.10); color: var(--ink); font-weight: 600; -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px); }
+.wv-strip .btn:hover { background: rgba(255, 255, 255, 0.11); }
+.wv-strip .btn.wv-hand { color: #fde68a; border-color: rgba(253, 230, 138, 0.28); background: rgba(253, 230, 138, 0.07); }
+.wv-strip .btn.wv-supers { color: #0b1a05; background: linear-gradient(135deg, #a3e635, #22c55e); border-color: transparent; box-shadow: 0 8px 22px -10px rgba(34, 197, 94, 0.8); }
+.wv-strip .btn.wv-supers:hover { filter: brightness(1.06); }
+.wv-strip .btn.wv-supers .i { color: inherit; }
+.wv-hype { height: 38px; padding: 0 12px 0 10px; border-radius: 999px; background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.08); }
+.wv-strip .wv-links, .wv-strip .wv-sources { margin-left: 0; }
+@media (max-width: 900px) {
+  .wv-reacts { bottom: 56px; right: 8px; }
+  .wv-reacts button { width: 36px; height: 36px; font-size: 18px; }
+  .wv-strip { padding: var(--sp-2) var(--sp-3); }
+  .wv-strip .wv-sp { display: none; }
+}
+.wv-player:has(#wEmpty:not([hidden])) .wv-reacts { display: none; }
