@@ -5200,13 +5200,13 @@ function renderWatchSec() {
 }
 function renderHandle() {
   const u = acct.user, h = u?.handle || '';
-  $('#wpHost').textContent = location.host + '/w/';
+  $('#wpHost').textContent = '/w/'; // the full address is spelled out in the note under the field
   if (document.activeElement !== $('#wpHandle')) $('#wpHandle').value = h;
   $('#wpHandle').disabled = $('#wpHandleSave').disabled = !u;
   $('#wpHandleSave').textContent = h ? 'Change' : 'Claim';
-  $('#wpHandleNote').textContent = !u ? 'Sign in to claim a name like /w/yourname. It’s free and always points at your current show.'
-    : h ? `Viewers can bookmark ${location.host}/w/${h}. Between shows it says you’re offline, then plays by itself when you go on.`
-    : 'Pick a name once; share one link forever.';
+  $('#wpHandleNote').textContent = !u ? 'Sign in to claim a name. It always points at your current show.'
+    : h ? `Same link every show: ${location.host.replace(/^www\./, '')}/w/${h}`
+    : 'Pick a name once and share one link forever.';
 }
 $('#wpHandleForm').addEventListener('submit', async (e) => {
   e.preventDefault();
@@ -5552,4 +5552,13 @@ function drawWatchBadge() {
   g.fillStyle = '#9ca3af'; g.font = '800 11px Inter, sans-serif'; g.fillText(label, x + 42, y + 20);
   g.fillStyle = '#fff'; g.font = '700 15px Inter, sans-serif'; g.fillText(text, x + 42, y + 38);
   g.restore();
+}
+
+// Panel sections remember being folded (per browser), so each host's panels open the way they left them.
+{
+  const folded = new Set(store.get('foldedSecs', []));
+  for (const d of document.querySelectorAll('details.psec[data-sec]')) {
+    if (folded.has(d.dataset.sec)) d.open = false;
+    d.addEventListener('toggle', () => { if (d.open) folded.delete(d.dataset.sec); else folded.add(d.dataset.sec); store.set('foldedSecs', [...folded]); });
+  }
 }

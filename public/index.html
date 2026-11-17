@@ -227,40 +227,50 @@
         <header class="panel-head"><h2>Show</h2></header>
         <div class="panel-body form">
           <div class="watch-sec" id="watchSec">
-            <div class="row between"><b>Your watch page</b><span class="hint" id="wpCount" style="margin:0"></span></div>
-            <p class="hint" style="margin:0">Send viewers here instead of YouTube: the show straight from your studio, live chat, super chats paid to you, and a button to ask to join.</p>
-            <code class="wp-url" id="wpUrl"></code>
+            <details class="psec" data-sec="watch" open><summary><b>Your watch page</b><span class="hint" id="wpCount"></span></summary><div class="psec-body">
+            <div class="wp-linkrow">
+              <code class="wp-url" id="wpUrl" title="Your watch page"></code>
+              <button type="button" class="icon-btn sm" id="wpCopy" aria-label="Copy watch link" data-tip="Copy link"><svg class="i sm" aria-hidden="true"><use href="/icons.svg#i-copy"/></svg></button>
+              <button type="button" class="icon-btn sm" id="wpOpen" aria-label="Open watch page" data-tip="Open"><svg class="i sm" aria-hidden="true"><use href="/icons.svg#i-arrow-up-right"/></svg></button>
+              <button type="button" class="icon-btn sm" id="wpCard" aria-label="Put the link and a QR code on stage" data-tip="Link + QR on stage"><svg class="i sm" aria-hidden="true"><use href="/icons.svg#i-qr-code"/></svg></button>
+            </div>
             <form class="wp-handle" id="wpHandleForm" autocomplete="off">
-              <label class="fld"><span>Your permanent link <em>the same address every show</em></span>
-                <span class="wp-handle-row"><span class="wp-host" id="wpHost"></span><input id="wpHandle" maxlength="24" spellcheck="false" autocapitalize="off" placeholder="yourname" pattern="[a-zA-Z0-9][a-zA-Z0-9-]{2,23}"><button class="btn sm primary" id="wpHandleSave">Save</button></span></label>
-              <p class="hint" id="wpHandleNote" style="margin:0"></p>
+              <label class="fld"><span>Permanent name</span>
+                <span class="wp-handle-row"><span class="wp-host" id="wpHost">/w/</span><input id="wpHandle" maxlength="24" spellcheck="false" autocapitalize="off" placeholder="yourname" pattern="[a-zA-Z0-9][a-zA-Z0-9-]{2,23}" aria-label="Permanent watch-page name"><button class="btn sm primary" id="wpHandleSave">Save</button></span></label>
+              <p class="hint" id="wpHandleNote"></p>
             </form>
-            <label class="fld"><span>About this show <em>shown under the video</em></span><textarea id="wpAbout" rows="3" maxlength="600" placeholder="What the show is about, the schedule, who’s on today"></textarea></label>
-            <label class="fld"><span>Links <em>one per line: Label | https://…</em></span><textarea id="wpLinks" rows="3" maxlength="1200" spellcheck="false" placeholder="Merch | https://shop.example.com&#10;Discord | https://discord.gg/…"></textarea></label>
-            <div class="row"><button type="button" class="btn sm primary" id="wpCopy">Copy link</button><button type="button" class="btn sm" id="wpCard">Put link + QR on stage</button><button type="button" class="btn sm ghost" id="wpOpen">Open</button></div>
-            <h3 class="pgroup-h">Viewer features</h3>
-            <label class="toggle-row"><span><b>Direct video</b><small>Viewers watch from your browser with under a second of delay.</small></span><input type="checkbox" class="toggle" id="wpDirect" role="switch"></label>
-            <label class="fld"><span>Direct viewers at once <em>each one uses up to 2.5 Mbps of your upload</em></span><select id="wpCap"><option value="3">3</option><option value="6">6</option><option value="10">10</option><option value="15">15</option><option value="20">20</option></select></label>
-            <label class="toggle-row"><span><b>Live chat</b><small>Viewer messages land in your chat; show any of them on stage.</small></span><input type="checkbox" class="toggle" id="wpChat" role="switch"></label>
-            <label class="toggle-row"><span><b>Show the watch link on stream</b><small>A small “Watch &amp; chat live” badge with the address, so platform viewers find your page.</small></span><input type="checkbox" class="toggle" id="wpBadge" role="switch"></label>
-            <label class="toggle-row"><span><b>Voice questions</b><small>Viewers raise a hand and record a question. You read the transcript, then play it on air or delete it.</small></span><input type="checkbox" class="toggle" id="wpVoice" role="switch"></label>
-            <label class="toggle-row"><span><b>Super chats</b><small>Paid straight to you. You confirm each one before it’s shown.</small></span><input type="checkbox" class="toggle" id="wpSupers" role="switch"></label>
+            <details class="more"><summary>Page details</summary>
+              <label class="fld"><span>About this show</span><textarea id="wpAbout" rows="3" maxlength="600" placeholder="Shown under the video: what the show is about, the schedule, who’s on today"></textarea></label>
+              <label class="fld"><span>Links</span><textarea id="wpLinks" rows="3" maxlength="1200" spellcheck="false" placeholder="One per line, e.g.&#10;Merch | https://shop.example.com"></textarea></label>
+            </details>
+            </div></details><details class="psec" data-sec="viewers" open><summary><b>Viewer features</b></summary><div class="psec-body">
+            <div class="toggle-group">
+              <label class="toggle-row"><span><b>Direct video</b><small>Under a second of delay, straight from your browser.</small></span><input type="checkbox" class="toggle" id="wpDirect" role="switch"></label>
+              <label class="sub-row" id="wpCapRow"><span>Viewers at once <em>about 2.5 Mbps of upload each</em></span><select class="input sm" id="wpCap"><option value="3">3</option><option value="6">6</option><option value="10">10</option><option value="15">15</option><option value="20">20</option></select></label>
+            </div>
+            <label class="toggle-row"><span><b>Live chat</b><small>Viewer messages land in your chat.</small></span><input type="checkbox" class="toggle" id="wpChat" role="switch"></label>
+            <label class="toggle-row"><span><b>Watch link on stream</b><small>A small badge so platform viewers find your page.</small></span><input type="checkbox" class="toggle" id="wpBadge" role="switch"></label>
+            <label class="toggle-row"><span><b>Voice questions</b><small>Viewers record a question; you play it or delete it.</small></span><input type="checkbox" class="toggle" id="wpVoice" role="switch"></label>
+            <label class="toggle-row"><span><b>Super chats</b><small>Paid straight to you; you confirm each one.</small></span><input type="checkbox" class="toggle" id="wpSupers" role="switch"></label>
             <div class="form" id="wpPayBox" hidden>
               <div class="row2"><label class="fld"><span>PayPal.me name</span><input id="wpPay-paypal" maxlength="40" placeholder="yourname" spellcheck="false"></label><label class="fld"><span>Venmo username</span><input id="wpPay-venmo" maxlength="31" placeholder="your-name" spellcheck="false"></label></div>
               <div class="row2"><label class="fld"><span>Cash App $cashtag</span><input id="wpPay-cashapp" maxlength="21" placeholder="$yourname" spellcheck="false"></label><label class="fld"><span>Minimum ($)</span><input id="wpMin" type="number" min="1" max="500" step="1"></label></div>
               <label class="fld"><span>Stripe payment link <em>adds card, Apple Pay and Google Pay</em></span><input id="wpPay-stripe" maxlength="120" placeholder="https://buy.stripe.com/…" spellcheck="false"></label>
               <p class="hint warn-note" id="wpNoPay" hidden>Add at least one way to pay, or viewers won’t see the Super chat button.</p>
             </div>
-            <h3 class="pgroup-h">Waiting for you</h3>
-            <div class="row between"><b>Voice questions</b><span class="hint" id="vmCount" style="margin:0"></span></div>
-            <ul class="sc-list" id="vmList"></ul>
-            <p class="hint" id="vmEmpty" style="margin:0">None yet. Raised hands chime and appear here and in the chat.</p>
-            <div class="row between"><b>Super chats</b><span class="hint" id="scTotal" style="margin:0"></span></div>
-            <ul class="sc-list" id="scList"></ul>
-            <p class="hint" id="scEmpty" style="margin:0">None yet. New ones chime and appear here.</p>
-
+            </div></details><details class="psec" data-sec="inbox" open><summary><b>Waiting for you</b></summary><div class="psec-body">
+            <div class="inbox-lists">
+              <p class="hint inbox-empty">Nothing waiting. Voice questions and super chats chime and show up here.</p>
+              <div class="row between"><b>Voice questions</b><span class="hint" id="vmCount"></span></div>
+              <ul class="sc-list" id="vmList"></ul>
+              <p class="hint" id="vmEmpty">None yet.</p>
+              <div class="row between"><b>Super chats</b><span class="hint" id="scTotal"></span></div>
+              <ul class="sc-list" id="scList"></ul>
+              <p class="hint" id="scEmpty">None yet.</p>
+            </div>
+            </div></details>
             <!-- Shop: products sold live; checkout happens on the store's own site -->
-            <details class="sec-fold" id="shopSec"><summary><b>Shop</b><span class="hint" id="shopCount" style="margin:0"></span></summary>
+            <details class="sec-fold" id="shopSec"><summary><b>Shop</b><span class="hint" id="shopCount" style="margin:0"></span></summary><div class="psec-body">
               <p class="hint" style="margin:0">Pin a product and it pops up on stage and on your watch page. Buyers check out on your store.</p>
               <label class="fld"><span>Shopify store</span><input id="shopDomain" maxlength="80" placeholder="yourstore.myshopify.com" spellcheck="false"></label><label class="fld"><span>Storefront token <em>from Shopify admin → Apps → Develop apps</em></span><input id="shopToken" maxlength="80" type="password" autocomplete="off" spellcheck="false"></label>
               <div class="row"><button type="button" class="btn sm" id="shopLoad">Load my Shopify products</button><span class="hint" id="shopMsg" style="margin:0"></span></div>
@@ -271,32 +281,32 @@
                 <button type="button" class="btn sm" id="shopAdd">Add product</button>
               </details>
               <ul class="shop-list" id="shopList"></ul>
-            </details>
+            </div></details>
 
             <!-- Polls and predictions -->
-            <details class="sec-fold" id="pollSec"><summary><b>Polls &amp; predictions</b><span class="hint" id="pollState" style="margin:0"></span></summary>
+            <details class="sec-fold" id="pollSec"><summary><b>Polls &amp; predictions</b><span class="hint" id="pollState" style="margin:0"></span></summary><div class="psec-body">
               <div class="seg block" role="radiogroup" aria-label="Kind" id="pollKind"><button type="button" role="radio" data-kind="poll" aria-checked="true">Poll</button><button type="button" role="radio" data-kind="predict" aria-checked="false">Prediction</button></div>
               <label class="fld"><span>Question</span><input id="pollQ" maxlength="120" placeholder="Who wins this round?"></label>
               <label class="fld"><span>Choices <em>one per line, 2 to 4</em></span><textarea id="pollOpts" rows="3" maxlength="200" placeholder="Red team&#10;Blue team"></textarea></label>
               <div class="row"><select class="input sm poll-mins" id="pollMins" aria-label="Voting time"><option value="1">1 min</option><option value="2" selected>2 min</option><option value="5">5 min</option><option value="10">10 min</option></select><button type="button" class="btn sm primary" id="pollGo">Start</button><button type="button" class="btn sm ghost" id="pollEnd">End</button></div>
               <div id="pollLive"></div>
-            </details>
+            </div></details>
 
             <!-- Play with me: viewers queue up with their gamertag -->
-            <details class="sec-fold" id="queueSec"><summary><b>Play with me</b><span class="hint" id="queueCount" style="margin:0"></span></summary>
+            <details class="sec-fold" id="queueSec"><summary><b>Play with me</b><span class="hint" id="queueCount" style="margin:0"></span></summary><div class="psec-body">
               <label class="toggle-row"><span><b>Take players</b><small>Viewers join a queue with their gamertag from the watch page.</small></span><input type="checkbox" class="toggle" id="wpQueue" role="switch"></label>
               <div class="row"><button type="button" class="btn sm primary" id="queueNext">Call next player</button><button type="button" class="btn sm ghost" id="queueClear">Clear queue</button></div>
               <ol class="queue-list" id="queueList"></ol>
-            </details>
+            </div></details>
 
             <!-- Custom emotes: :name: in chat -->
-            <details class="sec-fold" id="emoteSec"><summary><b>Custom emotes</b><span class="hint" id="emoteCount" style="margin:0"></span></summary>
+            <details class="sec-fold" id="emoteSec"><summary><b>Custom emotes</b><span class="hint" id="emoteCount" style="margin:0"></span></summary><div class="psec-body">
               <div class="row"><input class="input grow" id="emoteName" maxlength="20" placeholder="Emote name, e.g. hype" aria-label="Emote name" spellcheck="false"><button type="button" class="btn sm" id="emoteAdd">Upload image</button><input type="file" id="emoteFile" accept="image/png,image/webp,image/gif,image/jpeg" hidden></div>
               <p class="hint" style="margin:0">Viewers type <code>:name:</code> in chat. Square images under 200 KB work best.</p>
               <div class="emote-list" id="emoteList"></div>
-            </details>
+            </div></details>
           </div>
-          <h3 class="pgroup-h">On stage</h3>
+          <details class="psec" data-sec="stage" open><summary><b>Banner and ticker</b></summary><div class="psec-body">
           <label class="fld"><span>Banner text</span><textarea id="bannerText" rows="3" maxlength="120">Welcome to the conversation</textarea></label>
           <label class="fld"><span>Second line <em>optional</em></span><input id="bannerSub" maxlength="120" placeholder="Episode 12 · Live from the studio"></label>
           <div class="row">
@@ -312,7 +322,7 @@
             <button class="btn" id="tickerShow">Run ticker</button>
             <button class="btn ghost" id="tickerHide">Stop</button>
           </div>
-          <h3 class="pgroup-h">Stage options</h3>
+          </div></details><details class="psec" data-sec="options" open><summary><b>Stage options</b></summary><div class="psec-body">
           <label class="toggle-row">
             <span><b>Live captions</b><small id="capNote">Each person’s browser transcribes their own mic.</small></span>
             <input type="checkbox" class="toggle" id="capSwitch" role="switch">
@@ -335,6 +345,7 @@
             <input type="checkbox" class="toggle" id="overlaySwitch" role="switch">
           </label>
           <label class="toggle-row"><span><b>Guests go straight on stage</b><small>Off: new guests wait backstage until you click their picture</small></span><input type="checkbox" class="toggle" id="autoStage" role="switch"></label>
+          </div></details>
         </div>
       </section>
 
@@ -345,8 +356,8 @@
           <div class="row"><button type="button" class="btn primary" id="editToggle" aria-pressed="false">Edit on stage</button><button type="button" class="btn" id="resetScene"><svg class="i sm" aria-hidden="true"><use href="/icons.svg#i-rotate-ccw"/></svg>Reset scene</button></div>
           <p class="hint" id="layoutsHint">Drag and resize on the stage. Changes show for everyone and in recordings.</p>
           <p class="hint">Hold <kbd>Alt</kbd> while dragging to let layers overlap.</p>
-          <div class="fld"><span>Start from a template</span><div class="tpls" id="tplList"></div></div>
-          <div class="fld"><span>Add to stage</span>
+          <details class="psec" data-sec="templates" open><summary><b>Start from a template</b></summary><div class="psec-body"><div class="fld"><span class="dup">Start from a template</span><div class="tpls" id="tplList"></div></div>
+          </div></details><details class="psec" data-sec="add" open><summary><b>Add to stage</b></summary><div class="psec-body"><div class="fld"><span class="dup">Add to stage</span>
             <div class="adds">
               <button type="button" class="btn sm" data-add="slot">+ Camera</button>
               <button type="button" class="btn sm" data-add="media">+ Presentation</button>
@@ -359,26 +370,25 @@
               <button type="button" class="btn sm" data-add="shape">+ Colour block</button>
             </div>
           </div>
-          <div class="fld"><span>Layers <em>top of the list is on top of the picture</em></span>
+          </div></details><details class="psec" data-sec="layers" open><summary><b>Layers</b><span class="hint">top of the list is on top</span></summary><div class="psec-body"><div class="fld"><span class="dup">Layers</span>
             <ul class="el-list" id="elList"></ul>
             <p class="hint" id="elEmpty">Nothing added yet. Pick a template or add an element.</p>
           </div>
           <div class="el-props form" id="elProps" hidden></div>
-          <hr>
-          <div class="fld"><span>Media library <em>in this browser · your AI can present these by name</em></span>
+          </div></details><details class="psec" data-sec="library" open><summary><b>Media library</b><span class="hint">your AI can present these by name</span></summary><div class="psec-body"><div class="fld"><span class="dup">Media library</span>
             <div class="row"><button type="button" class="btn sm" id="libPick">+ PDF, video or image</button></div>
             <input class="input" id="libUrl" placeholder="YouTube or web link" spellcheck="false" aria-label="YouTube or web link"><div class="row nowrap"><input class="input grow" id="libUrlName" maxlength="40" placeholder="Name it" aria-label="Name"><button type="button" class="btn" id="libUrlAdd">Add</button></div>
             <ul class="el-list" id="libList"></ul>
             <p class="hint" id="libEmpty">Add decks, clips and pictures once, then present them in one click, from a scene, or by asking your AI.</p>
             <input type="file" id="libFile" accept="application/pdf,video/*,image/*" multiple hidden>
           </div>
-          <hr>
-          <div class="fld"><span>Save as a scene <em>appears in the scene strip</em></span>
+          </div></details><details class="psec" data-sec="save" open><summary><b>Save as a scene</b><span class="hint">appears in the scene strip</span></summary><div class="psec-body"><div class="fld"><span class="dup">Save as a scene</span>
             <div class="composer-row"><input id="layoutName" maxlength="40" placeholder="Scene name"><button type="button" class="btn sm" id="saveLayout">Save</button></div>
             <label class="fld"><span>Opens with <em>presented when the scene starts</em></span><select id="sceneMedia"><option value="">No media</option></select></label>
             <ul class="el-list" id="savedList"></ul>
             <p class="hint" id="savedEmpty">Saved scenes live in this browser, images included.</p>
           </div>
+          </div></details>
         </div>
       </section>
 
@@ -386,6 +396,7 @@
       <section class="panel" data-panel="brand" hidden>
         <header class="panel-head"><h2>Look</h2><div class="seg block sm look-seg" role="tablist" aria-label="Look"><button type="button" role="tab" data-look="layouts">Layout</button><button type="button" role="tab" data-look="brand" class="on" aria-selected="true">Brand</button></div></header>
         <div class="panel-body form">
+          <details class="psec" data-sec="colour" open><summary><b>Colour</b></summary><div class="psec-body">
           <div class="fld"><span>Stage accent colour</span>
             <div class="swatches" id="swatches">
               <button style="--c:#3b82f6" data-color="#3b82f6" aria-label="Blue"></button>
@@ -399,7 +410,7 @@
             <input type="color" id="colorPick" value="#3b82f6" aria-label="Custom accent colour">
           </div>
 
-          <h3 class="caps">Background</h3>
+          </div></details><details class="psec" data-sec="bg" open><summary><b>Background</b></summary><div class="psec-body">
           <div class="bgs" id="bgs">
             <button data-bg="dusk" aria-label="Dusk"></button>
             <button data-bg="ember" aria-label="Ember"></button>
@@ -410,7 +421,7 @@
           <div class="row"><button type="button" class="btn sm" id="bgImgPick">Use your own image</button><button type="button" class="btn ghost sm" id="bgImgClear" hidden>Remove image</button></div>
           <label class="fld" id="bgDimRow" hidden><span>Darken the image</span><input type="range" id="bgDim" min="0" max="0.85" step="0.05"></label>
 
-          <h3 class="caps">Text</h3>
+          </div></details><details class="psec" data-sec="text" open><summary><b>Text</b></summary><div class="psec-body">
           <label class="fld"><span>Stage font</span>
             <select id="fontSel">
               <option value="jakarta">Jakarta — clean and modern</option><option value="onest">Onest — friendly</option>
@@ -423,7 +434,7 @@
           </div>
           <label class="toggle-inline"><input type="checkbox" class="toggle sm" id="namesChk" checked><span>Show display names</span></label>
 
-          <h3 class="caps">Banners and titles</h3>
+          </div></details><details class="psec" data-sec="banners" open><summary><b>Banners and titles</b></summary><div class="psec-body">
           <div class="fld"><span>Banner style</span>
             <div class="seg block" id="bannerStyleSeg"><button type="button" data-bs="classic">Classic</button><button type="button" data-bs="glass">Glass</button><button type="button" data-bs="bold">Bold</button><button type="button" data-bs="minimal">Minimal</button></div>
           </div>
@@ -435,18 +446,18 @@
           </div>
           <label class="fld"><span>Show title <em>shown in the stage corner; you can also click it in the header</em></span><input id="titleInput" maxlength="60" placeholder="The conversation studio"></label>
 
-          <h3 class="caps">Panels</h3>
+          </div></details><details class="psec" data-sec="panels" open><summary><b>Panels</b></summary><div class="psec-body">
           <div class="fld"><span>AI window, chat overlay and camera-off tiles</span>
             <div class="seg block" id="panelSeg"><button type="button" data-panel="glass">Glass</button><button type="button" data-panel="solid">Solid colour</button></div>
           </div>
           <label class="fld" id="panelColorRow" hidden><span>Panel colour</span><input type="color" id="panelColor" value="#0f172a"></label>
 
-          <h3 class="caps">Overlays</h3>
+          </div></details><details class="psec" data-sec="overlays" open><summary><b>Overlays</b></summary><div class="psec-body">
           <div class="fld"><span>Frame</span>
             <div class="seg block" id="frameSeg"><button type="button" data-frame="none">None</button><button type="button" data-frame="corners">Corners</button><button type="button" data-frame="border">Border</button><button type="button" data-frame="vignette">Vignette</button></div>
           </div>
           <div class="row"><button type="button" class="btn sm" id="overlayPick">Add a full-screen overlay (PNG)</button><button type="button" class="btn ghost sm" id="overlayClear" hidden>Remove</button></div>
-          <h3 class="caps">Logo</h3>
+          </div></details><details class="psec" data-sec="logo" open><summary><b>Logo</b></summary><div class="psec-body">
           <div class="row"><button type="button" class="btn sm" id="logoPick">Upload your logo</button><button type="button" class="btn ghost sm" id="logoClear" hidden>Remove</button></div>
           <div class="form" id="logoRow" hidden>
             <div class="fld"><span>Logo position</span>
@@ -454,7 +465,7 @@
             </div>
             <label class="fld"><span>Logo size</span><input type="range" id="logoSize" min="0.04" max="0.35" step="0.01"></label>
           </div>
-          <h3 class="caps">Sponsors &amp; ads</h3>
+          </div></details><details class="psec" data-sec="ads" open><summary><b>Sponsors &amp; ads</b></summary><div class="psec-body">
           <label class="toggle-row"><span><b>Rotate sponsor banners</b><small>Up to 8 images, shown one at a time</small></span><input type="checkbox" class="toggle" id="adsSwitch" role="switch"></label>
           <div class="ad-list" id="adList"></div>
           <div class="row"><button type="button" class="btn sm" id="adPick">+ Add sponsor images</button></div>
@@ -465,11 +476,12 @@
           <input type="file" id="adFile" accept="image/*" multiple hidden>
           <p class="hint" id="brandHint">Brand changes apply to everyone in the studio.</p>
           <input type="file" id="bgImgFile" accept="image/*" hidden><input type="file" id="overlayFile" accept="image/png,image/webp,image/gif" hidden><input type="file" id="logoFile" accept="image/*" hidden>
-          <hr>
-          <div class="fld"><span>Support links <em>shown on stage as a QR card</em></span>
+          </div></details><details class="psec" data-sec="tips" open><summary><b>Support links</b><span class="hint">shown on stage as a QR card</span></summary><div class="psec-body">
+          <div class="fld"><span class="dup">Support links</span>
             <div class="tip-list" id="tipList"></div>
             <p class="hint">Viewers scan the code to tip you.</p>
           </div>
+          </div></details>
         </div>
       </section>
 

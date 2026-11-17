@@ -844,12 +844,7 @@ body.deck-closed .deck { padding-bottom: var(--sp-2); }
 .msg.sc-pending { border: 1px dashed var(--warn-line); background: var(--warn-bg); border-radius: var(--r-md); padding: var(--sp-2) var(--sp-3); display: grid; gap: 6px; }
 .msg.sc-pending .sc-note { font-size: 12px; color: var(--ink-3); }
 /* Show panel: folding sections for the shop, polls, the play-with-me queue and emotes */
-.sec-fold { border-top: 1px solid var(--line); padding-top: var(--sp-3); display: grid; gap: var(--sp-3); }
-.sec-fold > summary { display: flex; align-items: center; justify-content: space-between; cursor: pointer; list-style: none; }
 .sec-fold > summary::-webkit-details-marker { display: none; }
-.sec-fold > summary::after { content: "▸"; color: var(--ink-3); margin-left: var(--sp-2); }
-.sec-fold[open] > summary::after { content: "▾"; }
-.sec-fold[open] { gap: var(--sp-3); }
 .sub-fold summary { cursor: pointer; font-size: 13px; color: var(--ink-2); }
 .sub-fold[open] { display: grid; gap: var(--sp-2); }
 .shop-list, .queue-list { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--sp-2); }
@@ -883,8 +878,6 @@ body.deck-closed .deck { padding-bottom: var(--sp-2); }
 .panel-body .row > .grow, .panel-body .row > .input.grow { flex: 1; min-width: 0; }
 .panel-body .fld > span { line-height: 1.4; }
 .panel-body .fld > span em { display: block; margin-top: 1px; }
-.sec-fold { border: 1px solid var(--glass-border); border-radius: var(--r-md); padding: var(--sp-3); background: var(--fill); }
-.sec-fold > summary { min-height: 24px; }
 .sec-fold .sub-fold > summary { line-height: 1.4; }
 .poll-mins { width: auto; flex: none; }
 /* Support links: the name and its button on one line, the link field below at full width. */
@@ -898,3 +891,57 @@ body.deck-closed .deck { padding-bottom: var(--sp-2); }
 .more > summary::-webkit-details-marker { display: none; }
 .more > summary::before { content: ""; width: 6px; height: 6px; border-right: 1.5px solid currentColor; border-bottom: 1.5px solid currentColor; transform: rotate(-45deg); margin-right: 2px; transition: transform var(--dur) var(--ease-out); }
 .more[open] > summary::before { transform: rotate(45deg); }
+
+/* ---------------------------------------------------------------- panel sections
+   Every panel is a stack of named cards. Click a card's header to fold it; folds are remembered per browser.
+   The older folds (Shop, Polls, Play with me, Emotes) share the same look. */
+.panel-body:has(> .psec), .panel-body:has(> .watch-sec) { gap: var(--sp-3); }
+.watch-sec { display: grid; gap: var(--sp-3); }
+.psec, .sec-fold { border: 1px solid var(--glass-border); border-radius: var(--r-md); background: var(--fill); padding: 0; }
+.psec > summary, .sec-fold > summary { display: flex; align-items: center; gap: var(--sp-2); min-height: 44px; padding: 0 var(--sp-3) 0 var(--sp-4); cursor: pointer; list-style: none; border-radius: var(--r-md); }
+.psec > summary::-webkit-details-marker, .sec-fold > summary::-webkit-details-marker { display: none; }
+.psec > summary:hover, .sec-fold > summary:hover { background: var(--fill-hover); }
+.psec > summary b, .sec-fold > summary b { font-size: var(--fs-13); font-weight: 600; color: var(--ink); }
+.psec > summary .hint, .sec-fold > summary .hint { margin: 0 0 0 auto; font-size: var(--fs-12); color: var(--ink-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.psec > summary::after, .sec-fold > summary::after { content: ""; flex: none; width: 7px; height: 7px; margin: 0 4px 3px 8px; border-right: 1.5px solid var(--ink-3); border-bottom: 1.5px solid var(--ink-3); transform: rotate(45deg); transition: transform var(--dur) var(--ease-out); }
+.psec > summary:not(:has(.hint))::after, .sec-fold > summary:not(:has(.hint))::after { margin-left: auto; }
+.psec[open] > summary::after, .sec-fold[open] > summary::after { transform: rotate(-135deg); margin-bottom: -3px; }
+.psec-body { display: grid; gap: var(--sp-3); padding: var(--sp-1) var(--sp-4) var(--sp-4); }
+.psec-body .dup { display: none; }
+.psec-body > .fld:has(> .dup) { gap: 0; }
+.psec-body hr { margin: var(--sp-1) 0; }
+.psec-body .tip-row:first-child { padding-top: 0; }
+
+/* Older folds (Shop, Polls, Play with me, Emotes): padding, not margins, so inline margin:0 on hints can't undo it. */
+.psec[open] > summary::after, .sec-fold[open] > summary::after { content: ""; }
+
+/* ---------------------------------------------------------------- Show tab */
+/* The watch link: one line (the start of a long address is what gets cut), with copy, open and QR right beside it. */
+.wp-linkrow { display: flex; align-items: center; gap: 2px; padding: 4px 4px 4px 12px; border-radius: var(--r-sm); background: var(--surface-2); border: 1px solid var(--glass-border); }
+.wp-linkrow .wp-url { flex: 1; min-width: 0; padding: 0; background: none; border: 0; font: 600 12px/1.2 var(--font-mono, ui-monospace, monospace); color: var(--accent-text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; direction: rtl; text-align: left; }
+.wp-linkrow .icon-btn { flex: none; }
+/* Permanent name: "/w/" then the name, with room for it. */
+.wp-handle { display: grid; gap: 6px; }
+.wp-handle-row .wp-host { padding-left: var(--sp-3); font-family: var(--font-mono, ui-monospace, monospace); color: var(--ink-3); }
+.wp-handle-row input { font-family: var(--font-mono, ui-monospace, monospace); }
+#wpHandleNote { margin: 0; font-size: var(--fs-12); }
+#wpHandleNote:empty { display: none; }
+.psec-body > .more > summary { min-height: 28px; }
+.psec-body > .more[open] { display: grid; gap: var(--sp-3); }
+/* Viewer features: Direct video and its "viewers at once" picker read as one control. */
+.toggle-group { border: 1px solid var(--glass-border); border-radius: var(--r-md); background: var(--fill); overflow: hidden; }
+.toggle-group > .toggle-row { border: 0; border-radius: 0; background: none; }
+.sub-row { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-3); padding: var(--sp-2) var(--sp-3); border-top: 1px solid var(--line); font-size: var(--fs-13); }
+.sub-row > span { display: grid; gap: 1px; min-width: 0; }
+.sub-row em { font-style: normal; font-size: var(--fs-12); color: var(--ink-3); }
+.sub-row select { width: auto; min-width: 72px; flex: none; }
+.toggle-group:has(#wpDirect:not(:checked)) > .sub-row { display: none; }
+.psec-body .toggle-row small { line-height: 1.35; }
+/* Waiting for you: a single line until something arrives. */
+.inbox-lists { display: grid; gap: var(--sp-2); }
+.inbox-lists .hint { margin: 0; }
+.inbox-lists:has(#vmList:empty):has(#scList:empty) > :not(.inbox-empty) { display: none; }
+.inbox-lists:not(:has(#vmList:empty)) > .inbox-empty, .inbox-lists:not(:has(#scList:empty)) > .inbox-empty { display: none; }
+.psec > summary > b, .sec-fold > summary > b { flex: 1; min-width: 0; } /* title takes the slack, so the count and arrow sit at the right edge */
+.psec > summary .hint:empty, .sec-fold > summary .hint:empty { display: none; }
+.psec-body > .btn.link { margin: 0; justify-self: start; } /* links sit inside the card edge */
