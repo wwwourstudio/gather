@@ -328,3 +328,6 @@ body { background: #05070d; }
 
 /* the small status dot in the address chip: blue at rest, red while the show is live */
 .lamp { display: inline-block; flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--accent); }
+
+/* Super chat beside Raise hand: green like paid messages in the chat. */
+.btn.wv-supers { --btn-bg: rgba(22, 163, 74, 0.16); --btn-bg-hover: rgba(22, 163, 74, 0.26); --btn-line: rgba(22, 163, 74, 0.5); --btn-ink: #86efac; flex: none; }

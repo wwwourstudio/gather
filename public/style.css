@@ -955,3 +955,8 @@ body.deck-closed .deck { padding-bottom: var(--sp-2); }
 .psec > summary .hint, .sec-fold > summary .hint { flex: 0 1 auto; min-width: 0; }
 /* A labelled block inside a section (Media library, Layers, Templates…) uses the same 12px rhythm inside. */
 .psec-body > .fld:has(> .dup) { gap: var(--sp-3); }
+
+/* Super chats card: the payment fields are part of the card, under a short status line. */
+.pay-box { display: grid; gap: var(--sp-3); }
+.pay-box .pay-status { margin: 0; padding: var(--sp-2) var(--sp-3); border-radius: var(--r-sm); background: var(--surface-2); font-size: var(--fs-12); }
+[data-sec="supers"] > summary .hint { color: var(--ink-2); }

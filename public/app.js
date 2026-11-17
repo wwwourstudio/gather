@@ -4905,17 +4905,20 @@ function chime() {
 // A short tour for hosts: each step lights up one part of the studio and says what it's for. It runs once,
 // the first time you host, and any time from Help → "Take the studio tour". Steps whose part isn't on screen
 // (say, a panel that's folded away) are skipped.
+// One sweep around the screen, never doubling back: the stage and what's under it, the bottom bar left to right,
+// the panel rail top to bottom, then the header left to right, ending on Go live.
 const TOUR = [
   ['#stage', 'Your show', 'What you see here is exactly what viewers see and what gets recorded.'],
   ['#sceneStrip', 'Scenes', 'Switch layouts in one click, or press 1–9. Save your own from Look → Layout.'],
   ['.deck-tabs [data-deck="people"]', 'Guests and backstage', 'New guests wait backstage. Click someone’s picture to put them on stage, or back off it.'],
-  ['#shareBtn', 'Present', 'Share your screen, slides, a video or an image.'],
+  ['#shareBtn', 'Present', 'Share your screen, slides, a video, an image or a game.'],
   ['#recBtn', 'Record', 'Record the show in this browser, then download it or save it to Google Drive.'],
-  ['.rail-btn[data-tab="show"]', 'Show', 'Banners, a scrolling ticker, live captions, the chat overlay and the call-in card.'],
-  ['.rail-btn[data-tab="look"]', 'Look', 'Arrange the stage and set your brand: colours, logo, backgrounds and fonts.'],
   ['#aiDock', 'Your AI producer', 'Ask it anything on air, or tell it to switch scenes, show a banner or find a video. Press / any time.'],
-  ['#enterTop', 'Invite', 'Send guests the link. They don’t need an account. The footer has a copy button too.'],
-  ['#liveTop', 'Go live', 'Stream to YouTube, Twitch and more at once, and get a watch page for viewers.'],
+  ['.rail-btn[data-tab="show"]', 'Show', 'Your watch page, super chats, voice questions, the shop and polls, banners and the ticker.'],
+  ['.rail-btn[data-tab="look"]', 'Look', 'Arrange the stage and set your brand: colours, logo, backgrounds and fonts.'],
+  ['#enterTop', 'Invite', 'Send guests the link. They don’t need an account.'],
+  ['#watchTop', 'Watch page', 'Your own page for viewers: the show, live chat and super chats. Share this link anywhere.'],
+  ['#liveTop', 'Go live', 'Stream to YouTube, Twitch and more at once. Your watch page works without it.'],
 ];
 const tour = { i: 0, steps: [] };
 const visible = (el) => !!el && el.getClientRects().length > 0 && getComputedStyle(el).visibility !== 'hidden';
@@ -4947,6 +4950,7 @@ function placeTour() {
   if (top < 8) top = Math.min(vh - ch - 8, Math.max(8, r.top + r.height / 2 - ch / 2)); // tall targets: beside
   let left = r.left + r.width / 2 - cw / 2;
   if (r.height > vh * 0.5 && r.right + gap + cw < vw) left = r.right + gap; // a big area (the stage): put the card next to it
+  if (r.left > vw - 140 && r.height < vh * 0.5) { left = r.left - gap - cw; top = Math.max(8, Math.min(vh - ch - 8, r.top + r.height / 2 - ch / 2)); } // the panel rail: beside it, not over it
   left = Math.max(8, Math.min(vw - cw - 8, left));
   Object.assign(card.style, { left: left + 'px', top: top + 'px' });
 }
@@ -5032,6 +5036,8 @@ function programTracks() {
   audioCtx();
   const fps = S.local.pres?.game ? 60 : 30;
   if (!programStream || programStream.fps !== fps || programStream.getVideoTracks()[0]?.readyState !== 'live') { programStream = canvas.captureStream(fps); programStream.fps = fps; }
+  // The program is text, slides and faces: tell the encoder sharpness matters more than smoothness (games: motion).
+  const vt = programStream.getVideoTracks()[0]; if (vt) vt.contentHint = S.local.pres?.game ? 'motion' : 'detail';
   return [programStream.getVideoTracks()[0], recDest?.stream.getAudioTracks()[0]].filter(Boolean);
 }
 async function viewerWant(vid) {
@@ -5063,12 +5069,19 @@ async function viewerWant(vid) {
   catch (e) { console.warn('viewer offer failed', e); closeViewer(vid); }
   renderWatchSec();
 }
+// WebRTC starts every connection at a few hundred kbps and ramps up over ~10 s, so viewers first saw a 320x180
+// picture. Start video at 2 Mbps (never below 800 kbps) so the first frames are already sharp. Chrome reads these
+// hints from the codec parameters of the answer; other browsers ignore them.
+function fastStart(sdp) {
+  return String(sdp || '').replace(/^(a=fmtp:\d+ [^\r\n]*)/gm, (line) => (/x-google-start-bitrate/.test(line) || /apt=|opus|telephone/i.test(line) ? line : line + ';x-google-start-bitrate=2000;x-google-min-bitrate=800'))
+    .replace(/^(a=rtpmap:(\d+) (VP8|VP9|H264|AV1)\/90000)\r?$/gm, (m, line, pt) => (new RegExp(`^a=fmtp:${pt} `, 'm').test(sdp) ? line : `${line}\r\na=fmtp:${pt} x-google-start-bitrate=2000;x-google-min-bitrate=800`));
+}
 async function viewerSignal(vid, d) {
   const v = VIEW.get(vid);
   if (!v || !d) return;
   // A viewer picked a quality on their player: scale only their stream.
   if (d.quality) { v.q = d.quality; for (const s of v.pc.getSenders()) if (s.track?.kind === 'video') tuneViewerSender(s, v.q); return; }
-  try { if (d.sdp) await v.pc.setRemoteDescription(d.sdp); else if (d.candidate) await v.pc.addIceCandidate(d.candidate).catch(() => {}); }
+  try { if (d.sdp) await v.pc.setRemoteDescription(d.sdp.type === 'answer' ? { type: 'answer', sdp: fastStart(d.sdp.sdp) } : d.sdp); else if (d.candidate) await v.pc.addIceCandidate(d.candidate).catch(() => {}); }
   catch (e) { console.warn('viewer signal', e); }
 }
 /** Viewer encoding: 2.5 Mbps at 30 fps; in game mode 60 fps (4 Mbps), keeping motion smooth over sharpness. */
@@ -5078,7 +5091,7 @@ function tuneViewerSender(sender, q) {
     const p = sender.getParameters();
     const scale = { 720: 1, 480: 1.5, 360: 2 }[q] || 1;
     p.encodings = [{ ...(p.encodings?.[0] || {}), maxBitrate: Math.round((game ? 4_000_000 : 2_500_000) / scale / scale), maxFramerate: game ? 60 : 30, scaleResolutionDownBy: scale }];
-    p.degradationPreference = game ? 'maintain-framerate' : 'balanced';
+    p.degradationPreference = game ? 'maintain-framerate' : 'maintain-resolution'; // short of bandwidth: drop frames, never blur
     sender.setParameters(p).catch(() => {});
   } catch {}
 }
@@ -5185,10 +5198,14 @@ function renderWatchSec() {
   if (document.activeElement !== $('#wpAbout')) $('#wpAbout').value = cfg.about || '';
   if (document.activeElement !== $('#wpLinks')) $('#wpLinks').value = (cfg.links || []).map((l) => `${l.label} | ${l.url}`).join('\n');
   if (document.activeElement !== $('#wpMin')) $('#wpMin').value = String(cfg.min);
-  $('#wpPayBox').hidden = !cfg.supers;
+  // Super chats: the payment fields are always shown, with one line saying what's left to do.
+  const payOn = Object.values(cfg.pay).some(Boolean);
+  $('#wpSupersState').textContent = cfg.supers && payOn ? 'On' : cfg.supers ? 'Needs a way to pay' : 'Off';
+  $('#wpPayStatus').textContent = !payOn ? 'Add at least one way to get paid. Viewers pay you directly; gather never touches the money.'
+    : cfg.supers ? 'Viewers see a Tip button in the chat on your watch page.' : 'Payments are set. Turn on super chats above to show the Tip button.';
   if (document.activeElement !== $('#wpQueue')) $('#wpQueue').checked = !!cfg.queue;
   if (window.__shopReady) { renderShop(); renderPoll(); renderEmotes(); }
-  $('#wpNoPay').hidden = !cfg.supers || Object.values(cfg.pay).some(Boolean);
+  $('#wpNoPay').hidden = true; // replaced by #wpPayStatus
   renderHandle();
 }
 function renderHandle() {

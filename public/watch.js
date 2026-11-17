@@ -92,6 +92,7 @@ function render(info) {
   $('#wViewers').textContent = info.viewers ? `${info.viewers} watching` : '';
   const w = info.watch || {};
   $('#wSuperBtn').hidden = !w.supers || w.chat === false;
+  $('#wSuperStrip').hidden = $('#wSuperBtn').hidden; // the same super chat, where viewers already look
   // Voice questions replace the old call-in: raise a hand, record, the host decides.
   $('#wHand').hidden = $('#wMic').hidden = w.voice === false || !navigator.mediaDevices?.getUserMedia || !window.MediaRecorder;
   $('#wChatState').textContent = !info.found ? '' : w.chat === false ? 'Chat is off' : w.slow ? `Slow mode · ${w.slow}s` : '';
@@ -411,6 +412,7 @@ function openSuperRefresh() {
 }
 const $$ = (s) => document.querySelectorAll(s);
 $('#wSuperBtn').onclick = () => openSuper();
+$('#wSuperStrip').onclick = () => openSuper();
 $('#wPayGo').onclick = async () => {
   const w = W.info?.watch || {}, handle = w.pay?.[SC.method];
   if (!handle) return;

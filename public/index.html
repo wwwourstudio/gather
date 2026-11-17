@@ -243,6 +243,15 @@
               <label class="fld"><span>About this show</span><textarea id="wpAbout" rows="3" maxlength="600" placeholder="Shown under the video: what the show is about, the schedule, who’s on today"></textarea></label>
               <label class="fld"><span>Links</span><textarea id="wpLinks" rows="3" maxlength="1200" spellcheck="false" placeholder="One per line, e.g.&#10;Merch | https://shop.example.com"></textarea></label>
             </details>
+            </div></details><details class="psec" data-sec="supers" open><summary><b>Super chats</b><span class="hint" id="wpSupersState"></span></summary><div class="psec-body">
+            <label class="toggle-row"><span><b>Take super chats</b><small>Viewers tip from the chat. Money goes straight to you; you confirm each one before it shows.</small></span><input type="checkbox" class="toggle" id="wpSupers" role="switch"></label>
+            <div class="form pay-box" id="wpPayBox">
+              <p class="hint pay-status" id="wpPayStatus"></p>
+              <div class="row2"><label class="fld"><span>PayPal.me name</span><input id="wpPay-paypal" maxlength="40" placeholder="yourname" spellcheck="false"></label><label class="fld"><span>Venmo username</span><input id="wpPay-venmo" maxlength="31" placeholder="your-name" spellcheck="false"></label></div>
+              <div class="row2"><label class="fld"><span>Cash App $cashtag</span><input id="wpPay-cashapp" maxlength="21" placeholder="$yourname" spellcheck="false"></label><label class="fld"><span>Minimum ($)</span><input id="wpMin" type="number" min="1" max="500" step="1"></label></div>
+              <label class="fld"><span>Stripe payment link <em>adds card, Apple Pay and Google Pay</em></span><input id="wpPay-stripe" maxlength="120" placeholder="https://buy.stripe.com/…" spellcheck="false"></label>
+              <p class="hint warn-note" id="wpNoPay" hidden>Add at least one way to pay, or viewers won’t see the Super chat button.</p>
+            </div>
             </div></details><details class="psec" data-sec="viewers" open><summary><b>Viewer features</b></summary><div class="psec-body">
             <div class="toggle-group">
               <label class="toggle-row"><span><b>Direct video</b><small>Under a second of delay, straight from your browser.</small></span><input type="checkbox" class="toggle" id="wpDirect" role="switch"></label>
@@ -251,13 +260,6 @@
             <label class="toggle-row"><span><b>Live chat</b><small>Viewer messages land in your chat.</small></span><input type="checkbox" class="toggle" id="wpChat" role="switch"></label>
             <label class="toggle-row"><span><b>Watch link on stream</b><small>A small badge so platform viewers find your page.</small></span><input type="checkbox" class="toggle" id="wpBadge" role="switch"></label>
             <label class="toggle-row"><span><b>Voice questions</b><small>Viewers record a question; you play it or delete it.</small></span><input type="checkbox" class="toggle" id="wpVoice" role="switch"></label>
-            <label class="toggle-row"><span><b>Super chats</b><small>Paid straight to you; you confirm each one.</small></span><input type="checkbox" class="toggle" id="wpSupers" role="switch"></label>
-            <div class="form" id="wpPayBox" hidden>
-              <div class="row2"><label class="fld"><span>PayPal.me name</span><input id="wpPay-paypal" maxlength="40" placeholder="yourname" spellcheck="false"></label><label class="fld"><span>Venmo username</span><input id="wpPay-venmo" maxlength="31" placeholder="your-name" spellcheck="false"></label></div>
-              <div class="row2"><label class="fld"><span>Cash App $cashtag</span><input id="wpPay-cashapp" maxlength="21" placeholder="$yourname" spellcheck="false"></label><label class="fld"><span>Minimum ($)</span><input id="wpMin" type="number" min="1" max="500" step="1"></label></div>
-              <label class="fld"><span>Stripe payment link <em>adds card, Apple Pay and Google Pay</em></span><input id="wpPay-stripe" maxlength="120" placeholder="https://buy.stripe.com/…" spellcheck="false"></label>
-              <p class="hint warn-note" id="wpNoPay" hidden>Add at least one way to pay, or viewers won’t see the Super chat button.</p>
-            </div>
             </div></details><details class="psec" data-sec="inbox" open><summary><b>Waiting for you</b></summary><div class="psec-body">
             <div class="inbox-lists">
               <p class="hint inbox-empty">Nothing waiting. Voice questions and super chats chime and show up here.</p>
