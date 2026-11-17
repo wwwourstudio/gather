@@ -192,8 +192,8 @@
             <p class="hint" id="aiHouseNote" hidden></p>
             <details class="more"><summary>Model</summary><label class="fld"><span>Model ID <em>leave blank for the default</em></span><input id="aiModel" spellcheck="false"></label></details>
             <hr>
-            <div class="row2"><label class="fld"><span>Name</span><input id="aiName" maxlength="20" placeholder="Sam"></label>
-              <div class="fld"><span>Voice</span><div class="seg block" id="aiVoiceSeg"><button type="button" data-voice="browser">Me</button><button type="button" data-voice="openai">Stream</button><button type="button" data-voice="off">Off</button></div></div></div>
+            <label class="fld"><span>Name</span><input id="aiName" maxlength="20" placeholder="Sam"></label>
+              <div class="fld"><span>Voice</span><div class="seg block" id="aiVoiceSeg"><button type="button" data-voice="browser">Me</button><button type="button" data-voice="openai">Stream</button><button type="button" data-voice="off">Off</button></div></div>
             <div class="row2" id="aiVoiceNameRow" hidden><label class="fld"><span>Stream voice</span><select id="aiVoiceName"><option value="alloy">Alloy</option><option value="ash">Ash</option><option value="ballad">Ballad</option><option value="coral">Coral</option><option value="echo">Echo</option><option value="fable">Fable</option><option value="nova">Nova</option><option value="onyx">Onyx</option><option value="sage">Sage</option><option value="shimmer">Shimmer</option></select></label></div>
             <div class="row" id="aiVoiceTestRow"><button type="button" class="btn sm" id="aiVoiceTest">Test voice</button><p class="hint" id="aiVoiceNote" style="margin:0"></p></div>
             <label class="toggle-row"><span><b>Wake word</b><small id="aiWakeHint">Say “Hey Sam, …” and it acts. Chrome or Edge.</small></span><input type="checkbox" class="toggle" id="aiWake" role="switch"></label>
@@ -238,6 +238,7 @@
             <label class="fld"><span>About this show <em>shown under the video</em></span><textarea id="wpAbout" rows="3" maxlength="600" placeholder="What the show is about, the schedule, who’s on today"></textarea></label>
             <label class="fld"><span>Links <em>one per line: Label | https://…</em></span><textarea id="wpLinks" rows="3" maxlength="1200" spellcheck="false" placeholder="Merch | https://shop.example.com&#10;Discord | https://discord.gg/…"></textarea></label>
             <div class="row"><button type="button" class="btn sm primary" id="wpCopy">Copy link</button><button type="button" class="btn sm" id="wpCard">Put link + QR on stage</button><button type="button" class="btn sm ghost" id="wpOpen">Open</button></div>
+            <h3 class="pgroup-h">Viewer features</h3>
             <label class="toggle-row"><span><b>Direct video</b><small>Viewers watch from your browser with under a second of delay.</small></span><input type="checkbox" class="toggle" id="wpDirect" role="switch"></label>
             <label class="fld"><span>Direct viewers at once <em>each one uses up to 2.5 Mbps of your upload</em></span><select id="wpCap"><option value="3">3</option><option value="6">6</option><option value="10">10</option><option value="15">15</option><option value="20">20</option></select></label>
             <label class="toggle-row"><span><b>Live chat</b><small>Viewer messages land in your chat; show any of them on stage.</small></span><input type="checkbox" class="toggle" id="wpChat" role="switch"></label>
@@ -250,6 +251,7 @@
               <label class="fld"><span>Stripe payment link <em>adds card, Apple Pay and Google Pay</em></span><input id="wpPay-stripe" maxlength="120" placeholder="https://buy.stripe.com/…" spellcheck="false"></label>
               <p class="hint warn-note" id="wpNoPay" hidden>Add at least one way to pay, or viewers won’t see the Super chat button.</p>
             </div>
+            <h3 class="pgroup-h">Waiting for you</h3>
             <div class="row between"><b>Voice questions</b><span class="hint" id="vmCount" style="margin:0"></span></div>
             <ul class="sc-list" id="vmList"></ul>
             <p class="hint" id="vmEmpty" style="margin:0">None yet. Raised hands chime and appear here and in the chat.</p>
@@ -260,7 +262,7 @@
             <!-- Shop: products sold live; checkout happens on the store's own site -->
             <details class="sec-fold" id="shopSec"><summary><b>Shop</b><span class="hint" id="shopCount" style="margin:0"></span></summary>
               <p class="hint" style="margin:0">Pin a product and it pops up on stage and on your watch page. Buyers check out on your store.</p>
-              <div class="row2"><label class="fld"><span>Shopify store</span><input id="shopDomain" maxlength="80" placeholder="yourstore.myshopify.com" spellcheck="false"></label><label class="fld"><span>Storefront token <em>Shopify admin → Apps → Develop apps</em></span><input id="shopToken" maxlength="80" type="password" autocomplete="off" spellcheck="false"></label></div>
+              <label class="fld"><span>Shopify store</span><input id="shopDomain" maxlength="80" placeholder="yourstore.myshopify.com" spellcheck="false"></label><label class="fld"><span>Storefront token <em>from Shopify admin → Apps → Develop apps</em></span><input id="shopToken" maxlength="80" type="password" autocomplete="off" spellcheck="false"></label>
               <div class="row"><button type="button" class="btn sm" id="shopLoad">Load my Shopify products</button><span class="hint" id="shopMsg" style="margin:0"></span></div>
               <details class="sub-fold"><summary>Add a product by hand <em>Etsy, Gumroad, anything with a link</em></summary>
                 <div class="row2"><label class="fld"><span>Name</span><input id="shopTitle" maxlength="80" placeholder="Limited hoodie"></label><label class="fld"><span>Price</span><input id="shopPrice" maxlength="16" placeholder="$45"></label></div>
@@ -276,7 +278,7 @@
               <div class="seg block" role="radiogroup" aria-label="Kind" id="pollKind"><button type="button" role="radio" data-kind="poll" aria-checked="true">Poll</button><button type="button" role="radio" data-kind="predict" aria-checked="false">Prediction</button></div>
               <label class="fld"><span>Question</span><input id="pollQ" maxlength="120" placeholder="Who wins this round?"></label>
               <label class="fld"><span>Choices <em>one per line, 2 to 4</em></span><textarea id="pollOpts" rows="3" maxlength="200" placeholder="Red team&#10;Blue team"></textarea></label>
-              <div class="row"><select id="pollMins" aria-label="Voting time"><option value="1">1 min</option><option value="2" selected>2 min</option><option value="5">5 min</option><option value="10">10 min</option></select><button type="button" class="btn sm primary" id="pollGo">Start</button><button type="button" class="btn sm ghost" id="pollEnd">End</button></div>
+              <div class="row"><select class="input sm poll-mins" id="pollMins" aria-label="Voting time"><option value="1">1 min</option><option value="2" selected>2 min</option><option value="5">5 min</option><option value="10">10 min</option></select><button type="button" class="btn sm primary" id="pollGo">Start</button><button type="button" class="btn sm ghost" id="pollEnd">End</button></div>
               <div id="pollLive"></div>
             </details>
 
@@ -289,12 +291,12 @@
 
             <!-- Custom emotes: :name: in chat -->
             <details class="sec-fold" id="emoteSec"><summary><b>Custom emotes</b><span class="hint" id="emoteCount" style="margin:0"></span></summary>
-              <div class="row"><input id="emoteName" maxlength="20" placeholder="hype" aria-label="Emote name" spellcheck="false"><button type="button" class="btn sm" id="emoteAdd">Upload image</button><input type="file" id="emoteFile" accept="image/png,image/webp,image/gif,image/jpeg" hidden></div>
+              <div class="row"><input class="input grow" id="emoteName" maxlength="20" placeholder="Emote name, e.g. hype" aria-label="Emote name" spellcheck="false"><button type="button" class="btn sm" id="emoteAdd">Upload image</button><input type="file" id="emoteFile" accept="image/png,image/webp,image/gif,image/jpeg" hidden></div>
               <p class="hint" style="margin:0">Viewers type <code>:name:</code> in chat. Square images under 200 KB work best.</p>
               <div class="emote-list" id="emoteList"></div>
             </details>
           </div>
-          <hr>
+          <h3 class="pgroup-h">On stage</h3>
           <label class="fld"><span>Banner text</span><textarea id="bannerText" rows="3" maxlength="120">Welcome to the conversation</textarea></label>
           <label class="fld"><span>Second line <em>optional</em></span><input id="bannerSub" maxlength="120" placeholder="Episode 12 · Live from the studio"></label>
           <div class="row">
@@ -305,13 +307,12 @@
           <p class="hint" id="bannerHint">Banners appear on every participant's stage and in recordings.</p>
           <ul class="presets" id="bannerPresets"></ul>
           <button class="btn link" id="bannerSave">+ Save current text as a preset</button>
-          <hr>
           <label class="fld"><span>Scrolling ticker</span><input id="tickerText" maxlength="200" placeholder="Ask your questions in the chat · New episodes every Thursday"></label>
           <div class="row">
             <button class="btn" id="tickerShow">Run ticker</button>
             <button class="btn ghost" id="tickerHide">Stop</button>
           </div>
-          <hr>
+          <h3 class="pgroup-h">Stage options</h3>
           <label class="toggle-row">
             <span><b>Live captions</b><small id="capNote">Each person’s browser transcribes their own mic.</small></span>
             <input type="checkbox" class="toggle" id="capSwitch" role="switch">
@@ -329,12 +330,10 @@
             </div>
             <label class="fld"><span>Caption size</span><input type="range" id="capSize" min="16" max="48" step="1"></label>
           </div>
-          <hr>
           <label class="toggle-row">
             <span><b>Chat overlay on stage</b><small id="overlayHint">1 chat source: studio</small></span>
             <input type="checkbox" class="toggle" id="overlaySwitch" role="switch">
           </label>
-          <hr>
           <label class="toggle-row"><span><b>Guests go straight on stage</b><small>Off: new guests wait backstage until you click their picture</small></span><input type="checkbox" class="toggle" id="autoStage" role="switch"></label>
         </div>
       </section>
@@ -368,14 +367,14 @@
           <hr>
           <div class="fld"><span>Media library <em>in this browser · your AI can present these by name</em></span>
             <div class="row"><button type="button" class="btn sm" id="libPick">+ PDF, video or image</button></div>
-            <div class="composer-row"><input id="libUrl" placeholder="YouTube or web link" spellcheck="false"><input id="libUrlName" maxlength="40" placeholder="Name"><button type="button" class="btn sm" id="libUrlAdd">Add</button></div>
+            <input class="input" id="libUrl" placeholder="YouTube or web link" spellcheck="false" aria-label="YouTube or web link"><div class="row nowrap"><input class="input grow" id="libUrlName" maxlength="40" placeholder="Name it" aria-label="Name"><button type="button" class="btn" id="libUrlAdd">Add</button></div>
             <ul class="el-list" id="libList"></ul>
             <p class="hint" id="libEmpty">Add decks, clips and pictures once, then present them in one click, from a scene, or by asking your AI.</p>
             <input type="file" id="libFile" accept="application/pdf,video/*,image/*" multiple hidden>
           </div>
           <hr>
           <div class="fld"><span>Save as a scene <em>appears in the scene strip</em></span>
-            <div class="composer-row"><input id="layoutName" maxlength="40" placeholder="e.g. Interview, Q&amp;A, Product demo"><button type="button" class="btn sm" id="saveLayout">Save</button></div>
+            <div class="composer-row"><input id="layoutName" maxlength="40" placeholder="Scene name"><button type="button" class="btn sm" id="saveLayout">Save</button></div>
             <label class="fld"><span>Opens with <em>presented when the scene starts</em></span><select id="sceneMedia"><option value="">No media</option></select></label>
             <ul class="el-list" id="savedList"></ul>
             <p class="hint" id="savedEmpty">Saved scenes live in this browser, images included.</p>

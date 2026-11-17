@@ -567,7 +567,7 @@ hr { border: 0; border-top: 1px solid var(--line); margin: var(--sp-1) 0; width:
   .scene, .crew-card, .crew-add { width: 120px; }
   .sc-name { display: block; text-overflow: ellipsis; }
   .sc-name kbd { display: none; } /* number-key shortcuts don't exist on phones */
-  .tip-row { grid-template-columns: 80px minmax(0, 1fr) auto; }
+  .tip-row { grid-template-columns: minmax(0, 1fr) auto; }
 }
 .ebox.ghost:not(.sel):not(:hover) .elab { opacity: 0; } /* hidden layers often share a spot; name them on hover */
 
@@ -874,3 +874,27 @@ body.deck-closed .deck { padding-bottom: var(--sp-2); }
 .msg.vm-msg { border-radius: var(--r-md); padding: var(--sp-2) var(--sp-3); display: grid; gap: 6px; }
 .msg.vm-msg .row { flex-wrap: wrap; }
 .code.sm { font-size: 14px; padding: var(--sp-2); overflow-wrap: anywhere; }
+
+/* ---------------------------------------------------------------- panel contents
+   Every field is label-over-input at full width unless two short things fit side by side; long panels are split
+   into named groups; folds read as cards. */
+.pgroup-h { margin: var(--sp-3) 0 0; padding-top: var(--sp-4); border-top: 1px solid var(--line); font: 600 var(--fs-11)/1 var(--font-ui); letter-spacing: var(--tracking-caps); text-transform: uppercase; color: var(--ink-3); }
+.panel-body .row.nowrap { flex-wrap: nowrap; }
+.panel-body .row > .grow, .panel-body .row > .input.grow { flex: 1; min-width: 0; }
+.panel-body .fld > span { line-height: 1.4; }
+.panel-body .fld > span em { display: block; margin-top: 1px; }
+.sec-fold { border: 1px solid var(--glass-border); border-radius: var(--r-md); padding: var(--sp-3); background: var(--fill); }
+.sec-fold > summary { min-height: 24px; }
+.sec-fold .sub-fold > summary { line-height: 1.4; }
+.poll-mins { width: auto; flex: none; }
+/* Support links: the name and its button on one line, the link field below at full width. */
+.tip-row { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "tag btn" "input input"; row-gap: 6px; padding: var(--sp-2) 0; border-bottom: 1px solid var(--line); }
+.tip-row:last-child { border-bottom: 0; }
+.tip-row > .tip-tag { grid-area: tag; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tip-row > input { grid-area: input; }
+.tip-row > .tip-toggle { grid-area: btn; }
+/* A collapsible "more" row shows a chevron, so it reads as something to open rather than a stray label. */
+.more > summary { list-style: none; gap: 6px; }
+.more > summary::-webkit-details-marker { display: none; }
+.more > summary::before { content: ""; width: 6px; height: 6px; border-right: 1.5px solid currentColor; border-bottom: 1.5px solid currentColor; transform: rotate(-45deg); margin-right: 2px; transition: transform var(--dur) var(--ease-out); }
+.more[open] > summary::before { transform: rotate(45deg); }
