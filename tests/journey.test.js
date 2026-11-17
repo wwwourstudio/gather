@@ -14,6 +14,8 @@ const URL0 = process.env.GATHER_URL || 'http://localhost:8080';
   const tabTo = async (id, max) => { const path = []; for (let n = 1; n <= max; n++) { await page.keyboard.press('Tab'); if ((await page.evaluate(() => document.activeElement?.id)) === id) return n; path.push(await focused()); } console.log(`  tab path looking for #${id}: ${path.join(' → ')}`); return -1; };
   try {
     await page.goto(URL0 + '/');
+    await page.waitForFunction(() => !!window.__gather, null, { timeout: 15000 }); // the app has started and wired its buttons
+    await page.waitForLoadState('networkidle').catch(() => {});
     // Landing → green room → studio, keyboard only.
     const toCreate = await tabTo('enterStage', 10);
     check('Create a studio is reachable by Tab', toCreate > 0, `${toCreate} tab(s)`);
