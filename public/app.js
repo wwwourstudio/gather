@@ -1228,10 +1228,10 @@ function addExternal(m) {
   li.className = 'msg ext' + (m.paid ? ' paid' : '');
   setMsgData(li, m);
   const who = document.createElement('div'); who.className = 'who';
-  const badge = document.createElement('span'); badge.className = 'pill caps src-' + m.src; badge.textContent = SRC_NAME[m.src] || m.src;
+  const badge = document.createElement('span'); badge.className = 'pill caps src-' + m.src; badge.textContent = m.src === 'watch' ? 'Watch' : SRC_NAME[m.src] || m.src;
   const b = document.createElement('b'); b.textContent = m.name; if (m.color) b.style.color = m.color;
   who.append(badge, b);
-  if (m.q) { const q = document.createElement('span'); q.className = 'q-badge'; q.textContent = '✋ Question'; who.append(q); }
+  if (m.q) { const q = document.createElement('span'); q.className = 'q-badge'; q.textContent = 'Question'; who.append(q); }
   if (m.paid) { const amt = document.createElement('span'); amt.className = 'paid-amt'; amt.textContent = m.paid; who.append(amt); }
   const txt = document.createElement('div'); txt.className = 'txt'; txt.textContent = m.text;
   li.append(who, txt, msgActions(m));
@@ -5590,6 +5590,7 @@ async function aiTranscribe(x) {
   } catch (e) { toast(e.message, { err: true }); }
 }
 function voiceRow(x, inChat) {
+  if (inChat) return voiceChatRow(x);
   const li = document.createElement('li'); li.className = (inChat ? 'msg ext vm-msg ' : 'sc-item ') + 'vm ' + (x.status || 'new'); li.dataset.vm = x.id;
   const top = document.createElement('div'); top.className = inChat ? 'who' : 'sc-top';
   const badge = document.createElement('span'); badge.className = 'pill caps src-watch'; badge.textContent = '🎙 Voice question';
@@ -5608,6 +5609,37 @@ function voiceRow(x, inChat) {
     btn('Delete', 'ghost', () => { if (vmPlaying?.id === x.id) vmPlaying.stop(); wsSend({ type: 'vmDel', id: x.id }); dropVoice(x.id); if (S.state.featured?.id === 'vm-' + x.id) setStage({ featured: null }); }),
   );
   li.append(top, txt, row);
+  return li;
+}
+function voiceChatRow(x) {
+  const li = document.createElement('li'); li.className = 'msg ext vm-msg vm ' + (x.status || 'new'); li.dataset.vm = x.id; li.dataset.src = 'watch';
+  const who = document.createElement('div'); who.className = 'who';
+  const b = document.createElement('b'); b.textContent = x.name;
+  const tag = document.createElement('span'); tag.className = 'pill caps src-voice'; tag.textContent = 'Voice';
+  who.append(b, tag);
+  const card = document.createElement('div'); card.className = 'vm-card';
+  const playing = vmPlaying?.id === x.id;
+  const play = document.createElement('button'); play.type = 'button'; play.className = 'vm-play' + (playing ? ' on' : '');
+  play.setAttribute('aria-label', playing ? 'Stop' : 'Preview: only you hear it'); play.dataset.tip = playing ? 'Stop' : 'Preview (only you hear it)';
+  play.innerHTML = `<svg class="i" aria-hidden="true"><use href="/icons.svg#i-${playing ? 'square' : 'play'}"/></svg>`;
+  play.onclick = () => (playing ? vmPlaying.stop() : playVoice(x, false));
+  const wave = document.createElement('span'); wave.className = 'vm-wave'; wave.setAttribute('aria-hidden', 'true');
+  for (let i = 0; i < 18; i++) { const bar = document.createElement('i'); bar.style.height = 30 + ((i * 37 + x.id.length * 13) % 70) + '%'; wave.append(bar); }
+  const dur = document.createElement('span'); dur.className = 'vm-dur'; dur.textContent = `0:${String(x.dur || 0).padStart(2, '0')}`;
+  const state = document.createElement('span'); state.className = 'vm-state'; state.textContent = x.status === 'aired' ? 'Played on air' : x.status === 'heard' ? 'Previewed' : 'New';
+  card.append(play, wave, dur, state);
+  const txt = document.createElement('p'); txt.className = 'vm-text';
+  txt.textContent = x.transcript ? `“${x.transcript}”` : 'No transcript yet.';
+  if (x.ai) { const sm = document.createElement('small'); sm.textContent = ' · AI transcript'; txt.append(sm); }
+  const row = document.createElement('div'); row.className = 'vm-acts';
+  const mk = (label, cls, icon, fn, tip) => { const k = document.createElement('button'); k.type = 'button'; k.className = 'btn sm ' + cls; k.innerHTML = icon ? `<svg class="i sm" aria-hidden="true"><use href="/icons.svg#i-${icon}"/></svg>` : ''; if (label) k.append(label); if (tip) { k.dataset.tip = tip; k.setAttribute('aria-label', tip); } k.onclick = fn; return k; };
+  row.append(
+    mk('Play on air', 'primary', 'radio', () => playVoice(x, true)),
+    ...(x.transcript && !x.ai ? [] : [mk('', 'ghost icon-only', 'sparkles', () => aiTranscribe(x), 'AI transcript')]),
+    mk('', 'ghost icon-only', 'trash-2', () => { if (vmPlaying?.id === x.id) vmPlaying.stop(); wsSend({ type: 'vmDel', id: x.id }); dropVoice(x.id); if (S.state.featured?.id === 'vm-' + x.id) setStage({ featured: null }); }, 'Delete'),
+  );
+  li.append(who, card, txt, row);
+  chatShell(li, { id: 'vm-' + x.id, name: x.name, ts: x.ts });
   return li;
 }
 function renderVoice() {

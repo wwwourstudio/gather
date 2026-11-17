@@ -1153,3 +1153,63 @@ body:not(.pre) .deck-body:has(.deck-layer.on .scenes) { height: 94px; }
 .msg.me.has-av { align-self: stretch; max-width: 100%; }
 .msg.me.has-av .who { justify-content: flex-start; }
 .msg.me.has-av .txt { border-radius: 4px var(--r-md) var(--r-md) var(--r-md); }
+
+/* ================================================================ V6: live chat, calmer
+   Lines read like a chat, not a stack of cards: a name line (avatar, name, source, time, like) over plain text.
+   Super chats, questions, voice questions and AI answers keep a soft accent so they stand out. */
+.chat-head { padding: var(--sp-3) var(--sp-4) var(--sp-2); }
+.chat-head h2 { font-size: var(--fs-14); }
+.chat-filter { gap: 2px; }
+.chat-filter button { height: 24px; padding: 0 9px; font-size: 11.5px; border-color: transparent; background: transparent; }
+.chat-filter button.on { background: var(--fill-active); border-color: transparent; }
+body:not(.kbd) button:focus-visible, body:not(.kbd) [role="tab"]:focus-visible { outline: none; box-shadow: none; }
+.msgs { gap: 2px; }
+.msg.has-av { padding: 6px 8px; margin: 0 -8px; border-radius: 10px; transition: background var(--dur) var(--ease-out); row-gap: 1px; }
+.msg.has-av:hover { background: var(--fill); }
+.msg.has-av .txt, .msg.me.has-av .txt { background: none; border: 0; box-shadow: none; padding: 0; border-radius: 0; font-size: var(--fs-14); line-height: 1.45; color: var(--ink); }
+.msg.has-av .who { min-height: 20px; }
+.msg.has-av .who .pill.caps { order: 2; height: 17px; padding: 0 6px; font-size: 9.5px; letter-spacing: 0.04em; border-radius: 5px; background: color-mix(in srgb, var(--pill-bg, var(--ink-3)) 18%, transparent); color: color-mix(in srgb, var(--pill-bg, var(--ink-3)) 75%, white); border: 0; }
+.msg.has-av .who b { order: 1; }
+.msg.has-av .who .q-badge, .msg.has-av .who .paid-amt { order: 3; }
+.msg.has-av .who time { order: 4; }
+.msg.has-av .who .cgrow { order: 5; }
+.msg.has-av .who .clike { order: 6; }
+.msg.me.has-av .who b { color: var(--accent-text); }
+.msg.has-av:has(.q-badge) { background: color-mix(in srgb, var(--warn) 8%, transparent); box-shadow: inset 3px 0 0 var(--warn); }
+.msg.has-av:has(.q-badge) .txt { box-shadow: none; }
+.msg.paid.has-av { background: linear-gradient(135deg, rgba(133, 199, 66, 0.16), rgba(133, 199, 66, 0.04)); box-shadow: inset 3px 0 0 #85c742; }
+.msg.paid.has-av .txt { background: none; }
+.msg.has-av .mact { margin-top: 4px; }
+.src-voice { --pill-bg: #f59e0b; }
+/* AI answers: a violet card, still lighter than before */
+.msg.ai-msg.assistant .txt { padding: 8px 12px; }
+.msg.ai-msg { padding: 4px 0; }
+/* Voice questions: one card with a player, then the transcript and the actions in one row */
+.msg.vm-msg.has-av { border: 0; background: color-mix(in srgb, #f59e0b 7%, transparent); box-shadow: inset 3px 0 0 #f59e0b; padding: 8px 8px 10px; }
+.msg.vm-msg.has-av.aired, .msg.vm-msg.has-av.heard { background: transparent; box-shadow: inset 3px 0 0 color-mix(in srgb, #f59e0b 35%, transparent); }
+.vm-card { display: flex; align-items: center; gap: 10px; padding: 6px 10px 6px 6px; margin-top: 4px; border-radius: 999px; background: var(--fill); border: 1px solid var(--glass-border); max-width: 100%; }
+.vm-play { flex: none; width: 30px; height: 30px; border-radius: 50%; border: 0; display: grid; place-items: center; background: #f59e0b; color: #1a1205; cursor: pointer; }
+.vm-play .i { width: 14px; height: 14px; fill: currentColor; }
+.vm-play.on { background: var(--danger); color: #fff; }
+.vm-wave { flex: 1; min-width: 40px; height: 22px; display: flex; align-items: center; gap: 2px; }
+.vm-wave i { flex: 1; max-width: 3px; border-radius: 2px; background: color-mix(in srgb, #f59e0b 60%, var(--ink-3)); }
+.vm-dur { flex: none; font: 600 var(--fs-12) var(--font-ui); font-variant-numeric: tabular-nums; color: var(--ink-2); }
+.vm-state { flex: none; font-size: var(--fs-11); color: var(--ink-3); }
+.msg.vm-msg .vm-text { margin: 4px 0 0; font-size: var(--fs-13); color: var(--ink-2); }
+.vm-acts { display: flex; align-items: center; gap: 4px; margin-top: 6px; }
+.vm-acts .btn.sm { height: 28px; gap: 6px; }
+.vm-acts .icon-only { width: 28px; padding: 0; justify-content: center; }
+/* Composer: the Chat / Ask switch and the AI suggestions share one compact row */
+.chat-tools { display: flex; align-items: center; gap: 6px; margin: 0 var(--sp-4) 6px; min-width: 0; }
+.chat-tools .chat-to { margin: 0; flex: none; padding: 2px; }
+.chat-tools .chat-to button { height: 24px; padding: 0 10px; font-size: 11.5px; }
+.chat-tools .ai-empty { margin: 0; min-width: 0; flex: 1; }
+[data-panel="chat"] .chat-tools .ai-empty .ai-sugg { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; gap: 4px; mask-image: linear-gradient(90deg, #000 85%, transparent); }
+.chat-tools .ai-sugg .chip { height: 26px; padding: 0 10px; font-size: 11.5px; flex: none; }
+
+.msg.has-av .who .q-badge { order: 2; height: 17px; padding: 0 6px; border-radius: 5px; font-size: 9.5px; letter-spacing: 0.04em; text-transform: uppercase; white-space: nowrap; background: color-mix(in srgb, var(--warn) 22%, transparent); color: color-mix(in srgb, var(--warn) 80%, white); margin: 0; }
+.msg.has-av .who b { min-width: 0; flex: 0 1 auto; }
+.msg.has-av .who > :not(b):not(.cgrow) { flex: none; }
+.msg.has-av .mact { flex-wrap: nowrap; gap: 4px; overflow-x: auto; scrollbar-width: none; }
+.msg.has-av .mact .pill { height: 22px; padding: 0 8px; font-size: 11px; flex: none; }
+.msg.has-av .who:has(.q-badge) .src-watch { display: none; } /* a question from the watch page: the Question tag is enough */
