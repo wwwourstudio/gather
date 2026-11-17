@@ -29,7 +29,7 @@ const SP = process.argv[2];
   });
   await p.goto((process.env.GATHER_URL || 'http://localhost:8080') + '/'); await p.click('#enterStage'); await p.fill('#enterName', 'Alex Morgan'); await p.click('#enterGo');
   await p.waitForSelector('#inviteDlg[open]'); await p.click('#inviteDlg .modal-close');
-  await p.click('#userBtn'); await p.click('#settingsTop'); await p.fill('#twitchInput', 'SomeChannel'); await p.click('#twitchGo'); await p.keyboard.press('Escape'); await p.click('[data-tab="show"]');
+  await p.click('#settingsTop'); await p.fill('#twitchInput', 'SomeChannel'); await p.click('#twitchGo'); await p.keyboard.press('Escape'); await p.click('[data-tab="show"]');
   await p.waitForFunction(() => window.__gather.feed.length >= 2, null, { timeout: 5000 });
   console.log('handshake:', await p.evaluate(() => window.__sent.join(' | ')));
   console.log('feed:', JSON.stringify(await p.evaluate(() => window.__gather.feed.map(m => [m.src, m.name, m.color, m.text]))));

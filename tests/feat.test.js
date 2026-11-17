@@ -83,7 +83,7 @@ let pages = []; // for the timing dump on failure
   await b.waitForFunction(() => window.__gather.state.featured?.text?.includes('relay'), null, { timeout: 5000, polling: 100 });
   console.log('featured message synced; feed length on guest:', await b.evaluate(() => window.__gather.feed.length));
   // 7. twitch connect attempt (network may block)
-  await a.click('#userBtn'); await a.click('#settingsTop'); await a.fill('#twitchInput', 'https://twitch.tv/SomeChannel'); await a.click('#twitchGo'); await a.keyboard.press('Escape');
+  await a.click('#settingsTop'); await a.fill('#twitchInput', 'https://twitch.tv/SomeChannel'); await a.click('#twitchGo'); await a.keyboard.press('Escape');
   await b.waitForFunction(() => window.__gather.state.feeds.twitch === 'somechannel', null, { timeout: 5000, polling: 100 });
   await a.waitForTimeout(2500);
   console.log('twitch channel synced; host status:', await a.textContent('#twitchStatus'));
@@ -96,7 +96,7 @@ let pages = []; // for the timing dump on failure
   await a.click('[data-tab="look"]'); await a.click('.look-seg:visible [data-look="layouts"]'); await a.click('#editToggle'); await a.waitForTimeout(300); await a.screenshot({ path: SP + '/f-edit.png' });
   // the host walk-through, from Help
   await a.keyboard.press('Escape').catch(() => {});
-  await a.click('#userBtn'); await a.click('#helpTop'); await a.click('#tourStart');
+  await a.click('#helpTop'); await a.click('#tourStart');
   const steps = Number((await a.textContent('#tourStep')).split(' of ')[1]);
   for (let i = 0; i < steps; i++) await a.click('#tourNext');
   console.log('9 walk-through:', steps, 'steps, closed at the end:', await a.isHidden('#tour'));

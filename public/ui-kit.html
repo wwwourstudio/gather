@@ -7,100 +7,39 @@
 <meta name="robots" content="noindex">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@600;700;800&family=JetBrains+Mono:wght@500;600;800&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap">
 <link rel="stylesheet" href="/tokens.css">
 <link rel="stylesheet" href="/ui.css">
-<link rel="stylesheet" href="/style.css">
 <style>
-  /* page layout only; every control below is a primitive from ui.css or a pattern from style.css */
-  html, body { height: auto; }
-  body { padding: 0; background: radial-gradient(120% 60% at 50% 0%, var(--bg-2), var(--bg) 70%); min-height: 100%; overflow: auto; }
-  .kit { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: var(--sp-8); max-width: 1280px; margin: 0 auto; padding: var(--sp-8); }
-  .kit-nav { position: sticky; top: var(--sp-8); align-self: start; display: grid; gap: 2px; }
-  .kit-nav .logo-word { margin-bottom: var(--sp-2); }
-  .kit-nav a { padding: 7px 12px; border-radius: var(--r-md); color: var(--ink-2); text-decoration: none; font-size: var(--fs-13); font-weight: 500; }
-  .kit-nav a:hover { background: var(--fill-hover); color: var(--ink); }
-  .kit-nav .caps { padding: var(--sp-4) 12px var(--sp-1); }
-  main { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--sp-5); align-content: start; }
-  main > header, main > .wide { grid-column: 1 / -1; }
-  header { display: flex; align-items: flex-end; justify-content: space-between; gap: var(--sp-4); padding-bottom: var(--sp-2); }
-  header h1 { font-size: 40px; font-weight: 800; letter-spacing: -0.045em; }
-  header p { margin: var(--sp-2) 0 0; color: var(--ink-2); max-width: 60ch; }
-  section { padding: var(--sp-6); display: grid; gap: var(--sp-4); align-content: start; scroll-margin-top: var(--sp-8); }
-  section > h2 { font-size: var(--fs-16); display: flex; align-items: baseline; gap: var(--sp-2); }
-  section > h2 small { font: 500 var(--fs-12) var(--font-ui); color: var(--ink-3); letter-spacing: 0; }
+  /* page layout only; every control below is a primitive from ui.css */
+  body { padding: var(--sp-8); background: radial-gradient(120% 90% at 50% 0%, var(--bg-2), var(--bg) 70%); min-height: 100%; }
+  main { max-width: 1120px; margin: 0 auto; display: grid; gap: var(--sp-6); }
+  header { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-4); }
+  h1 { font-size: var(--fs-32); font-weight: 800; letter-spacing: -0.04em; }
+  section { padding: var(--sp-6); display: grid; gap: var(--sp-4); }
+  section > h2 { font-size: var(--fs-16); }
   .grid { display: flex; flex-wrap: wrap; gap: var(--sp-3) var(--sp-4); align-items: center; }
   .grid > .caps:not(.pill) { flex-basis: 100%; margin-top: var(--sp-2); }
   .grid > .tile { width: 160px; }
   .grid > .input { width: 220px; }
-  .media { position: relative; border-radius: var(--r-lg); padding: var(--sp-6); background: linear-gradient(135deg, #1d3f47, #2a3566 55%, #3c3f74); display: flex; gap: var(--sp-3); flex-wrap: wrap; align-items: center; }
-  .tokens { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: var(--sp-3); }
+  .media { position: relative; border-radius: var(--r-md); padding: var(--sp-6); background: linear-gradient(135deg, #1b8a3a, #2563eb 55%, #9333ea); display: flex; gap: var(--sp-3); flex-wrap: wrap; align-items: center; min-height: 140px; }
+  .tokens { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: var(--sp-2); }
   .tok { display: grid; gap: var(--sp-1); font-size: var(--fs-12); color: var(--ink-2); }
-  .tok i { display: block; height: 44px; border-radius: var(--r-md); border: 1px solid var(--line); }
-  .tok code { font-size: 11px; color: var(--ink-3); }
-  .types { display: grid; gap: var(--sp-3); }
-  .types div { display: grid; grid-template-columns: 110px 1fr; align-items: baseline; gap: var(--sp-4); }
-  .types code { font-size: 11px; color: var(--ink-3); }
-  .icons { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: var(--sp-2); }
-  .icons button { display: grid; justify-items: center; gap: 8px; padding: 14px 6px 10px; border-radius: var(--r-md); border: 1px solid var(--line); background: var(--fill); color: var(--ink); font: 500 10.5px var(--font-mono); }
-  .icons button:hover { border-color: var(--accent-line); color: var(--accent-text); }
-  .icons .i { width: 24px; height: 24px; }
-  .pattern { display: grid; gap: var(--sp-3); padding: var(--sp-4); border-radius: var(--r-lg); background: var(--bg); border: 1px solid var(--line); }
-  .pattern > .caps { margin: 0; }
-  .demo-pop { width: 280px; }
-  .demo-side { width: 360px; max-width: 100%; border-radius: var(--r-lg); border: 1px solid var(--line); background: var(--surface); overflow: hidden; }
-  .demo-side .panel-head { display: flex; }
-  @media (max-width: 1000px) { .kit { grid-template-columns: minmax(0, 1fr); padding: var(--sp-4); } .kit-nav { display: none; } main { grid-template-columns: minmax(0, 1fr); } }
+  .tok i { display: block; height: var(--h-md); border-radius: var(--r-sm); border: 1px solid var(--line); }
+  .demo-pop { width: 260px; }
 </style>
 </head>
 <body>
-<div class="kit">
-<nav class="kit-nav" aria-label="Kit sections">
-  <span class="logo-word">gather<i>.</i></span>
-  <span class="caps">Foundations</span>
-  <a href="#k-tokens">Colour</a><a href="#k-type">Type</a><a href="#k-shape">Shape &amp; depth</a><a href="#k-icons">Icons</a>
-  <span class="caps">Primitives</span>
-  <a href="#k-button">Button</a><a href="#k-iconbutton">IconButton</a><a href="#k-seg">SegmentedControl</a><a href="#k-toggle">Toggle</a><a href="#k-pill">Pill</a><a href="#k-glass">Panels</a><a href="#k-overlays">Tile · Popover · Modal · Input</a><a href="#k-composer">Composer · Chip</a>
-  <span class="caps">App patterns</span>
-  <a href="#k-patterns">Header · menu · link · panel</a>
-</nav>
 <main>
   <header>
-    <div><h1>gather UI kit</h1><p>Every screen is built from these pieces. One blue, one set of corners and heights, one focus ring, and gather’s own duotone icons. Switch themes to check both.</p></div>
+    <div><h1>gather UI kit</h1><p class="caps" style="margin: var(--sp-1) 0 0">Tokens · primitives · every state</p></div>
     <div class="seg" role="radiogroup" aria-label="Theme" id="themeSeg">
       <button type="button" role="radio" aria-checked="true" data-t="dark">Dark</button>
       <button type="button" role="radio" aria-checked="false" data-t="light">Light</button>
     </div>
   </header>
 
-  <section class="glass wide" id="k-tokens">
-    <h2>Colour <small>tokens.css · dark is the default, light is opt-in</small></h2>
-    <div class="tokens" id="tokenList"></div>
-  </section>
-
-  <section class="glass" id="k-type">
-    <h2>Type <small>Plus Jakarta Sans for headings · Inter for the interface · JetBrains Mono for links and codes</small></h2>
-    <div class="types">
-      <div><code>Display 40/800</code><span style="font: 800 40px/1.05 var(--font-display); letter-spacing: -0.045em">Go live</span></div>
-      <div><code>Title 20/700</code><span style="font: 700 20px var(--font-display); letter-spacing: -0.02em">Invite your guests</span></div>
-      <div><code>Body 14/400</code><span>Guests land in the green room and check their camera.</span></div>
-      <div><code>Label 12/600</code><span style="font-size: 12px; font-weight: 600">Live captions</span></div>
-      <div><code>Caps 11/600</code><span class="caps">Upcoming</span></div>
-      <div><code>Mono 13/600</code><span style="font: 600 13px var(--font-mono); color: var(--accent-text)">gather.live/w/maya</span></div>
-    </div>
-  </section>
-
-  <section class="glass" id="k-shape">
-    <h2>Shape &amp; depth <small>corners, control heights, elevation</small></h2>
-    <div class="tokens" id="shapeList"></div>
-  </section>
-
-  <section class="glass wide" id="k-icons">
-    <h2>Icons <small>gather’s own duotone set · scripts/icons.js · click one to copy its name</small></h2>
-    <div class="icons" id="iconList"></div>
-  </section>
-
-  <section class="glass wide" id="k-button">
+  <section class="glass" id="k-button">
     <h2>Button</h2>
     <div class="grid">
       <span class="caps">Variants</span>
@@ -111,7 +50,7 @@
       <button class="btn live" data-kit="btn-live">Stop</button>
       <button class="btn link" data-kit="btn-link">Copy link</button>
       <span class="caps">Sizes</span>
-      <button class="btn sm">Small 30</button>
+      <button class="btn sm">Small 28</button>
       <button class="btn">Medium 36</button>
       <button class="btn lg">Large 44</button>
       <button class="btn round"><svg class="i" aria-hidden="true"><use href="/icons.svg#i-user"/></svg>Round</button>
@@ -123,7 +62,7 @@
     </div>
   </section>
 
-  <section class="glass wide" id="k-iconbutton">
+  <section class="glass" id="k-iconbutton">
     <h2>IconButton</h2>
     <div class="grid">
       <span class="caps">Variants</span>
@@ -191,21 +130,10 @@
     </div>
   </section>
 
-  <section class="glass" id="k-composer">
-    <h2>Composer · Chip</h2>
-    <div class="composer-box" style="max-width:420px">
-      <button type="button" class="icon-btn sm comp-mic" aria-label="Talk"><svg class="i" aria-hidden="true"><use href="/icons.svg#i-mic"/></svg></button>
-      <textarea rows="1" placeholder="Message Sam…" aria-label="Composer example"></textarea>
-      <button type="button" class="send-btn" aria-label="Send"><svg class="i" aria-hidden="true"><use href="/icons.svg#i-arrow-up"/></svg></button>
-    </div>
-    <p class="composer-hint" style="max-width:420px"><span>Hint text</span><span class="keys">Shift + Enter for a new line</span></p>
-    <div class="row" style="margin-top:12px"><button type="button" class="chip">Fact-check a claim</button><button type="button" class="chip">Switch to Solo</button></div>
-  </section>
-
-  <section class="glass wide" id="k-glass">
-    <h2>Panels <small>flat docked regions · raised overlays · controls over video</small></h2>
+  <section class="glass" id="k-glass">
+    <h2>GlassPanel</h2>
     <div class="media">
-      <div class="glass" style="padding: var(--sp-4); width: 220px" data-kit="glass">Docked: flat surface, hairline border. Header, side panel, bottom bar.</div>
+      <div class="glass" style="padding: var(--sp-4); width: 220px" data-kit="glass">Glass: rgba(255,255,255,.06), blur 20, saturate 140, 1px border, top highlight, 2% noise</div>
       <div class="glass raised" style="padding: var(--sp-4); width: 220px" data-kit="glass-raised">Raised: popovers, modals, toasts</div>
       <div class="glass on-media" style="padding: var(--sp-3); display: flex; gap: var(--sp-2); align-items: center" data-kit="glass-on-media">
         <span class="pill live caps">Slides</span><span class="num">3 / 12</span>
@@ -216,7 +144,7 @@
     </div>
   </section>
 
-  <section class="glass wide" id="k-overlays">
+  <section class="glass" id="k-overlays">
     <h2>Tile · Popover · Modal · Tooltip · Input</h2>
     <div class="grid">
       <span class="caps">Tile</span>
@@ -250,46 +178,22 @@
     </dialog>
   </section>
 
-  <section class="glass wide" id="k-patterns">
-    <h2>App patterns <small>built from the primitives above · style.css</small></h2>
-    <div class="grid" style="align-items: stretch">
-      <div class="pattern">
-        <span class="caps">Header: Share + account</span>
-        <div style="display:flex;gap:8px;align-items:center">
-          <button class="btn hdr share-btn" data-kit="share"><svg class="i" aria-hidden="true"><use href="/icons.svg#i-link"/></svg><span>Share</span><code class="share-path">/w/k7m2x</code></button>
-          <button class="btn hdr user-btn" id="kitUser" aria-haspopup="menu" aria-expanded="false" aria-label="Account, settings and help" style="width:40px;padding:0;justify-content:center;border-radius:999px"><svg class="i" aria-hidden="true"><use href="/icons.svg#i-user"/></svg></button>
-        </div>
-      </div>
-      <div class="pattern" style="flex:1;min-width:320px">
-        <span class="caps">Claim a watch-page name</span>
-        <form class="slate" style="margin:0" onsubmit="return false"><label class="slate-host" for="kitHandle">gather/w/</label><input id="kitHandle" placeholder="yourname" spellcheck="false"><button class="btn primary lg">Claim it</button></form>
-      </div>
-      <div class="pattern">
-        <span class="caps">Side panel: tabs, sub-tabs, inbox</span>
-        <div class="demo-side">
-          <nav class="rail side-tabs" aria-label="Panels (demo)">
-            <button class="icon-btn stacked rail-btn"><svg class="i" aria-hidden="true"><use href="/icons.svg#i-message-square"/></svg><span class="caption">Chat</span></button>
-            <button class="icon-btn stacked rail-btn on"><svg class="i" aria-hidden="true"><use href="/icons.svg#i-flag"/></svg><span class="caption">Show</span></button>
-            <button class="icon-btn stacked rail-btn"><svg class="i" aria-hidden="true"><use href="/icons.svg#i-palette"/></svg><span class="caption">Look</span></button>
-            <button class="icon-btn stacked rail-btn"><svg class="i" aria-hidden="true"><use href="/icons.svg#i-sparkles"/></svg><span class="caption">AI</span></button>
-          </nav>
-          <div class="panel-head" style="padding:8px 12px"><div class="seg block sm" role="tablist" aria-label="Show (demo)"><button type="button" class="on">On stage</button><button type="button">Engage</button><button type="button">Watch page</button></div></div>
-          <details class="inbox" open style="margin:8px 12px 12px"><summary><b>Waiting for you</b><span class="inbox-count">2</span></summary>
-            <div class="inbox-body"><span style="font-size:13px;display:flex;gap:6px;align-items:center"><svg class="i sm" aria-hidden="true"><use href="/icons.svg#i-mic"/></svg>Jordan · “How do you light the set?”</span><span style="font-size:13px">$5 from Sam · confirm it arrived</span></div>
-          </details>
-        </div>
-      </div>
+  <section class="glass" id="k-composer">
+    <h2>Composer · Chip</h2>
+    <div class="composer-box" style="max-width:420px">
+      <button type="button" class="icon-btn sm comp-mic" aria-label="Talk"><svg class="i" aria-hidden="true"><use href="/icons.svg#i-mic"/></svg></button>
+      <textarea rows="1" placeholder="Message Sam…" aria-label="Composer example"></textarea>
+      <button type="button" class="send-btn" aria-label="Send"><svg class="i" aria-hidden="true"><use href="/icons.svg#i-arrow-up"/></svg></button>
     </div>
-    <div class="popover glass raised acct-menu" id="kitMenu" popover role="menu" aria-label="Account (demo)"><div class="menu">
-      <button class="menu-item" role="menuitem"><svg class="i" aria-hidden="true"><use href="/icons.svg#i-user"/></svg><b>Maya Ortiz</b><span>gather.live/w/maya</span></button>
-      <button class="menu-item" role="menuitem"><svg class="i" aria-hidden="true"><use href="/icons.svg#i-sliders-horizontal"/></svg><b>Settings</b><span>Camera, mic, chat sources, appearance</span></button>
-      <button class="menu-item" role="menuitem"><svg class="i" aria-hidden="true"><use href="/icons.svg#i-circle-help"/></svg><b>Help</b><span>Search answers or take the walk-through</span></button>
-    </div></div>
+    <p class="composer-hint" style="max-width:420px"><span>Hint text</span><span class="keys">Shift + Enter for a new line</span></p>
+    <div class="row" style="margin-top:12px"><button type="button" class="chip">Fact-check a claim</button><button type="button" class="chip">Switch to Solo</button></div>
   </section>
 
-
+  <section class="glass" id="k-tokens">
+    <h2>Tokens</h2>
+    <div class="tokens" id="tokenList"></div>
+  </section>
 </main>
-</div>
 <script type="module">
   import { busy, togglePopover } from '/ui.js';
   const $ = (s) => document.querySelector(s);
@@ -304,16 +208,10 @@
     const b = e.target.closest('button'); if (!b || b.disabled || seg.id === 'themeSeg') return;
     for (const x of seg.children) x.classList.toggle('on', x === b);
   });
-  const names = ['--bg', '--bg-2', '--surface', '--surface-2', '--surface-3', '--ink', '--ink-2', '--ink-3', '--line', '--line-2', '--accent', '--accent-text', '--accent-soft', '--live', '--danger', '--ok', '--warn', '--focus', '--fill', '--on-media'];
-  $('#tokenList').innerHTML = names.map((n) => `<div class="tok"><i style="background:var(${n})"></i><span>${n}</span><code>${getComputedStyle(document.documentElement).getPropertyValue(n).trim()}</code></div>`).join('');
-  const shapes = [['--r-sm', 'r'], ['--r-md', 'r'], ['--r-lg', 'r'], ['--r-xl', 'r'], ['--h-sm', 'h'], ['--h-md', 'h'], ['--h-lg', 'h'], ['--shadow-lift', 's'], ['--shadow-pop', 's'], ['--shadow-accent', 's']];
-  $('#shapeList').innerHTML = shapes.map(([n, k]) => `<div class="tok"><i style="${k === 'r' ? `border-radius:var(${n});background:var(--fill-hover)` : k === 'h' ? `height:var(${n});border-radius:var(--r-md);background:var(--fill-hover)` : `box-shadow:var(${n});background:var(--surface-2);border:0`}"></i><span>${n}</span><code>${getComputedStyle(document.documentElement).getPropertyValue(n).trim().slice(0, 28)}</code></div>`).join('');
-  fetch('/icons.svg').then((r) => r.text()).then((t) => {
-    const ids = [...t.matchAll(/id="i-([^"]+)"/g)].map((m) => m[1]);
-    $('#iconList').innerHTML = ids.map((id) => `<button type="button" data-icon="${id}" aria-label="Copy ${id}"><svg class="i" aria-hidden="true"><use href="/icons.svg#i-${id}"/></svg>${id}</button>`).join('');
-    $('#iconList').onclick = (e) => { const b = e.target.closest('[data-icon]'); if (b) navigator.clipboard?.writeText(b.dataset.icon).catch(() => {}); };
-  });
-  $('#kitUser').onclick = (e) => togglePopover($('#kitMenu'), e.currentTarget, 'bottom');
+  const names = ['--bg', '--surface', '--ink', '--ink-2', '--ink-3', '--accent', '--live', '--danger', '--ok', '--warn', '--fill', '--fill-hover', '--glass-bg', '--glass-border', '--focus', '--on-media'];
+  $('#tokenList').innerHTML = names.map((n) => `<div class="tok"><i style="background:var(${n})"></i><span>${n}</span></div>`).join('')
+    + ['--sp-1', '--sp-2', '--sp-3', '--sp-4', '--sp-6', '--sp-8'].map((n) => `<div class="tok"><i style="width:var(${n});background:var(--accent);border:0"></i><span>${n}</span></div>`).join('')
+    + ['--r-sm', '--r-md', '--r-lg'].map((n) => `<div class="tok"><i style="border-radius:var(${n});background:var(--fill-hover)"></i><span>${n}</span></div>`).join('');
 </script>
 </body>
 </html>

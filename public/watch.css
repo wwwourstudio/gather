@@ -325,3 +325,6 @@ body { background: #05070d; }
 
 /* An empty chat says what to do instead of showing a blank panel. */
 .wv-chat.quiet .wv-msgs::before { content: "No messages yet. Say hi — the host sees every message here."; margin: auto; max-width: 24ch; text-align: center; color: var(--ink-3); font-size: 13px; line-height: 1.5; }
+
+/* the small status dot in the address chip: blue at rest, red while the show is live */
+.lamp { display: inline-block; flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--accent); }

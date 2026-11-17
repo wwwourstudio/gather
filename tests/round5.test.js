@@ -14,7 +14,7 @@ const SP = process.argv[2];
   // guest with a camera-off background
   await b.goto((process.env.GATHER_URL || 'http://localhost:8080') + '/s/' + code); await b.waitForSelector('#enterDlg[open]'); await b.fill('#enterName', 'Jordan Lee'); await b.click('#enterGo');
   await b.waitForFunction(() => [...window.__gather.peers.values()].some(p => p.conn === 'connected'), null, { timeout: 15000 });
-  await b.click('#userBtn'); await b.click('#settingsTop'); await b.setInputFiles('#offBgFile', SP + '/logo.png');
+  await b.click('#settingsTop'); await b.setInputFiles('#offBgFile', SP + '/logo.png');
   await a.waitForFunction(() => { const p = [...window.__gather.peers.values()][0]; return p.offbg && window.__gather.assets.get(p.offbg)?.img; }, null, { timeout: 10000 });
   console.log('1 guest camera-off background reached host; stored in IndexedDB, not localStorage:', await b.evaluate(() => localStorage.getItem('gather:offBg') === null));
   // 2 drop a PDF on the stage
@@ -58,7 +58,7 @@ const SP = process.argv[2];
   console.log('  removed caller rejoining with the link:', back);
   if (back !== 403) console.log('FAIL a removed person got back in');
   // 6 watch-link card (replaced the call-in card) + sponsors + glass panel
-  await a.click('[data-tab="show"]'); await a.click('[data-showsub="page"]'); await a.click('#wpCard');
+  await a.click('[data-tab="show"]'); await a.click('#wpCard');
   await a.click('[data-tab="look"]'); await a.click('.look-seg:visible [data-look="brand"]'); await a.setInputFiles('#adFile', SP + '/logo.png');
   await b.waitForFunction(() => window.__gather.state.ads.on && window.__gather.state.ads.items.length === 1 && window.__gather.state.elements.some(e => e.type === 'callin' && e.url.includes('/w/')), null, { timeout: 8000 });
   await a.click('#panelSeg [data-panel="solid"]'); await b.waitForFunction(() => window.__gather.state.brand.panel === 'solid', null, { timeout: 5000 });

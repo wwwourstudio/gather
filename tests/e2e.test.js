@@ -30,7 +30,7 @@ const SP = process.argv[2];
   await a.waitForSelector('.msg.me');
   console.log('chat ok');
   // banner from host
-  await a.click('[data-tab="show"]'); await a.click('[data-showsub="stage"]');
+  await a.click('[data-tab="show"]');
   await a.fill('#bannerSub', 'Episode 12 · Live from the studio');
   await a.click('#bannerShow');
   await b.waitForFunction(() => window.__gather.state.banner?.text === 'Welcome to the conversation');
@@ -48,7 +48,7 @@ const SP = process.argv[2];
   await a.click('#recDlg .modal-close');
   // spotlight + brand
   await a.click('#sceneStrip .scene:has-text("Spotlight")'); await a.click('[data-tab="look"]'); await a.click('.look-seg:visible [data-look="brand"]'); await a.click('#swatches [data-color="#e8794a"]'); await a.click('#bgs [data-bg="ember"]');
-  await a.click('[data-tab="show"]'); await a.click('[data-showsub="stage"]'); await a.fill('#tickerText', 'Ask your questions in the chat · New episodes every Thursday'); await a.click('#tickerShow');
+  await a.click('[data-tab="show"]'); await a.fill('#tickerText', 'Ask your questions in the chat · New episodes every Thursday'); await a.click('#tickerShow');
   await a.waitForTimeout(1500);
   await b.screenshot({ path: SP + '/07-guest-brand.png' });
   // mobile

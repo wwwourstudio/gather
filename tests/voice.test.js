@@ -20,7 +20,7 @@ const wait = (p, fn, arg, ms = 10000) => p.waitForFunction(fn, arg, { timeout: m
     check('the studio has a short watch link', /^[a-z2-9]{5}$/.test(short || ''), short);
     check('invite dialog shows the short watch link', (await a.textContent('#inviteWatch')).endsWith('/w/' + short));
     await a.keyboard.press('Escape');
-    check('the header’s Share button shows the short watch link', await a.isVisible('#enterTop') && (await a.textContent('#enterTop')).includes('/w/' + short));
+    check('the header has a Watch page button', await a.isVisible('#watchTop'));
     check('the call-in section is gone', !(await a.$('#callinCard')) && !(await a.$('#callinUrl')));
     check('the stream shows a “Watch & chat live” badge', await a.evaluate(() => { const c = document.querySelector('#stageCanvas'), g = c.getContext('2d'); const d = g.getImageData(c.width - 120, c.height - 60, 40, 20).data; let dark = 0; for (let i = 0; i < d.length; i += 4) if (d[i] < 40 && d[i + 1] < 40 && d[i + 2] < 60) dark++; return dark > 100; }));
 
@@ -34,15 +34,14 @@ const wait = (p, fn, arg, ms = 10000) => p.waitForFunction(fn, arg, { timeout: m
     check('sent: the dialog closes with a confirmation', await wait(v, () => !document.querySelector('#wVoiceDlg').open && /voice question went to the host/.test(document.querySelector('#wMsgs').textContent)));
 
     check('host: the voice question lands in the studio chat', await wait(a, () => document.querySelector('#msgs [data-vm]')));
-    await a.click('[data-tab="chat"]');
-    check('host: and in Chat’s “Waiting for you” strip, with a count', await wait(a, () => !document.querySelector('#inbox').hidden && document.querySelector('#inboxCount').textContent === '1'));
-    check('host: the strip lists it', await wait(a, () => document.querySelectorAll('#vmList li').length === 1));
+    await a.click('[data-tab="show"]');
+    check('host: and in the Show panel’s Voice questions list', await wait(a, () => document.querySelectorAll('#vmList li').length === 1));
     await a.click('#vmList li button:has-text("Preview")');
     check('host: preview plays (only for the host)', await wait(a, () => /Stop/.test(document.querySelector('#vmList li').textContent)));
     await a.click('#vmList li button:has-text("Play on air")');
     check('host: play on air puts the question on stage', await wait(a, () => window.__gather.state.featured?.paid === '🎙' && window.__gather.state.featured.name === 'Jordan'));
     await a.click('#vmList li button:has-text("Delete")');
-    check('host: delete removes it everywhere, and the strip goes away', await wait(a, () => !document.querySelector('#vmList li') && !document.querySelector('#msgs [data-vm]') && !window.__gather.state.featured && document.querySelector('#inbox').hidden));
+    check('host: delete removes it everywhere', await wait(a, () => !document.querySelector('#vmList li') && !document.querySelector('#msgs [data-vm]') && !window.__gather.state.featured));
   } catch (e) { check('suite ran', false, e.stack); }
   console.log('errors A', errs, 'B', []);
   await bh.close(); await bv.close();

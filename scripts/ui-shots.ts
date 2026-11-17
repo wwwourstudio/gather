@@ -44,7 +44,6 @@ async function main(): Promise<void> {
     }
     for (const [i, [name, sel]] of [['golive', '#liveTop'], ['settings', '#settingsTop'], ['help', '#helpTop']].entries()) {
       await p.evaluate(() => window.scrollTo(0, 0));
-      if (sel !== '#liveTop') await p.click('#userBtn'); // Settings and Help live in the account menu
       await p.click(sel); await snap(p, w, `${String(11 + i).padStart(2, '0')}-dialog-${name}`); await p.keyboard.press('Escape');
     }
     await p.evaluate(() => window.scrollTo(0, 0));

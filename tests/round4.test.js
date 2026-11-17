@@ -21,7 +21,7 @@ const fakeSR = () => {
   await a0.goto((process.env.GATHER_URL || 'http://localhost:8080') + '/'); await a0.click('#enterStage'); await a0.fill('#enterName', 'Alex Morgan'); await a0.click('#enterGo');
   await a0.waitForSelector('#inviteDlg[open]'); await a0.keyboard.press('Escape');
   await a0.click('[data-tab="look"]'); await a0.click('.look-seg:visible [data-look="brand"]'); await a0.selectOption('#fontSel', 'playfair'); await a0.click('#bannerStyleSeg [data-bs="glass"]');
-  await a0.click('#userBtn'); await a0.click('#settingsTop'); await a0.check('#aiNoiseChk').catch(() => {}); await a0.keyboard.press('Escape');
+  await a0.click('#settingsTop'); await a0.check('#aiNoiseChk').catch(() => {}); await a0.keyboard.press('Escape');
   await a0.waitForTimeout(2200); await a0.close();
   await a.waitForTimeout(2200);
   const a2 = await mk(); await a2.goto((process.env.GATHER_URL || 'http://localhost:8080') + '/');
@@ -59,9 +59,9 @@ const fakeSR = () => {
   await a.setInputFiles('#logoFile', SP + '/logo.png');
   await b.waitForFunction(() => { const br = window.__gather.state.brand; return br.frame === 'corners' && br.tag === 'glass' && br.font === 'playfair' && br.logo && window.__gather.assets.get(br.logo)?.img; }, null, { timeout: 8000 });
   console.log('4 brand synced to guest (font, tag, frame, logo):', true);
-  await a.click('[data-tab="show"]'); await a.click('[data-showsub="stage"]'); await a.click('#bannerShow');
+  await a.click('[data-tab="show"]'); await a.click('#bannerShow');
   // 5 captions
-  await a.click('[data-tab="show"]'); await a.click('[data-showsub="stage"]'); await a.click('.toggle-row:has(#capSwitch)');
+  await a.click('[data-tab="show"]'); await a.click('.toggle-row:has(#capSwitch)');
   await b.waitForFunction(() => [...(window.__gather.state.captions?.on ? [1] : [])].length, null, { timeout: 5000 });
   await a.waitForFunction(() => window.__gather.state.captions.on);
   await a.waitForTimeout(1800);
@@ -78,7 +78,7 @@ const fakeSR = () => {
   await a.waitForTimeout(500); await a.screenshot({ path: SP + '/r4-vertical.png' });
   await a.click('#liveTop'); await a.click('#aspectSeg [data-aspect="16:9"]'); await a.keyboard.press('Escape');
   // 7 help search jumps to the setting
-  await a.click('#userBtn'); await a.click('#helpTop'); await a.fill('#helpSearch', 'echo');
+  await a.click('#helpTop'); await a.fill('#helpSearch', 'echo');
   console.log('7 help results for "echo":', await a.textContent('#helpResults .help-item b'));
   await a.click('#helpResults .help-item'); await a.waitForTimeout(400);
   console.log('  opened tab:', await a.evaluate(() => window.__gather.tab), '| highlighted:', await a.evaluate(() => !!document.querySelector('.flash')));
@@ -88,7 +88,7 @@ const fakeSR = () => {
     out.aiNoise = window.__gather.audioFx.ai;
     return out;
   });
-  if (!(await a.isVisible('#settingsDlg'))) { await a.click('#userBtn'); await a.click('#settingsTop'); }
+  if (!(await a.isVisible('#settingsDlg'))) await a.click('#settingsTop');
   if (!fx.aiNoise) await a.click('.toggle-row:has(#aiNoiseChk)');
   await a.waitForTimeout(1500);
   console.log('8 AI noise removal running:', await a.evaluate(() => !!window.__gather.local.audioOut));

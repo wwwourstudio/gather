@@ -2,7 +2,7 @@
  * Verifies the design system: screenshots every primitive in every state from /ui-kit.html
  * (default, hover, active, focus-visible, plus the disabled / loading / pressed specimens on the page)
  * in dark and light, and checks the token contract in the live page:
- *   control heights 30/36/44 · radii 8/10/14 (18 for dialogs) · icons 16/20 at stroke 1.75 · Inter for UI ·
+ *   control heights 28/34/42 · radii 6/8/12 · icons 16/20 at stroke 1.75 · Inter for UI ·
  *   tabular numbers · 150ms ease-out UI motion · ~0ms under prefers-reduced-motion ·
  *   docked regions are flat (no blur, no shadow); real glass only on .raised and .on-media.
  *
@@ -78,10 +78,10 @@ async function main(): Promise<void> {
       glass: [cs('[data-kit="glass"]').backgroundColor, cs('[data-kit="glass"]').backdropFilter, cs('[data-kit="glass"]').borderTopColor, cs('[data-kit="glass"]').boxShadow],
     };
   });
-  check(m.btn.join() === '30,36,44', `Button heights sm/md/lg = 30/36/44 (got ${m.btn.join('/')})`);
-  check(m.ib.join() === '30,36,44', `IconButton sizes = 30/36/44 (got ${m.ib.join('/')})`);
-  check(m.seg === 36, `SegmentedControl height 36 (got ${m.seg})`);
-  check(m.radii[0] === '8px' && m.radii[1] === '14px' && m.radii[2] === '10px', `radii 8/10/14 (got ${m.radii.join(' ')})`);
+  check(m.btn.join() === '28,34,42', `Button heights sm/md/lg = 28/34/42 (got ${m.btn.join('/')})`);
+  check(m.ib.join() === '28,34,42', `IconButton sizes = 28/34/42 (got ${m.ib.join('/')})`);
+  check(m.seg === 34, `SegmentedControl height 34 (got ${m.seg})`);
+  check(m.radii[0] === '6px' && m.radii[1] === '12px' && m.radii[2] === '8px', `radii 6/8/12 (got ${m.radii.join(' ')})`);
   check(m.iconStroke.every((w) => w === '1.75px' || w === '1.75'), `icon stroke 1.75 (got ${m.iconStroke.join(', ')})`);
   check(m.iconSize.join() === '16,20,16', `icon sizes 16/20 (got ${m.iconSize.join('/')})`);
   check(/^"?Inter/.test(m.uiFont), `UI font is Inter (got ${m.uiFont})`);
@@ -123,7 +123,7 @@ async function main(): Promise<void> {
     fonts: [...new Set([...document.querySelectorAll('body *')].filter((e) => (e as HTMLElement).checkVisibility?.()).map((e) => getComputedStyle(e).fontFamily.split(',')[0].replace(/"/g, '').trim()))],
   }));
   check(app.rawSvgs === 0, `app has no hand-drawn SVG icons (found ${app.rawSvgs})`);
-  check(app.sprite > 20, `app icons come from gather’s icon sprite (${app.sprite})`);
+  check(app.sprite > 20, `app icons come from the Lucide sprite (${app.sprite})`);
   check(app.fonts.every((f) => ['Inter', 'Plus Jakarta Sans', 'JetBrains Mono'].includes(f)), `app UI uses only Inter + Plus Jakarta Sans, with JetBrains Mono for links and codes (found ${app.fonts.join(', ')})`);
   check(errors.length === 0, `no page errors (${errors.join('; ')})`);
 

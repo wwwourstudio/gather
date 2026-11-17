@@ -48,7 +48,7 @@ const BASE = process.env.GATHER_URL || 'http://localhost:8080';
   await b.waitForFunction(() => !!window.__gather.studio, null, { timeout: 12000 });
 
   // 1 Drive: auto-save switch signs in, a recording uploads by itself (resuming after a partial chunk)
-  await a.click('#userBtn'); await a.click('#settingsTop');
+  await a.click('#settingsTop');
   await a.click('.toggle-row:has(#driveAuto)');
   await a.waitForFunction(() => document.getElementById('googleState').textContent.startsWith('Connected to Google: Drive'), null, { timeout: 5000 });
   console.log('1 Drive connected:', await a.textContent('#googleState'));
@@ -62,7 +62,7 @@ const BASE = process.env.GATHER_URL || 'http://localhost:8080';
   await a.keyboard.press('Escape');
 
   // 2 YouTube: connect, chat (with Super Chat and membership) reaches host and guest
-  await a.click('#userBtn'); await a.click('#settingsTop'); await a.click('#ytGo');
+  await a.click('#settingsTop'); await a.click('#ytGo');
   await a.waitForFunction(() => document.getElementById('ytStatus').textContent.includes('Friday night show'), null, { timeout: 8000 });
   await a.keyboard.press('Escape'); await a.click('.rail-btn[data-tab="chat"]');
   await a.waitForSelector('#msgs li[data-src="youtube"]', { timeout: 8000 });

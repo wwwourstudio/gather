@@ -17,7 +17,7 @@ const wait = (p, fn, arg, ms = 10000) => p.waitForFunction(fn, arg, { timeout: m
     const a = await mk(bh);
     await a.goto(B + '/'); await a.click('#enterStage'); await a.fill('#enterName', 'Maya Host'); await a.click('#enterGo');
     await a.waitForSelector('#inviteDlg[open]'); const code = (await a.textContent('#inviteCode')).trim(); await a.keyboard.press('Escape');
-    await a.click('[data-tab="show"]'); await a.click('[data-showsub="engage"]');
+    await a.click('[data-tab="show"]');
     await a.click('#shopSec > summary'); await a.click('#shopSec .sub-fold > summary');
     await a.fill('#shopTitle', 'Limited hoodie'); await a.fill('#shopPrice', '$45'); await a.fill('#shopUrl', 'https://www.etsy.com/listing/123/limited-hoodie'); await a.click('#shopAdd');
     await a.click('#shopList .shop-item .btn.primary'); // Pin
@@ -50,7 +50,7 @@ const wait = (p, fn, arg, ms = 10000) => p.waitForFunction(fn, arg, { timeout: m
     // Host: sees the question and the player; calls the next player.
     await a.click('[data-tab="chat"]');
     check('host: the question is flagged in the studio chat', await wait(a, () => [...document.querySelectorAll('#msgs .msg.ext')].some((li) => /Question/.test(li.textContent) && /GPU/.test(li.textContent))));
-    await a.click('[data-tab="show"]'); await a.click('[data-showsub="engage"]'); await a.click('#queueNext');
+    await a.click('[data-tab="show"]'); await a.click('#queueNext');
     check('viewer: told they are up, with a join button', await wait(v, () => /You’re up/.test(document.querySelector('#wCards [data-card="queue"]')?.textContent || ''), null, 20000));
 
     // A second viewer likes, mentions, reports; the poll result reaches the host.

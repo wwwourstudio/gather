@@ -1237,7 +1237,7 @@ function addExternal(m) {
   const badge = document.createElement('span'); badge.className = 'pill caps src-' + m.src; badge.textContent = SRC_NAME[m.src] || m.src;
   const b = document.createElement('b'); b.textContent = m.name; if (m.color) b.style.color = m.color;
   who.append(badge, b);
-  if (m.q) { const q = document.createElement('span'); q.className = 'q-badge'; q.innerHTML = `${icon('hand')}Question`; who.append(q); }
+  if (m.q) { const q = document.createElement('span'); q.className = 'q-badge'; q.textContent = '✋ Question'; who.append(q); }
   if (m.paid) { const amt = document.createElement('span'); amt.className = 'paid-amt'; amt.textContent = m.paid; who.append(amt); }
   const txt = document.createElement('div'); txt.className = 'txt'; txt.textContent = m.text;
   li.append(who, txt, msgActions(m));
@@ -1415,7 +1415,7 @@ const ELEMENT_DEFAULTS = {
   media: () => ({ type: 'media', x: .025, y: .07, w: .7, h: .86, radius: 12 }),
   ai: () => ({ type: 'ai', x: .62, y: .07, w: .355, h: .62, size: 22 }),
   tip: () => ({ type: 'tip', x: .025, y: .64, w: .34, h: .31, provider: 'paypal', url: '', label: 'Support the show' }),
-  callin: () => ({ type: 'callin', x: .66, y: .66, w: .31, h: .28, url: S.studio ? `${location.origin}/w/${S.studio}` : '', label: 'Watch & chat live', phone: '' }), // the watch-link card (QR + address)
+  callin: () => ({ type: 'callin', x: .66, y: .66, w: .31, h: .28, url: S.studio ? watchLinkUrl() : '', label: 'Watch & chat live', phone: '' }), // the watch-link card (QR + address)
   shape: () => ({ type: 'shape', x: .4, y: .4, w: .2, h: .2, color: '#0b1020', opacity: 1, radius: 0, label: '' }),
 };
 const px720 = (x, y, w, h) => ({ x: x / 1280, y: y / 720, w: w / 1280, h: h / 720 });
@@ -2534,7 +2534,6 @@ async function uploadAvatar(force) {
 
 // ---------------------------------------------------------------- account (sign in, profile, synced settings)
 const acct = { token: store.get('acctToken', ''), user: null };
-var landPending = '', landFrom = 'land'; // a watch-page name typed before signing in (landing or Show panel); claimed once they're in
 async function acctApi(action, body = {}) {
   let res;
   try {
@@ -2592,13 +2591,6 @@ function setUser(u, token) {
     if (u.avatar) rawSet('avatar', u.avatar);
   }
   renderUser(); renderPreview(); renderStreamPanel(); renderWatchSec();
-  $('#acctOpenLabel').textContent = u ? (u.name || 'Your account') : 'Sign in';
-  $('#acctOpenSub').textContent = u ? (u.handle ? `${location.host}/w/${u.handle}` : u.email) : 'Keep your name, link and settings';
-  if (typeof renderLandSlate === 'function') renderLandSlate();
-  if (u && landPending) {
-    const h = landPending; landPending = ''; $('#acctDlg').open && $('#acctDlg').close();
-    if (landFrom === 'show') { landFrom = 'land'; $('#wpHandle').value = h; $('#wpHandleForm').requestSubmit(); } else claimLanding(h);
-  }
 }
 function signedOut(msg) {
   acct.user = null; acct.token = ''; rawSet('acctToken', '');
@@ -2717,10 +2709,7 @@ function openAccount(view) {
   $('#acctDlg').showModal();
 }
 const acErr = (id, msg) => { const e = $(id); e.textContent = msg; e.hidden = !msg; };
-// The avatar opens a small menu (account, settings, help). On the landing page there's nothing else in it, so it
-// goes straight to the account dialog.
-$('#userBtn').onclick = (ev) => { if (document.body.classList.contains('pre')) return openAccount(); togglePopover($('#acctMenu'), ev.currentTarget, 'bottom'); };
-$('#acctOpen').onclick = () => { $('#acctMenu').hidePopover(); openAccount(); };
+$('#userBtn').onclick = () => openAccount();
 $$('#acTabs button').forEach((b) => b.addEventListener('click', () => { acView = b.dataset.ac; acErr('#acErr', ''); renderAcctDlg(); }));
 $('#acForm').addEventListener('submit', async (e) => {
   e.preventDefault();
@@ -3322,7 +3311,7 @@ function watchUrl(d) {
   if (w && !/^https?:\/\//i.test(w)) w = 'https://' + w;
   return /^https:\/\//i.test(w) ? w : '';
 }
-const watchLink = () => `${location.origin}/w/${S.studio}`;
+const watchLink = () => watchLinkUrl();
 $('#watchCopy').onclick = () => copy(watchLink(), 'Watch page link copied.');
 function fmtClock(ms) { const s = Math.floor(ms / 1000); return [Math.floor(s / 3600), Math.floor(s / 60) % 60, s % 60].map((n, i) => (i ? String(n).padStart(2, '0') : n)).join(':').replace(/^0:/, ''); }
 function renderLive() {
@@ -3342,7 +3331,6 @@ function renderLive() {
   $('#liveBtn').disabled = !host || !S.studio || (!L && !n) || L?.phase === 'stopping';
   $('#liveBtn').classList.toggle('ending', on);
   $('#liveTop').classList.toggle('on-air', !!L);
-  document.body.classList.toggle('on-air', !!L);
   $('#livePillText').textContent = on ? 'Live ' + fmtClock(Date.now() - L.t0) : L ? 'Starting…' : 'Go live';
   $('#liveStats').hidden = !L;
   $('#watchRow').hidden = !S.relayOn || !S.studio;
@@ -3584,7 +3572,7 @@ function renderHeader() {
   $('#studioTitle').classList.toggle('editable', isHost());
   $('#studioTitle').title = isHost() ? 'Click to rename the show' : '';
   $('#enterTop').hidden = !S.studio;
-  if (window.__watchReady && S.studio) $('#watchTopText').textContent = '/w/' + watchSlug();
+  if ($('#watchTop')) $('#watchTop').hidden = !S.studio || !isHost();
   $('#liveTop').hidden = !S.studio || !isHost();
   document.body.classList.toggle('pre', !S.studio && S.phase !== 'reconnecting'); // landing: just the stage hero
   // Scheduled shows: on the landing page they sit under the hero (that's where you start one); inside a studio, in Go live.
@@ -3777,7 +3765,7 @@ function renderPresets() {
 
 // ---------------------------------------------------------------- panels & controls
 // Four tabs in the rail (Chat, Show, Look, AI). Go live, Settings and Help are dialogs; older names still work.
-const TAB_ALIAS = { banners: 'show:stage', inbox: 'chat:inbox', stream: 'dlg:liveDlg', settings: 'dlg:settingsDlg', help: 'dlg:helpDlg', layouts: 'look:layouts', brand: 'look:brand', look: 'look:' };
+const TAB_ALIAS = { banners: 'show', stream: 'dlg:liveDlg', settings: 'dlg:settingsDlg', help: 'dlg:helpDlg', layouts: 'look:layouts', brand: 'look:brand', look: 'look:' };
 function openDlg(id) {
   for (const other of ['liveDlg', 'settingsDlg', 'helpDlg']) if (other !== id && $('#' + other).open) $('#' + other).close();
   const d = $('#' + id);
@@ -3791,8 +3779,6 @@ function setTab(tab) {
   if (a.startsWith('dlg:')) return openDlg(a.slice(4));
   let panel = a, rail = a;
   if (a.startsWith('look:')) { S.lookSub = a.slice(5) || S.lookSub || 'layouts'; panel = S.lookSub; rail = 'look'; }
-  if (a.startsWith('show:')) { setShowSub(a.slice(5)); panel = rail = 'show'; }
-  if (a === 'chat:inbox') { panel = rail = 'chat'; $('#inbox').open = true; }
   S.tab = rail;
   document.body.classList.remove('panel-closed'); $('#panelToggle').setAttribute('aria-expanded', 'true');
   $$('.rail-btn').forEach((b) => { const on = b.dataset.tab === rail; b.classList.toggle('on', on); if (on) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current'); });
@@ -3802,23 +3788,6 @@ function setTab(tab) {
   if (panel !== 'layouts' && editor.on) setEditing(false);
 }
 $$('.rail-btn').forEach((b) => b.addEventListener('click', () => setTab(b.dataset.tab)));
-// Show's sub-tabs (On stage / Engage / Watch page). The last one is remembered.
-function setShowSub(sub) {
-  if (!['stage', 'engage', 'page'].includes(sub)) sub = 'stage';
-  S.showSub = sub; store.set('showSub', sub);
-  $$('.show-sub').forEach((el) => (el.hidden = el.dataset.sub !== sub));
-  $$('.show-seg [data-showsub]').forEach((b) => { const on = b.dataset.showsub === sub; b.classList.toggle('on', on); b.setAttribute('aria-selected', String(on)); });
-}
-$$('.show-seg [data-showsub]').forEach((b) => b.addEventListener('click', () => setShowSub(b.dataset.showsub)));
-setShowSub(store.get('showSub', 'stage'));
-// "Waiting for you" in Chat: shown while voice questions or unconfirmed super chats are waiting, with a count.
-function renderInbox() {
-  const vm = $$('#vmList > li').length, sc = $$('#scList > li.pending').length, n = vm + sc;
-  $('#inbox').hidden = !n || !isHost();
-  $('#inboxCount').textContent = n;
-}
-new MutationObserver(renderInbox).observe($('#vmList'), { childList: true });
-new MutationObserver(renderInbox).observe($('#scList'), { childList: true, subtree: true, attributes: true, attributeFilter: ['class'] });
 // Hide the panel to give the stage the room; any tab brings it back.
 $('#panelToggle').onclick = () => {
   const closed = document.body.classList.toggle('panel-closed');
@@ -3827,8 +3796,8 @@ $('#panelToggle').onclick = () => {
   if (closed) $$('.rail-btn').forEach((x) => { x.classList.remove('on'); x.removeAttribute('aria-current'); }); else setTab(S.tab);
 };
 $$('.look-seg [data-look]').forEach((b) => b.addEventListener('click', () => setTab(b.dataset.look)));
-$('#helpTop').onclick = () => { $('#acctMenu').hidePopover(); openDlg('helpDlg'); };
-$('#settingsTop').onclick = () => { $('#acctMenu').hidePopover(); openDlg('settingsDlg'); };
+$('#helpTop').onclick = () => openDlg('helpDlg');
+$('#settingsTop').onclick = () => openDlg('settingsDlg');
 $('#liveTop').onclick = () => openDlg('liveDlg');
 
 function sceneList() {
@@ -4891,34 +4860,6 @@ $('#addSlot').onclick = openInvite;
 $('#enterTop').onclick = openInvite;
 $('#heroSchedule').onclick = () => openWizard();
 $('#enterStage').onclick = () => needAccountThen(() => openEnter('create'));
-// The landing's slate: claim a permanent watch-page name (signing up if needed), then open a studio.
-const landNote = (msg, err) => { $('#landClaimNote').textContent = msg; $('#landClaimNote').classList.toggle('err', !!err); };
-async function claimLanding(h) {
-  $('#landClaimGo').setAttribute('aria-busy', 'true');
-  try {
-    if (acct.user.handle !== h) { const r = await acctApi('handle', { handle: h }); setUser(r.user); }
-    landNote(`${location.host}/w/${h} is yours. Opening your studio…`);
-    openEnter('create');
-  } catch (err) { landNote(err.message, true); }
-  finally { $('#landClaimGo').removeAttribute('aria-busy'); }
-}
-$('#landClaim').addEventListener('submit', (e) => {
-  e.preventDefault();
-  const h = $('#landHandle').value.trim().toLowerCase();
-  if (!/^[a-z0-9][a-z0-9-]{2,23}$/.test(h)) return landNote('Use 3–24 letters, numbers or dashes, starting with a letter or number.', true);
-  if (!acct.user) { landPending = h; landNote('Create a free account to keep this name. It takes a name, an email and a password.'); return openAccount('up'); }
-  claimLanding(h);
-});
-// The note under the field spells out the whole link as you type it.
-const landLink = () => { if (!$('#landLink')) return; $('#landLink').textContent = `${location.host.replace(/^www\./, '')}/w/${$('#landHandle').value.trim().toLowerCase().replace(/[^a-z0-9-]/g, '') || 'yourname'}`; };
-$('#landHandle').addEventListener('input', () => { $('#landClaimNote').classList.remove('err'); $('#landClaimNote').innerHTML = 'Your link: <b id="landLink"></b>'; landLink(); });
-landLink();
-function renderLandSlate() {
-  const h = acct.user?.handle;
-  if (h && document.activeElement !== $('#landHandle')) { $('#landHandle').value = h; landLink(); }
-  $('#landClaimGo').textContent = h ? 'Start a show' : 'Claim it';
-}
-renderLandSlate();
 $('#landJoin').addEventListener('submit', (e) => {
   e.preventDefault();
   const raw = $('#landCode').value, code = parseCode(raw), kind = linkKind(raw);
@@ -4980,8 +4921,8 @@ const TOUR = [
   ['.rail-btn[data-tab="show"]', 'Show', 'Banners, a scrolling ticker, live captions, the chat overlay and the call-in card.'],
   ['.rail-btn[data-tab="look"]', 'Look', 'Arrange the stage and set your brand: colours, logo, backgrounds and fonts.'],
   ['#aiDock', 'Your AI producer', 'Ask it anything on air, or tell it to switch scenes, show a banner or find a video. Press / any time.'],
-  ['#enterTop', 'Share', 'Invite guests to the stage, or send viewers your watch page. Both links are in here.'],
-  ['#liveTop', 'Go live', 'Next to Record: stream to YouTube, Twitch and more at once. Your watch page is always on.'],
+  ['#enterTop', 'Invite', 'Send guests the link. They don’t need an account. The footer has a copy button too.'],
+  ['#liveTop', 'Go live', 'Stream to YouTube, Twitch and more at once, and get a watch page for viewers.'],
 ];
 const tour = { i: 0, steps: [] };
 const visible = (el) => !!el && el.getClientRects().length > 0 && getComputedStyle(el).visibility !== 'hidden';
@@ -5080,10 +5021,9 @@ const WATCH_DEFAULTS = { chat: true, supers: false, join: false, queue: false, v
 const watchCfg = () => ({ ...WATCH_DEFAULTS, ...(S.state.watch || {}), pay: { ...WATCH_DEFAULTS.pay, ...(S.state.watch?.pay || {}) } });
 // Signed-in hosts with a watch-page name share gather…/w/<name>, which follows them from show to show.
 const myHandle = () => (isHost() && acct.user?.handle) || '';
-// Your name if you've claimed one, else this studio's short link (/w/k7m2x); the long studio code is the fallback.
+// Your claimed name, else this studio's short link (/w/k7m2x); the long studio code is only a fallback.
 const watchSlug = () => myHandle() || S.short || S.studio;
 const watchLinkUrl = () => `${location.origin}/w/${watchSlug()}`;
-/** The link as people read it: no https://, no www. */
 const watchLinkText = () => watchLinkUrl().replace(/^https?:\/\/(www\.)?/, '');
 const VIEW = new Map(); // viewer id -> { pc }
 S.viewers = VIEW; // for the console and tests
@@ -5170,7 +5110,7 @@ function gotSuperchat(item, fresh) {
   S.supers.set(item.id, item);
   if (fresh && !had && item.status === 'pending') {
     chime();
-    toast(`${money(item.amount)} super chat from ${item.name} on ${PAY_NAME[item.method]}. Check it arrived, then confirm.`, { ms: 12000, action: ['Review', () => { setTab('chat:inbox'); $('#scList')?.scrollIntoView({ block: 'start', behavior: smooth() }); }] });
+    toast(`${money(item.amount)} super chat from ${item.name} on ${PAY_NAME[item.method]}. Check it arrived, then confirm.`, { ms: 12000, action: ['Review', () => { setTab('show'); $('#watchSec')?.scrollIntoView({ block: 'start', behavior: smooth() }); }] });
   }
   renderSupers();
   superInChat(item);
@@ -5257,24 +5197,21 @@ function renderWatchSec() {
   if (window.__shopReady) { renderShop(); renderPoll(); renderEmotes(); }
   $('#wpNoPay').hidden = !cfg.supers || Object.values(cfg.pay).some(Boolean);
   renderHandle();
-  $('#livePage').hidden = !on || !isHost();
-  if (on) $('#livePageUrl').textContent = watchLinkText();
 }
-$('#livePageCopy').onclick = () => copy(watchLinkUrl(), 'Watch link copied. Share it anywhere.');
-$('#livePageOpen').onclick = () => window.open(watchLinkUrl(), '_blank', 'noopener');
 function renderHandle() {
   const u = acct.user, h = u?.handle || '';
   $('#wpHost').textContent = location.host + '/w/';
   if (document.activeElement !== $('#wpHandle')) $('#wpHandle').value = h;
+  $('#wpHandle').disabled = $('#wpHandleSave').disabled = !u;
   $('#wpHandleSave').textContent = h ? 'Change' : 'Claim';
-  $('#wpHandleNote').textContent = !u ? 'Type a name and press Claim. You’ll sign in (or make a free account), then it’s yours.'
+  $('#wpHandleNote').textContent = !u ? 'Sign in to claim a name like /w/yourname. It’s free and always points at your current show.'
     : h ? `Viewers can bookmark ${location.host}/w/${h}. Between shows it says you’re offline, then plays by itself when you go on.`
     : 'Pick a name once; share one link forever.';
 }
 $('#wpHandleForm').addEventListener('submit', async (e) => {
   e.preventDefault();
+  if (!acct.user) return openAccount('in');
   const h = $('#wpHandle').value.trim().toLowerCase();
-  if (!acct.user) { landPending = h; landFrom = 'show'; return openAccount(store.get('hadAccount', false) ? 'in' : 'up'); }
   if (h === acct.user.handle) return;
   $('#wpHandleSave').disabled = true;
   try {
@@ -5457,7 +5394,7 @@ function drawPoll() {
 
 // ---------------------------------------------------------------- play with me: the viewer queue
 S.queue = [];
-function gotQueue(m) { chime(); toast(`${m.name}${m.tag ? ' (' + m.tag + ')' : ''} wants to play.`, { action: ['Open', () => { setTab('show:engage'); $('#queueSec').open = true; }] }); S.queue.push({ name: m.name, tag: m.tag, status: 'waiting', ts: Date.now() }); renderQueue(S.queue); }
+function gotQueue(m) { chime(); toast(`${m.name}${m.tag ? ' (' + m.tag + ')' : ''} wants to play.`, { action: ['Open', () => { setTab('show'); $('#queueSec').open = true; }] }); S.queue.push({ name: m.name, tag: m.tag, status: 'waiting', ts: Date.now() }); renderQueue(S.queue); }
 function renderQueue(items) {
   if (items) S.queue = items;
   if (!$('#queueList')) return;
@@ -5516,7 +5453,7 @@ function gotVoice(item, fresh) {
   if (!item?.id) return;
   const had = S.vms.has(item.id);
   S.vms.set(item.id, { ...(S.vms.get(item.id) || {}), ...item });
-  if (fresh && !had) { chime(); toast(`🎙 ${item.name} raised a hand with a voice question.`, { ms: 9000, action: ['Review', () => { setTab('chat:inbox'); $('#vmList')?.scrollIntoView({ block: 'center', behavior: smooth() }); }] }); }
+  if (fresh && !had) { chime(); toast(`🎙 ${item.name} raised a hand with a voice question.`, { ms: 9000, action: ['Review', () => { setTab('show'); $('#vmList')?.scrollIntoView({ block: 'center', behavior: smooth() }); }] }); }
   renderVoice();
 }
 function dropVoice(id) { S.vms.delete(id); vmAudio.delete(id); renderVoice(); }
@@ -5557,7 +5494,7 @@ async function aiTranscribe(x) {
 function voiceRow(x, inChat) {
   const li = document.createElement('li'); li.className = (inChat ? 'msg ext vm-msg ' : 'sc-item ') + 'vm ' + (x.status || 'new'); li.dataset.vm = x.id;
   const top = document.createElement('div'); top.className = inChat ? 'who' : 'sc-top';
-  const badge = document.createElement('span'); badge.className = 'pill caps src-watch'; badge.innerHTML = `${icon('mic')}Voice question`;
+  const badge = document.createElement('span'); badge.className = 'pill caps src-watch'; badge.textContent = '🎙 Voice question';
   const who = document.createElement('b'); who.textContent = x.name;
   const meta = document.createElement('small'); meta.textContent = `${x.dur || '?'} s${x.status === 'aired' ? ' · played on air' : x.status === 'heard' ? ' · previewed' : ''}`;
   top.append(badge, who, meta);
@@ -5589,6 +5526,12 @@ function renderVoice() {
 }
 
 // ---------------------------------------------------------------- where viewers find the watch page
+$('#watchTop').onclick = (ev) => {
+  if (!S.studio) return;
+  const url = watchLinkUrl();
+  copy(url, 'Watch link copied. Share it anywhere.');
+  if (ev.shiftKey || ev.metaKey) window.open(url, '_blank', 'noopener');
+};
 $('#copyWatch').onclick = () => copy(watchLinkUrl(), 'Watch link copied.');
 $('#openWatch').onclick = () => window.open(watchLinkUrl(), '_blank', 'noopener');
 $('#inviteDlg').addEventListener('toggle', () => { if ($('#inviteDlg').open && S.studio) $('#inviteWatch').textContent = watchLinkText(); });
