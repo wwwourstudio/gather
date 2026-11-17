@@ -1406,3 +1406,24 @@ body.pre .landing { grid-template-columns: minmax(0, 1fr); justify-items: center
   .land-feats { grid-template-columns: 1fr; }
   .land-foot { flex-direction: column; }
 }
+
+/* ---------------------------------------------------------------- the watch link badge: editable on the stage */
+.badge-hit { position: absolute; z-index: 4; border: 0; padding: 0; border-radius: 10px; background: transparent; cursor: pointer; box-shadow: 0 0 0 2px transparent; transition: box-shadow var(--dur) var(--ease-out); }
+.badge-hit span { position: absolute; right: 0; top: -26px; height: 22px; padding: 0 8px; border-radius: 6px; display: grid; place-items: center; background: var(--accent); color: #fff; font: 600 11px/1 var(--font-ui); opacity: 0; transform: translateY(4px); transition: opacity var(--dur) var(--ease-out), transform var(--dur) var(--ease-out); white-space: nowrap; }
+.badge-hit:hover, .badge-hit:focus-visible { box-shadow: 0 0 0 2px var(--accent); }
+.badge-hit:hover span, .badge-hit:focus-visible span { opacity: 1; transform: none; }
+body.editing .badge-hit { pointer-events: none; }
+.badge-pop { width: 280px; padding: var(--sp-4); display: grid; gap: var(--sp-3); }
+.badge-pop b { font-size: var(--fs-14); }
+.badge-pop .hint { margin: -6px 0 0; }
+.badge-pop-row { display: flex; justify-content: space-between; gap: var(--sp-2); }
+
+/* ---------------------------------------------------------------- studio chat: host tools float, nothing jumps */
+#msgs.is-host .msg.has-av .mact { position: absolute; z-index: 3; top: 2px; right: 38px; margin: 0; display: flex; flex-wrap: nowrap; gap: 2px; padding: 3px; border-radius: 10px; background: var(--surface-3); border: 1px solid var(--line-2); box-shadow: 0 8px 22px -10px rgba(0, 0, 0, 0.7); opacity: 0; pointer-events: none; transform: translateY(2px); transition: opacity 120ms var(--ease-out), transform 120ms var(--ease-out); overflow: visible; }
+#msgs.is-host .msg.has-av:hover .mact, #msgs.is-host .msg.has-av:focus-within .mact { opacity: 1; pointer-events: auto; transform: none; }
+#msgs.is-host .msg.has-av .mact .pill { height: 22px; padding: 0 8px; font-size: 11px; border-radius: 7px; }
+.msg.has-av { transition: background 120ms var(--ease-out); }
+.msg.has-av, .msg.ai-msg { animation-duration: 160ms; }
+@media (hover: none) { #msgs.is-host .msg.has-av .mact { position: static; opacity: 1; pointer-events: auto; transform: none; background: none; border: 0; box-shadow: none; padding: 0; margin-top: 4px; } }
+#msgs.is-host .msg.has-av .mact { top: -14px; right: 8px; }
+#msgs.is-host { padding-top: 14px; }

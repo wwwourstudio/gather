@@ -2465,7 +2465,7 @@ function renderAIPanel() {
   $('#aiHostNote').hidden = host;
   $('#chatToAi').textContent = 'Ask ' + S.aiName; $('#chatFilterAi').textContent = S.aiName;
   $('#aiInput').placeholder = `Ask ${S.aiName} or tell it what to do…`;
-  $('#chatHint').textContent = host ? `Only people in the studio see this · type @${S.aiName} to ask your AI` : 'Only people in the studio see this';
+  $('#chatHint').textContent = host ? `Studio only · @${S.aiName} asks your AI` : 'Only people in the studio see this';
   if (!host && S.chatTo === 'ai') setChatTo('chat', false);
   renderAILog();
 }
@@ -5682,9 +5682,10 @@ $('#openWatch').onclick = () => window.open(watchLinkUrl(), '_blank', 'noopener'
 $('#inviteDlg').addEventListener('toggle', () => { if ($('#inviteDlg').open && S.studio) $('#inviteWatch').textContent = watchLinkText(); });
 /** On stream: "Watch & chat live · host/w/code", bottom right, unless the host turned it off or placed the QR card. */
 function drawWatchBadge() {
+  S.badgeRect = null;
   if (!S.studio || watchCfg().badge === false) return;
   if ((S.state.elements || []).some((e) => e.type === 'callin' && !e.hidden)) return;
-  const text = watchLinkText(), label = 'WATCH & CHAT LIVE';
+  const text = watchLinkText(), label = (watchCfg().badgeLabel || 'Watch & chat live').toUpperCase();
   g.save();
   g.font = '700 15px Inter, sans-serif'; const tw = g.measureText(text).width;
   g.font = '800 11px Inter, sans-serif'; const lw = g.measureText(label).width;
@@ -5697,6 +5698,7 @@ function drawWatchBadge() {
   g.fillStyle = '#9ca3af'; g.font = '800 11px Inter, sans-serif'; g.fillText(label, x + 42, y + 20);
   g.fillStyle = '#fff'; g.font = '700 15px Inter, sans-serif'; g.fillText(text, x + 42, y + 38);
   g.restore();
+  S.badgeRect = { x, y, w, h };
 }
 
 // Panel sections remember being folded (per browser), so each host's panels open the way they left them.
@@ -5722,4 +5724,34 @@ addEventListener('pointerdown', () => document.body.classList.remove('kbd'), tru
     if (document.hidden || quiet.matches || document.body.classList.contains('pre')) return;
     try { cx.drawImage(canvas, 0, 0, amb.width, amb.height); amb.classList.add('on'); } catch {}
   }, 400);
+}
+
+
+// The "Watch & chat live" badge on the stream: the host can point at it on the stage, change its words or hide it.
+{
+  const hit = document.createElement('button');
+  hit.type = 'button'; hit.className = 'badge-hit'; hit.hidden = true; hit.setAttribute('aria-label', 'Edit the watch link badge');
+  hit.innerHTML = '<span>Edit badge</span>';
+  $('#stage').append(hit);
+  const pop = document.createElement('div');
+  pop.className = 'popover glass raised badge-pop'; pop.popover = 'auto'; pop.setAttribute('aria-label', 'Watch link badge');
+  pop.innerHTML = `<b>Watch link on stream</b><p class="hint">Points platform viewers to your watch page, where they can chat and tip.</p>
+    <label class="fld"><span>Label</span><input class="input" id="badgeLabelIn" maxlength="28" placeholder="Watch & chat live"></label>
+    <div class="badge-pop-row"><button type="button" class="btn sm" id="badgeHide">Hide from stream</button><button type="button" class="btn sm primary" id="badgeDone">Done</button></div>`;
+  document.body.append(pop);
+  hit.onclick = () => { pop.querySelector('#badgeLabelIn').value = watchCfg().badgeLabel || ''; togglePopover(pop, hit, 'top'); pop.querySelector('#badgeLabelIn').focus(); };
+  pop.querySelector('#badgeLabelIn').addEventListener('input', (e) => setWatch({ badgeLabel: e.target.value.slice(0, 28) }));
+  pop.querySelector('#badgeHide').onclick = () => { setWatch({ badge: false }); pop.hidePopover(); toast('The watch link badge is off. Turn it back on in Show → Viewer features.'); };
+  pop.querySelector('#badgeDone').onclick = () => pop.hidePopover();
+  let last = '';
+  const place = () => {
+    const r = S.badgeRect, show = !!r && isHost() && !document.body.classList.contains('pre');
+    const key = show ? `${r.x}|${r.y}|${r.w}|${r.h}` : '';
+    if (key !== last) {
+      last = key; hit.hidden = !show;
+      if (show) Object.assign(hit.style, { left: (r.x / W * 100) + '%', top: (r.y / H * 100) + '%', width: (r.w / W * 100) + '%', height: (r.h / H * 100) + '%' });
+    }
+    requestAnimationFrame(place);
+  };
+  requestAnimationFrame(place);
 }
