@@ -2338,36 +2338,56 @@ function actChip(a, withOpen = true) {
   }
   return li;
 }
+// The AI's conversation lives in the live chat, in time order with everything else: each item is one <li> in
+// #msgs keyed by data-aid, replaced in place as it streams.
+const aiShown = new Set();
+function aiItemLi(it, host, shown) {
+  const li = document.createElement('li'); li.className = 'msg ai-msg ' + it.role + (it.error ? ' error' : '');
+  li.dataset.aid = it.id; li.dataset.src = 'ai';
+  if (it.role === 'user') {
+    const who = document.createElement('div'); who.className = 'who';
+    const b = document.createElement('b'); b.textContent = 'You'; const to = document.createElement('span'); to.textContent = '→ ' + S.aiName;
+    who.append(b, to);
+    const t = document.createElement('div'); t.className = 'bubble'; t.textContent = it.text; li.append(who, t); return li;
+  }
+  const who = document.createElement('div'); who.className = 'who';
+  const orb = document.createElement('i'); orb.className = 'orb'; orb.setAttribute('aria-hidden', 'true');
+  const nm = document.createElement('b'); nm.textContent = S.aiName;
+  const via = document.createElement('span'); via.textContent = AI_NAME[it.provider] ? 'AI · ' + AI_NAME[it.provider] : 'AI';
+  who.append(orb, nm, via);
+  const txt = document.createElement('div'); txt.className = 'txt'; txt.textContent = plainMd(it.text || '') || (it.done ? '' : ' ');
+  if (!it.done) txt.classList.add('streaming');
+  li.append(who, txt);
+  if (it.actions?.length) { const ul = document.createElement('ul'); ul.className = 'act-chips'; ul.append(...it.actions.map(actChip)); li.append(ul); }
+  if (host && it.done && !it.error && it.text) {
+    const row = document.createElement('div'); row.className = 'msg-tools';
+    const on = shown?.id === it.id;
+    const st = document.createElement('button'); st.type = 'button'; st.className = 'btn sm' + (on ? ' on' : ''); st.dataset.stage = it.id;
+    st.textContent = on ? 'On stage' : 'Show on stage'; st.setAttribute('aria-pressed', on);
+    st.onclick = () => (on ? takeAnswerOff() : showAnswer(it.id));
+    const cp = document.createElement('button'); cp.type = 'button'; cp.className = 'btn sm ghost'; cp.textContent = 'Copy';
+    cp.onclick = () => navigator.clipboard?.writeText(plainMd(it.text)).then(() => toast('Copied.'), () => toast('Couldn’t copy.', { err: true }));
+    row.append(st, cp); li.append(row);
+  }
+  return li;
+}
 function renderAILog() {
-  const log = $('#aiLog');
+  const log = $('#msgs');
   if (!log) return;
   const host = isHost(), shown = aiOnStage() ? stageAnswer() : null;
-  log.replaceChildren(...S.ai.items.map((it) => {
-    const li = document.createElement('li'); li.className = 'ai-msg ' + it.role + (it.error ? ' error' : '');
-    li.dataset.id = it.id;
-    if (it.role === 'user') { const t = document.createElement('div'); t.className = 'bubble'; t.textContent = it.text; li.append(t); return li; }
-    const who = document.createElement('div'); who.className = 'who';
-    const nm = document.createElement('b'); nm.textContent = S.aiName;
-    const via = document.createElement('span'); via.textContent = AI_NAME[it.provider] || '';
-    who.append(nm, via);
-    const txt = document.createElement('div'); txt.className = 'txt'; txt.textContent = plainMd(it.text || '') || (it.done ? '' : ' ');
-    if (!it.done) txt.classList.add('streaming');
-    li.append(who, txt);
-    if (it.actions?.length) { const ul = document.createElement('ul'); ul.className = 'act-chips'; ul.append(...it.actions.map(actChip)); li.append(ul); }
-    if (host && it.done && !it.error && it.text) {
-      const row = document.createElement('div'); row.className = 'msg-tools';
-      const on = shown?.id === it.id;
-      const st = document.createElement('button'); st.type = 'button'; st.className = 'btn sm' + (on ? ' on' : ''); st.dataset.stage = it.id;
-      st.textContent = on ? 'On stage' : 'Show on stage'; st.setAttribute('aria-pressed', on);
-      st.onclick = () => (on ? takeAnswerOff() : showAnswer(it.id));
-      const cp = document.createElement('button'); cp.type = 'button'; cp.className = 'btn sm ghost'; cp.textContent = 'Copy';
-      cp.onclick = () => navigator.clipboard?.writeText(plainMd(it.text)).then(() => toast('Copied.'), () => toast('Couldn’t copy.', { err: true }));
-      row.append(st, cp); li.append(row);
-    }
-    return li;
-  }));
-  $('#aiEmpty').hidden = !!S.ai.items.length;
-  const body = log.closest('.panel-body'); if (body) body.scrollTop = body.scrollHeight;
+  const ids = new Set(S.ai.items.map((it) => it.id));
+  for (const li of log.querySelectorAll('li[data-aid]')) if (!ids.has(li.dataset.aid)) { li.remove(); aiShown.delete(li.dataset.aid); }
+  for (const it of S.ai.items) {
+    const cur = log.querySelector(`li[data-aid="${CSS.escape(it.id)}"]`);
+    if (cur) { cur.replaceWith(aiItemLi(it, host, shown)); continue; }
+    if (aiShown.has(it.id)) continue; // trimmed off the top of a long chat: don't bring it back at the bottom
+    aiShown.add(it.id); appendLog(aiItemLi(it, host, shown));
+    if (S.tab !== 'chat' && it.role === 'assistant') { S.unread++; $('#chatBadge').hidden = false; }
+  }
+  if (!S.ai.items.length) aiShown.clear();
+  $('#chatEmpty').hidden = !!log.children.length;
+  const last = S.ai.items[S.ai.items.length - 1];
+  if (last && !last.done) { const body = log.parentElement; if (body.scrollHeight - body.scrollTop - body.clientHeight < 160) body.scrollTop = body.scrollHeight; }
 }
 /** Put one answer in the AI window, adding the window to the stage (without changing the scene) if needed. */
 function showAnswer(id) {
@@ -2405,14 +2425,35 @@ function renderAIPanel() {
   $('#aiInput').disabled = !host; $('#aiAsk').disabled = !host || S.ai.busy;
   if (S.ai.busy) $('#aiAsk').setAttribute('aria-busy', 'true'); else $('#aiAsk').removeAttribute('aria-busy');
   $('#aiHostNote').hidden = host;
+  $('#chatToAi').textContent = 'Ask ' + S.aiName; $('#chatFilterAi').textContent = S.aiName;
+  $('#aiInput').placeholder = `Ask ${S.aiName} or tell it what to do…`;
+  $('#chatHint').textContent = host ? `Only people in the studio see this · type @${S.aiName} to ask your AI` : 'Only people in the studio see this';
+  if (!host && S.chatTo === 'ai') setChatTo('chat', false);
   renderAILog();
 }
+// The AI tab is its settings; talking to it happens in the live chat.
 function setAiSetup(open, focus = true) {
-  $('#aiSetup').hidden = !open; $('#aiSetupBtn').setAttribute('aria-expanded', open); $('#aiSetupBtn').classList.toggle('on', open);
-  if (open && focus) (store.get('aiKey:' + S.aiProv, '') ? $('#aiName') : $('#aiKey')).focus();
+  if (!open) return;
+  if (focus) { setTab('ai'); (store.get('aiKey:' + S.aiProv, '') ? $('#aiName') : $('#aiKey')).focus(); }
 }
-$('#aiSetupBtn').onclick = () => setAiSetup($('#aiSetup').hidden);
-$('#aiSetupDone').onclick = () => { setAiSetup(false); $('#aiInput').focus(); };
+$('#aiSetupBtn').onclick = () => setTab('ai');
+$('#aiSetupDone').onclick = () => { setTab('chat'); setChatTo('ai'); };
+/** Who the composer sends to: the studio chat or your AI. */
+function setChatTo(to, focus = true) {
+  if (to === 'ai' && !isHost()) to = 'chat';
+  S.chatTo = to;
+  $$('#chatTo [data-to]').forEach((b) => { const on = b.dataset.to === to; b.classList.toggle('on', on); b.setAttribute('aria-checked', on); });
+  $('#chatForm').hidden = to === 'ai'; $('#aiForm').hidden = to !== 'ai'; $('#aiEmpty').hidden = to !== 'ai';
+  document.querySelector('[data-panel="chat"]').classList.toggle('to-ai', to === 'ai');
+  if (focus) (to === 'ai' ? $('#aiInput') : $('#chatInput')).focus();
+}
+$$('#chatTo [data-to]').forEach((b) => b.addEventListener('click', () => setChatTo(b.dataset.to)));
+// Filters: everything, or just viewers, questions, super chats or the AI.
+$$('#chatFilter [data-f]').forEach((b) => b.addEventListener('click', () => {
+  $$('#chatFilter [data-f]').forEach((x) => { const on = x === b; x.classList.toggle('on', on); x.setAttribute('aria-selected', on); });
+  $('#msgs').dataset.f = b.dataset.f;
+  const body = $('#msgs').parentElement; body.scrollTop = body.scrollHeight;
+}));
 $$('#aiProv button').forEach((b) => b.addEventListener('click', () => { S.aiProv = b.dataset.prov; store.set('aiProv', S.aiProv); renderAIPanel(); }));
 $('#aiKey').addEventListener('change', (e) => { store.set('aiKey:' + S.aiProv, e.target.value.trim()); toast(e.target.value.trim() ? `${AI_NAME[S.aiProv]} key saved in this browser.` : 'Key removed.'); renderAIPanel(); });
 $('#aiModel').addEventListener('change', (e) => store.set('aiModel:' + S.aiProv, e.target.value.trim()));
@@ -3543,6 +3584,12 @@ $('#chatForm').addEventListener('submit', (e) => {
   const v = $('#chatInput').value.trim();
   if (!v) return;
   if (!S.studio) return toast('Enter a studio to chat.');
+  // "@Sam …" in the chat goes to your AI instead (host only).
+  const at = isHost() && new RegExp('^@' + (S.aiName || 'Sam').replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b[\\s,:]*', 'i').exec(v);
+  if (at && v.length > at[0].length) {
+    $('#chatInput').value = ''; autoGrow($('#chatInput'));
+    $('#aiInput').value = v.slice(at[0].length); $('#aiForm').requestSubmit(); return;
+  }
   wsSend({ type: 'chat', text: v });
   $('#chatInput').value = ''; autoGrow($('#chatInput'));
 });

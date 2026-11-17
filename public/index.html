@@ -147,7 +147,15 @@
     <aside class="side glass" id="side">
       <!-- Chat -->
       <section class="panel" data-panel="chat">
-        <header class="panel-head"><h2>Chat</h2></header>
+        <header class="panel-head chat-head"><h2>Live chat</h2>
+          <div class="chat-filter" id="chatFilter" role="tablist" aria-label="Show in the chat">
+            <button type="button" role="tab" data-f="all" class="on" aria-selected="true">All</button>
+            <button type="button" role="tab" data-f="viewers">Viewers</button>
+            <button type="button" role="tab" data-f="q">Q&amp;A</button>
+            <button type="button" role="tab" data-f="paid">Super chats</button>
+            <button type="button" role="tab" data-f="ai" id="chatFilterAi">AI</button>
+          </div>
+        </header>
         <div class="panel-body chat-body">
           <div class="feat-bar" id="featBar" hidden>
             <span class="feat-label">On stage</span>
@@ -160,12 +168,33 @@
           </div>
           <ol class="msgs" id="msgs" aria-live="polite"></ol>
         </div>
+        <div class="chat-to host-only" id="chatTo" role="radiogroup" aria-label="Send to">
+          <button type="button" role="radio" data-to="chat" class="on" aria-checked="true"><svg class="i sm" aria-hidden="true"><use href="/icons.svg#i-message-square"/></svg>Chat</button>
+          <button type="button" role="radio" data-to="ai" aria-checked="false"><i class="orb" aria-hidden="true"></i><span id="chatToAi">Ask Sam</span></button>
+        </div>
+        <div class="ai-empty host-only" id="aiEmpty" hidden>
+          <div class="ai-sugg" id="aiSugg">
+            <button type="button" class="chip" data-q="Fact-check: ">Fact-check</button>
+            <button type="button" class="chip" data-q="Switch to Solo">Switch to Solo</button>
+            <button type="button" class="chip" data-q="Show a banner: Q&amp;A time">Show a banner</button>
+            <button type="button" class="chip" data-q="Start a 5 minute countdown">5-min countdown</button>
+            <button type="button" class="chip" data-q="Find a video of ">Find a video</button>
+          </div>
+        </div>
         <form class="composer" id="chatForm" autocomplete="off">
           <div class="composer-box">
             <textarea id="chatInput" rows="1" maxlength="1000" placeholder="Message the studio" aria-label="Message everyone in the studio"></textarea>
             <button class="send-btn" id="chatSend" aria-label="Send message"><svg class="i" aria-hidden="true"><use href="/icons.svg#i-arrow-up"/></svg></button>
           </div>
-          <p class="composer-hint"><span>Only people in the studio see this</span></p>
+          <p class="composer-hint"><span id="chatHint">Only people in the studio see this · type @Sam to ask your AI</span></p>
+        </form>
+        <form class="composer host-only" id="aiForm" autocomplete="off" hidden>
+          <div class="composer-box">
+            <button type="button" class="icon-btn sm comp-mic" id="aiMic" aria-label="Talk instead of typing" aria-pressed="false"><svg class="i" aria-hidden="true"><use href="/icons.svg#i-mic"/></svg></button>
+            <textarea id="aiInput" rows="1" maxlength="4000" placeholder="Message Sam…" aria-label="Ask your AI"></textarea>
+            <button class="send-btn" id="aiAsk" aria-label="Send"><svg class="i" aria-hidden="true"><use href="/icons.svg#i-arrow-up"/></svg></button>
+          </div>
+          <p class="composer-hint"><span id="aiHint">Answers land in the chat, ready to put on stage</span><button type="button" class="btn link quiet" id="aiClear">Clear AI</button></p>
         </form>
       </section>
 
@@ -178,7 +207,7 @@
           <button type="button" class="icon-btn sm host-only" id="aiSetupBtn" aria-expanded="false" aria-controls="aiSetup" aria-label="AI settings" data-tip="AI settings"><svg class="i" aria-hidden="true"><use href="/icons.svg#i-sliders-horizontal"/></svg></button>
         </header>
         <div class="panel-body ai-body">
-          <div class="ai-setup form host-only" id="aiSetup" hidden>
+          <div class="ai-setup form host-only" id="aiSetup">
             <div class="fld"><span>Provider</span>
               <div class="seg block" role="radiogroup" aria-label="AI provider" id="aiProv">
                 <button type="button" role="radio" data-prov="claude">Claude</button>
@@ -197,29 +226,10 @@
             <div class="row2" id="aiVoiceNameRow" hidden><label class="fld"><span>Stream voice</span><select id="aiVoiceName"><option value="alloy">Alloy</option><option value="ash">Ash</option><option value="ballad">Ballad</option><option value="coral">Coral</option><option value="echo">Echo</option><option value="fable">Fable</option><option value="nova">Nova</option><option value="onyx">Onyx</option><option value="sage">Sage</option><option value="shimmer">Shimmer</option></select></label></div>
             <div class="row" id="aiVoiceTestRow"><button type="button" class="btn sm" id="aiVoiceTest">Test voice</button><p class="hint" id="aiVoiceNote" style="margin:0"></p></div>
             <label class="toggle-row"><span><b>Wake word</b><small id="aiWakeHint">Say “Hey Sam, …” and it acts. Chrome or Edge.</small></span><input type="checkbox" class="toggle" id="aiWake" role="switch"></label>
-            <button type="button" class="btn primary block" id="aiSetupDone">Done</button>
+            <button type="button" class="btn primary block" id="aiSetupDone">Talk to your AI in the chat</button>
           </div>
-          <p class="hint" id="aiHostNote" hidden>The host talks to the AI. You’ll see its answers here as they arrive.</p>
-          <div class="ai-empty host-only" id="aiEmpty">
-            <p>Ask a question and the answer streams in, ready to put on stage. Or tell it what to do:</p>
-            <div class="ai-sugg" id="aiSugg">
-              <button type="button" class="chip" data-q="Fact-check: ">Fact-check a claim</button>
-              <button type="button" class="chip" data-q="Switch to Solo">Switch to Solo</button>
-              <button type="button" class="chip" data-q="Show a banner: Q&amp;A time">Show a banner</button>
-              <button type="button" class="chip" data-q="Start a 5 minute countdown">5-minute countdown</button>
-              <button type="button" class="chip" data-q="Find a video of ">Find a video</button>
-            </div>
-          </div>
-          <ol class="ai-log" id="aiLog" aria-live="polite"></ol>
+          <p class="hint" id="aiHostNote" hidden>The host talks to the AI. Its answers show up in the chat.</p>
         </div>
-        <form class="composer host-only" id="aiForm" autocomplete="off">
-          <div class="composer-box">
-            <button type="button" class="icon-btn sm comp-mic" id="aiMic" aria-label="Talk instead of typing" aria-pressed="false"><svg class="i" aria-hidden="true"><use href="/icons.svg#i-mic"/></svg></button>
-            <textarea id="aiInput" rows="1" maxlength="4000" placeholder="Message Sam…" aria-label="Ask your AI"></textarea>
-            <button class="send-btn" id="aiAsk" aria-label="Send"><svg class="i" aria-hidden="true"><use href="/icons.svg#i-arrow-up"/></svg></button>
-          </div>
-          <p class="composer-hint"><span id="aiHint"><kbd>/</kbd> opens this over the stage</span><button type="button" class="btn link quiet" id="aiClear">Clear</button></p>
-        </form>
       </section>
 
       <!-- Show: what you put up live -->

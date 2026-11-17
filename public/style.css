@@ -1033,3 +1033,54 @@ body:not(.pre) .deck-body:has(.deck-layer.on .scenes) { height: 94px; }
 .guide .guide-text b { font-weight: 600; color: var(--ink); }
 .guide .guide-text::before { content: "Next: "; color: var(--ink-3); }
 .guide #guideGo { --btn-bg: var(--fill); --btn-bg-hover: var(--fill-hover); --btn-ink: var(--accent-text); border-color: var(--glass-border); }
+
+/* ================================================================ V6: the live chat
+   One stream for everything: the studio, watch-page viewers, YouTube/Twitch, super chats, questions, sales and
+   your AI. Filters narrow it; the composer sends to the chat or to your AI. */
+.chat-head { flex-wrap: wrap; row-gap: var(--sp-2); padding-bottom: var(--sp-2); }
+.chat-head h2 { flex: 1; }
+.chat-filter { display: flex; gap: 4px; width: 100%; overflow-x: auto; scrollbar-width: none; }
+.chat-filter::-webkit-scrollbar { display: none; }
+.chat-filter button { flex: none; height: 26px; padding: 0 9px; border-radius: 999px; border: 1px solid var(--glass-border); background: transparent; color: var(--ink-3); font: 600 var(--fs-12) var(--font-ui); cursor: pointer; transition: background var(--dur) var(--ease-out), color var(--dur) var(--ease-out); }
+.chat-filter button:hover { background: var(--fill-hover); color: var(--ink-2); }
+.chat-filter button.on { background: var(--fill-active); color: var(--ink); border-color: color-mix(in srgb, var(--ink) 18%, transparent); }
+#msgs[data-f="viewers"] > li:not(.ext),
+#msgs[data-f="q"] > li:not(:has(.q-badge)),
+#msgs[data-f="paid"] > li:not(.paid),
+#msgs[data-f="ai"] > li:not(.ai-msg) { display: none; }
+
+/* Messages: a name line, then the words on a soft glass card. */
+.msgs { gap: 10px; }
+.msg { max-width: 100%; align-self: stretch; }
+.msg .txt { background: color-mix(in srgb, var(--surface-2) 55%, transparent); border-color: var(--glass-border); font-size: var(--fs-14); line-height: 1.45; }
+.msg.me { align-self: flex-end; max-width: 88%; }
+.msg.me .who { justify-content: flex-end; }
+.msg.me .txt { background: var(--accent-soft); border-color: var(--accent-line, color-mix(in srgb, var(--accent) 35%, transparent)); border-radius: var(--r-md) 4px var(--r-md) var(--r-md); }
+.msg.sys { align-self: center; font-size: var(--fs-12); color: var(--ink-3); background: none; }
+.msg:has(.q-badge) .txt { box-shadow: inset 3px 0 0 var(--warn); }
+.msg.paid .txt { background: linear-gradient(135deg, rgba(133, 199, 66, 0.16), rgba(133, 199, 66, 0.05)); border-color: rgba(133, 199, 66, 0.45); box-shadow: none; }
+.msg.paid .paid-amt { padding: 1px 8px; border-radius: 999px; background: #85c742; color: #0b1a05; font-size: var(--fs-11); }
+
+/* Your AI, in the stream. */
+.msg.ai-msg.user { align-self: flex-end; max-width: 88%; justify-items: end; }
+.msg.ai-msg.user .who { justify-content: flex-end; }
+.msg.ai-msg.user .bubble { padding: 6px var(--sp-3); border-radius: var(--r-md) 4px var(--r-md) var(--r-md); background: color-mix(in srgb, #a78bfa 18%, transparent); border: 1px solid color-mix(in srgb, #a78bfa 40%, transparent); font-size: var(--fs-14); white-space: pre-wrap; overflow-wrap: anywhere; }
+.msg.ai-msg.assistant .txt { padding: var(--sp-2) var(--sp-3); border-radius: 4px var(--r-md) var(--r-md) var(--r-md); background: linear-gradient(160deg, color-mix(in srgb, #a78bfa 14%, transparent), color-mix(in srgb, var(--accent) 6%, transparent)); border: 1px solid color-mix(in srgb, #a78bfa 32%, transparent); }
+.msg.ai-msg .who .orb { width: 14px; height: 14px; flex: none; }
+.msg.ai-msg .who b { color: #c4b5fd; }
+.msg.ai-msg .msg-tools { display: flex; gap: 6px; }
+
+/* Send to: the chat, or your AI. */
+.chat-to { display: flex; gap: 4px; margin: 0 var(--sp-4) 6px; padding: 3px; border-radius: 999px; background: var(--fill); border: 1px solid var(--glass-border); width: max-content; }
+.chat-to button { display: inline-flex; align-items: center; gap: 6px; height: 26px; padding: 0 12px; border: 0; border-radius: 999px; background: transparent; color: var(--ink-3); font: 600 var(--fs-12) var(--font-ui); cursor: pointer; }
+.chat-to button .orb { width: 12px; height: 12px; }
+.chat-to button.on { background: var(--surface-3); color: var(--ink); box-shadow: inset 0 0 0 1px var(--glass-border); }
+.chat-to button[data-to="ai"].on { background: color-mix(in srgb, #a78bfa 22%, var(--surface-2)); color: #e9e3ff; }
+[data-panel="chat"] > .ai-empty { margin: 0 var(--sp-4) 6px; }
+[data-panel="chat"] > .ai-empty .ai-sugg { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; gap: 6px; }
+[data-panel="chat"] > .ai-empty .chip { flex: none; }
+[data-panel="chat"].to-ai .composer-box { border-color: color-mix(in srgb, #a78bfa 45%, transparent); box-shadow: 0 0 0 3px color-mix(in srgb, #a78bfa 12%, transparent); }
+[data-panel="chat"] > .composer[hidden] { display: none; }
+/* The AI tab is settings only now. */
+#aiSetupBtn { display: none; }
+.ai-panel .ai-setup { display: grid; animation: none; padding: 0; border: 0; background: none; }
