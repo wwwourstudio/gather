@@ -603,8 +603,18 @@
 <dialog class="modal" id="settingsDlg" aria-labelledby="settingsH">
   <div class="modal-card glass raised wide settings-card">
     <form method="dialog"><button class="icon-btn sm modal-close" aria-label="Close"><svg class="i sm" aria-hidden="true"><use href="/icons.svg#i-x"/></svg></button></form>
-    <h2 id="settingsH">Settings</h2>
-    <div class="form settings-body">
+    <nav class="set-nav" aria-label="Settings sections">
+      <h2 id="settingsH">Settings</h2>
+      <button type="button" class="set-nav-btn" data-set="general"><svg class="i" aria-hidden="true"><use href="/icons.svg#i-sliders-horizontal"/></svg>General</button>
+      <button type="button" class="set-nav-btn" data-set="mic"><svg class="i" aria-hidden="true"><use href="/icons.svg#i-mic"/></svg>Microphone</button>
+      <button type="button" class="set-nav-btn" data-set="camera"><svg class="i" aria-hidden="true"><use href="/icons.svg#i-video"/></svg>Camera</button>
+      <button type="button" class="set-nav-btn" data-set="background"><svg class="i" aria-hidden="true"><use href="/icons.svg#i-image"/></svg>Background</button>
+      <button type="button" class="set-nav-btn" data-set="connections"><svg class="i" aria-hidden="true"><use href="/icons.svg#i-link"/></svg>Connections</button>
+      <button type="button" class="set-nav-btn" data-set="network"><svg class="i" aria-hidden="true"><use href="/icons.svg#i-shield-check"/></svg>Network</button>
+    </nav>
+    <div class="form settings-body" id="settingsBody">
+      <section class="set-sec" id="set-general" data-set="general" aria-labelledby="set-general-h">
+        <header class="set-sec-h"><span class="set-ic" aria-hidden="true"><svg class="i"><use href="/icons.svg#i-sliders-horizontal"/></svg></span><div><h3 id="set-general-h">General</h3><p>How gather looks, and your name.</p></div></header>
 
           <div class="fld"><span>Appearance</span>
             <div class="seg block" role="radiogroup" aria-label="Appearance" id="themeSeg">
@@ -617,31 +627,43 @@
             <div class="row"><img id="offBgThumb" class="bgfx-thumb" alt="" hidden><button type="button" class="btn sm" id="offBgPick">Choose a picture</button><button type="button" class="btn ghost sm" id="offBgClear" hidden>Remove</button></div>
             <input type="file" id="offBgFile" accept="image/*" hidden>
           </div>
+      </section>
+      <section class="set-sec" id="set-mic" data-set="mic" aria-labelledby="set-mic-h">
+        <header class="set-sec-h"><span class="set-ic" aria-hidden="true"><svg class="i"><use href="/icons.svg#i-mic"/></svg></span><div><h3 id="set-mic-h">Microphone</h3><p>Pick a mic and clean up your sound.</p></div></header>
 
-          <h3 class="caps">Microphone</h3>
           <label class="fld"><span>Microphone</span><select id="micSelect"><option value="">Default microphone</option></select></label>
           <div class="fld"><span>Input level</span><div class="meter"><i id="meterFill"></i></div></div>
           <label class="fld"><span>Input gain <em id="micGainVal">100%</em></span><input type="range" id="micGain" min="0.3" max="2.5" step="0.05"></label>
           <label class="toggle-row"><span><b>AI noise removal</b><small>Removes fans, keyboards and traffic, keeps your voice</small></span><input type="checkbox" class="toggle" id="aiNoiseChk" role="switch"></label>
-          <label class="toggle-inline"><input type="checkbox" class="toggle sm" id="echoChk"><span>Echo cancellation <em class="dim">— keep on unless you use headphones</em></span></label>
+          <div class="set-list">
+          <label class="toggle-inline"><input type="checkbox" class="toggle sm" id="echoChk"><span>Echo cancellation <em class="dim">keep on unless you use headphones</em></span></label>
           <label class="toggle-inline"><input type="checkbox" class="toggle sm" id="nsChk"><span>Browser noise suppression</span></label>
           <label class="toggle-inline"><input type="checkbox" class="toggle sm" id="agcChk"><span>Automatic volume levelling</span></label>
           <label class="toggle-inline"><input type="checkbox" class="toggle sm" id="startMic" checked><span>Start with microphone on</span></label>
+          </div>
+      </section>
+      <section class="set-sec" id="set-camera" data-set="camera" aria-labelledby="set-camera-h">
+        <header class="set-sec-h"><span class="set-ic" aria-hidden="true"><svg class="i"><use href="/icons.svg#i-video"/></svg></span><div><h3 id="set-camera-h">Camera</h3><p>Pick a camera, its quality and the light.</p></div></header>
 
-          <h3 class="caps">Camera</h3>
           <label class="fld"><span>Camera</span><select id="camSelect"><option value="">Default camera</option></select></label>
           <div class="row2">
             <label class="fld"><span>Quality</span><select id="qualitySelect"><option value="360">360p · light</option><option value="720" selected>720p · recommended</option><option value="1080">1080p · best</option></select></label>
             <label class="fld"><span>Frame rate</span><select id="fpsSelect"><option value="24">24 fps · film</option><option value="30">30 fps</option><option value="60">60 fps · smooth</option></select></label>
           </div>
+          <div class="set-picture"><div class="set-picture-h"><span>Picture</span><button type="button" class="btn ghost sm" id="fxReset">Reset</button></div>
           <label class="fld"><span>Brightness</span><input type="range" id="fxBright" min="-0.3" max="0.3" step="0.01"></label>
           <label class="fld"><span>Contrast</span><input type="range" id="fxContrast" min="0.6" max="1.6" step="0.01"></label>
           <label class="fld"><span>Colour</span><input type="range" id="fxSat" min="0" max="1.8" step="0.01"></label>
-          <div class="row"><button type="button" class="btn ghost sm" id="fxReset">Reset light</button></div>
-          <label class="toggle-inline"><input type="checkbox" class="toggle sm" id="mirrorChk"><span>Mirror my own view <em class="dim">— others always see you the right way round</em></span></label>
+          
+          </div>
+          <div class="set-list">
+          <label class="toggle-inline"><input type="checkbox" class="toggle sm" id="mirrorChk"><span>Mirror my own view <em class="dim">others always see you the right way round</em></span></label>
           <label class="toggle-inline"><input type="checkbox" class="toggle sm" id="startCam" checked><span>Start with camera on</span></label>
+          </div>
+      </section>
+      <section class="set-sec" id="set-background" data-set="background" aria-labelledby="set-background-h">
+        <header class="set-sec-h"><span class="set-ic" aria-hidden="true"><svg class="i"><use href="/icons.svg#i-image"/></svg></span><div><h3 id="set-background-h">Background</h3><p>Blur, replace or key out what’s behind you.</p></div></header>
 
-          <h3 class="caps">Background</h3>
           <div class="seg block" id="bgFxSeg" role="radiogroup" aria-label="Background effect">
             <button type="button" role="radio" data-fx="none">None</button>
             <button type="button" role="radio" data-fx="blur">Blur</button>
@@ -669,15 +691,10 @@
           </div>
           <label class="fld" id="bgFxEdgeRow" hidden><span>Edge softness</span><input type="range" id="fxEdge" min="0.03" max="0.3" step="0.01"></label>
           <label class="fld" id="bgFxBlurRow" hidden><span>Blur amount</span><input type="range" id="fxBlur" min="0.4" max="2.5" step="0.1"></label>
+      </section>
+      <section class="set-sec" id="set-connections" data-set="connections" aria-labelledby="set-connections-h">
+        <header class="set-sec-h"><span class="set-ic" aria-hidden="true"><svg class="i"><use href="/icons.svg#i-link"/></svg></span><div><h3 id="set-connections-h">Connections</h3><p>Bring platform chats in, and save to Google Drive.</p></div></header>
 
-          <details class="more"><summary>Your own relay server (TURN)</summary>
-          <label class="fld"><span>TURN server URL <em>optional</em></span><input id="turnUrl" placeholder="turn:your-server.com:3478" spellcheck="false"></label>
-          <p class="hint" id="turnHint">A TURN relay helps guests on strict corporate and mobile networks.</p>
-          <label class="fld"><span>TURN username</span><input id="turnUser" spellcheck="false" autocomplete="off"></label>
-          <label class="fld"><span>TURN credential</span><input id="turnPass" type="password" autocomplete="off"></label>
-          <p class="hint">Use short-lived credentials. Kept in this browser session only.</p>
-          </details>
-          <h3 class="caps">Connections</h3>
           <div class="platforms">
             <div class="plat-head"><strong>Platform chat</strong><span>Connected chats flow into this chat and the overlay.</span></div>
             <form class="plat" id="twitchForm" autocomplete="off">
@@ -701,6 +718,16 @@
             <label class="toggle-row"><span><b>Save recordings to Google Drive</b><small id="driveNote">Each recording goes into a “gather recordings” folder in your Drive.</small></span><input type="checkbox" class="toggle" id="driveAuto" role="switch"></label>
             <div class="row"><span class="hint" id="googleState" style="margin:0">Not connected</span><button type="button" class="btn sm ghost" id="googleOut" hidden>Disconnect Google</button></div>
           </div>
+      </section>
+      <section class="set-sec" id="set-network" data-set="network" aria-labelledby="set-network-h">
+        <header class="set-sec-h"><span class="set-ic" aria-hidden="true"><svg class="i"><use href="/icons.svg#i-shield-check"/></svg></span><div><h3 id="set-network-h">Network</h3><p>Your own relay server, for strict networks.</p></div></header>
+
+          <label class="fld"><span>TURN server URL <em>optional</em></span><input id="turnUrl" placeholder="turn:your-server.com:3478" spellcheck="false"></label>
+          <p class="hint" id="turnHint">A TURN relay helps guests on strict corporate and mobile networks.</p>
+          <label class="fld"><span>TURN username</span><input id="turnUser" spellcheck="false" autocomplete="off"></label>
+          <label class="fld"><span>TURN credential</span><input id="turnPass" type="password" autocomplete="off"></label>
+          <p class="hint">Use short-lived credentials. Kept in this browser session only.</p>
+      </section>
     </div>
   </div>
 </dialog>

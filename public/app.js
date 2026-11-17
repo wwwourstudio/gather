@@ -3879,6 +3879,19 @@ $('#panelToggle').onclick = () => {
 $$('.look-seg [data-look]').forEach((b) => b.addEventListener('click', () => setTab(b.dataset.look)));
 $('#helpTop').onclick = () => openDlg('helpDlg');
 $('#settingsTop').onclick = () => openDlg('settingsDlg');
+// Settings: one scrolling column of section cards; the sidebar jumps to a section and follows the scroll.
+{
+  const body = $('#settingsBody'), btns = $$('.set-nav-btn');
+  const mark = (k) => btns.forEach((b) => { const on = b.dataset.set === k; b.classList.toggle('on', on); if (on) b.setAttribute('aria-current', 'true'); else b.removeAttribute('aria-current'); });
+  btns.forEach((b) => b.addEventListener('click', () => { const sec = $('#set-' + b.dataset.set); body.scrollTo({ top: sec.offsetTop - body.offsetTop - 8, behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' }); mark(b.dataset.set); }));
+  body.addEventListener('scroll', () => {
+    if (body.scrollTop + body.clientHeight >= body.scrollHeight - 4) return mark(btns[btns.length - 1].dataset.set);
+    let cur = btns[0].dataset.set;
+    for (const sec of body.querySelectorAll('.set-sec')) if (sec.offsetTop - body.offsetTop - 40 <= body.scrollTop) cur = sec.dataset.set;
+    mark(cur);
+  }, { passive: true });
+  mark('general');
+}
 $('#liveTop').onclick = () => openDlg('liveDlg');
 
 function sceneList() {
