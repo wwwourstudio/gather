@@ -1395,7 +1395,7 @@ function renderGoogle() {
 }
 api('config').then((c) => {
   configureGoogle(c.googleClientId); renderGoogle();
-  S.houseAI = c.houseAI || null; renderAIPanel();
+  S.houseAI = c.houseAI || null; S.houseVoice = c.houseVoice || null; renderAIPanel(); renderProducerUI(); renderVoiceNames();
   S.relayOn = !!c.relay; renderLive();
   S.requireAccount = !!c.requireAccount;
   if (c.builtInTurn) $('#turnHint').textContent = 'gather’s built-in relay already connects guests on strict corporate and mobile networks. Add your own only if you need to.';
@@ -4620,17 +4620,30 @@ function renderProducerUI() {
   if (!host || !S.studio) setCmd(false);
   if (document.activeElement !== $('#aiName')) $('#aiName').value = S.aiName;
   $('#aiWake').checked = !!S.aiWake;
-  const v = store.get('aiVoice', 'browser');
+  const v = voiceMode();
   $$('#aiVoiceSeg button').forEach((b) => b.classList.toggle('on', b.dataset.voice === v));
   $('#aiVoiceNameRow').hidden = v !== 'openai';
   $('#aiVoiceTest').hidden = v === 'off';
-  $('#aiVoiceName').value = store.get('aiVoiceName', 'alloy');
-  $('#aiVoiceNote').textContent = v === 'openai' ? (store.get('aiKey:openai', '') ? 'Everyone in the stream and the recording hears it.' : 'Needs a ChatGPT (OpenAI) key, saved under ChatGPT above.') : v === 'browser' ? 'Only you hear this voice.' : `${S.aiName} replies without speaking.`;
+  $('#aiVoiceName').value = voiceName();
+  $('#aiVoiceNote').textContent = v === 'openai' ? (store.get('aiKey:openai', '') || S.houseVoice ? 'A natural voice. Everyone in the stream and the recording hears it.' : 'Needs a ChatGPT (OpenAI) key, saved under ChatGPT above.') : v === 'browser' ? 'Your device’s own voice. Only you hear it.' : `${S.aiName} replies without speaking.`;
 }
 $('#aiName').addEventListener('input', (e) => { S.aiName = e.target.value.trim().slice(0, 20) || 'Sam'; store.set('aiName', S.aiName); renderProducerUI(); renderAILog(); });
 $('#aiWake').onchange = (e) => { S.aiWake = e.target.checked; store.set('aiWake', S.aiWake); syncCaptions(); toast(S.aiWake ? `Say “Hey ${S.aiName}” and then what you need.` : 'Wake word off.'); };
 $$('#aiVoiceSeg button').forEach((b) => b.addEventListener('click', () => { store.set('aiVoice', b.dataset.voice); renderProducerUI(); }));
-$('#aiVoiceName').onchange = (e) => store.set('aiVoiceName', e.target.value);
+$('#aiVoiceName').onchange = (e) => store.set(elevenVoice() ? 'aiVoiceName:eleven' : 'aiVoiceName', e.target.value);
+// The natural "Stream" voice is the default whenever this server has a house voice; otherwise the device's voice.
+function voiceMode() { return store.get('aiVoice', null) || (S.houseVoice ? 'openai' : 'browser'); }
+// Without an OpenAI key of your own, the house voice service picks the list of voices.
+function elevenVoice() { return !store.get('aiKey:openai', '') && S.houseVoice?.provider === 'elevenlabs'; }
+function voiceName() { return elevenVoice() ? store.get('aiVoiceName:eleven', 'rachel') : store.get('aiVoiceName', 'coral'); }
+function renderVoiceNames() {
+  const list = elevenVoice() ? [['rachel', 'Rachel · warm'], ['sarah', 'Sarah · bright'], ['elli', 'Elli · young'], ['adam', 'Adam · deep'], ['josh', 'Josh · friendly'], ['antoni', 'Antoni · smooth']]
+    : [['coral', 'Coral · warm'], ['sage', 'Sage · calm'], ['ash', 'Ash · clear'], ['ballad', 'Ballad · soft'], ['verse', 'Verse · lively'], ['nova', 'Nova · bright'], ['alloy', 'Alloy · neutral'], ['echo', 'Echo · low'], ['fable', 'Fable · British'], ['onyx', 'Onyx · deep'], ['shimmer', 'Shimmer · light']];
+  const sel = $('#aiVoiceName'), key = list.map((x) => x[0]).join();
+  if (sel.dataset.list !== key) { sel.dataset.list = key; sel.replaceChildren(...list.map(([v, t]) => { const o = document.createElement('option'); o.value = v; o.textContent = t; return o; })); }
+  sel.value = voiceName();
+}
+renderVoiceNames();
 $('#aiVoiceTest').onclick = () => speak(`Hi, I'm ${S.aiName}. Ready when you are.`);
 // The command bar floats over the stage only while you're using it: open it from the dock or with "/".
 function setCmd(open) {
@@ -4759,14 +4772,15 @@ async function askProducer(text) {
 }
 // Voice out: OpenAI voice goes into the stream mix; the browser voice is heard only by the host.
 async function speak(text) {
-  const mode = store.get('aiVoice', 'browser');
+  const mode = voiceMode();
   if (mode === 'off' || !text) return;
   setAiStatus('speaking');
   try {
     if (mode === 'openai') {
       const key = store.get('aiKey:openai', '');
-      if (!key) throw new Error('Add a ChatGPT (OpenAI) key in the AI panel for the stream voice.');
-      const res = await fetch('/api/ai', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mode: 'tts', apiKey: key, text, voice: store.get('aiVoiceName', 'alloy') }) });
+      const house = !key && S.houseVoice && S.studio ? { studio: S.studio, id: S.id, tok: S.tok } : null;
+      if (!key && !house) throw new Error('Add a ChatGPT (OpenAI) key in the AI panel for the stream voice.');
+      const res = await fetch('/api/ai', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mode: 'tts', apiKey: key || undefined, house: house || undefined, text, voice: voiceName() }) });
       if (!res.ok) { const j = await res.json().catch(() => ({})); throw new Error(j.error || 'The voice request failed.'); }
       const ctx = audioCtx();
       const buf = await ctx.decodeAudioData(await res.arrayBuffer());
@@ -4777,16 +4791,36 @@ async function speak(text) {
       await new Promise((r) => { src.onended = r; src.start(); });
       mix.dispose(); syncMedia(); S.aiAnalyser = null;
     } else if ('speechSynthesis' in window) {
-      await new Promise((r) => {
-        const u = new SpeechSynthesisUtterance(text);
-        const v = speechSynthesis.getVoices().find((x) => /^en/i.test(x.lang) && /natural|google|samantha|aria|jenny/i.test(x.name));
-        if (v) u.voice = v;
-        u.onend = r; u.onerror = r; speechSynthesis.speak(u);
-        setTimeout(r, 30000);
-      });
+      await deviceSpeak(text);
     }
   } catch (e) { toast(e.message, { err: true }); }
   finally { if (S.aiStatus === 'speaking') setAiStatus('idle'); }
+}
+// The device's own voice, made as good as it can be: the most natural English voice it has (Edge's "Natural"
+// neural voices, Chrome's Google voices, Apple's enhanced/premium ones), a lively pace, and one sentence at a time
+// (Chrome cuts a long utterance off after about 15 seconds).
+function bestDeviceVoice() {
+  const all = speechSynthesis.getVoices().filter((x) => /^en(-|_|$)/i.test(x.lang));
+  const score = (x) => (/natural|neural/i.test(x.name) ? 50 : 0) + (/premium|enhanced/i.test(x.name) ? 40 : 0) + (/^google/i.test(x.name) ? 30 : 0)
+    + (/aria|jenny|guy|ava|andrew|emma|brian|samantha|serena|daniel|karen|moira/i.test(x.name) ? 15 : 0) + (/en-us/i.test(x.lang) ? 5 : 0) + (x.localService ? 0 : 3)
+    - (/compact|espeak|zira|david|fred|albert|bad news|bells|boing|bubbles|cellos|jester|organ|trinoids|whisper|zarvox|wobble/i.test(x.name) ? 60 : 0);
+  return all.sort((a, b) => score(b) - score(a))[0] || null;
+}
+async function deviceSpeak(text) {
+  if (!speechSynthesis.getVoices().length) await new Promise((r) => { speechSynthesis.addEventListener('voiceschanged', r, { once: true }); setTimeout(r, 1200); });
+  const voice = bestDeviceVoice();
+  const parts = String(text).replace(/\$(\d+(?:\.\d\d)?)/g, '$1 dollars').match(/[^.!?]+[.!?]*\s*/g) || [text];
+  speechSynthesis.cancel();
+  for (const p of parts) {
+    if (!p.trim()) continue;
+    await new Promise((r) => {
+      const u = new SpeechSynthesisUtterance(p.trim());
+      if (voice) { u.voice = voice; u.lang = voice.lang; }
+      u.rate = 1.04; u.pitch = 1;
+      u.onend = r; u.onerror = r; speechSynthesis.speak(u);
+      setTimeout(r, 15000);
+    });
+  }
 }
 function aiVoiceLevel() {
   const an = S.aiAnalyser;
