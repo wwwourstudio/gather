@@ -1132,3 +1132,24 @@ body:not(.pre) .deck-body:has(.deck-layer.on .scenes) { height: 94px; }
 .dest > input::placeholder { color: var(--ink-3); }
 .plat-tile.added { border-color: color-mix(in srgb, var(--c) 55%, transparent); background: color-mix(in srgb, var(--c) 10%, var(--fill)); }
 .plat-tile.added::after { content: "\2713"; margin-left: auto; font-size: var(--fs-12); color: var(--c); }
+
+/* ---------------------------------------------------------------- chat lines: avatar · name · time · like, then the words */
+.msg.has-av { display: grid; grid-template-columns: 30px minmax(0, 1fr); column-gap: 10px; row-gap: 3px; align-items: start; }
+.msg.has-av > :not(.cav) { grid-column: 2; }
+.msg.has-av > .cav { grid-row: 1 / span 4; }
+.cav { width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; overflow: hidden; color: #fff; font: 700 11px/1 var(--font-ui); letter-spacing: 0.02em; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.14); }
+.cav img { width: 100%; height: 100%; object-fit: cover; }
+.msg.has-av .who { gap: 6px; min-width: 0; }
+.msg.has-av .who b { font-size: var(--fs-13); color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.msg.has-av .who time { font-size: var(--fs-11); color: var(--ink-3); flex: none; }
+.msg.has-av .who .cgrow { flex: 1; }
+.clike { flex: none; display: inline-flex; align-items: center; gap: 3px; height: 22px; padding: 0 6px; border: 0; border-radius: 999px; background: transparent; color: var(--ink-3); font: 600 var(--fs-11) var(--font-ui); cursor: pointer; transition: color var(--dur) var(--ease-out), background var(--dur) var(--ease-out); }
+.clike .i { width: 14px; height: 14px; }
+.clike:hover { color: #fb7185; background: rgba(251, 113, 133, 0.10); }
+.clike[aria-pressed="true"] { color: #fb7185; }
+.clike[aria-pressed="true"] .i { fill: currentColor; }
+.clike.pop .i { animation: clike-pop 0.35s var(--ease-out); }
+@keyframes clike-pop { 40% { transform: scale(1.35); } }
+.msg.me.has-av { align-self: stretch; max-width: 100%; }
+.msg.me.has-av .who { justify-content: flex-start; }
+.msg.me.has-av .txt { border-radius: 4px var(--r-md) var(--r-md) var(--r-md); }

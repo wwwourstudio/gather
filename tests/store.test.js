@@ -8,6 +8,16 @@ let ok = true;
 const check = (name, cond, detail = '') => { console.log(`${cond ? 'ok  ' : 'FAIL'} ${name}${detail ? ' — ' + detail : ''}`); if (!cond) ok = false; };
 const wait = (p, fn, arg, ms = 10000) => p.waitForFunction(fn, arg, { timeout: ms, polling: 100 }).then(() => true).catch(() => false);
 
+// Chatting on the watch page needs an account: sign up from the "Sign in to chat" box (email + password).
+const signUp = async (page, name) => {
+  if (!(await page.isVisible('#wSignDlg'))) await page.click('#wMe');
+  await page.waitForSelector('#wSignDlg[open]');
+  if (!(await page.isVisible('#wSignNameRow'))) await page.click('#wSignMode');
+  await page.fill('#wSignName', name); await page.fill('#wSignEmail', `${name.toLowerCase()}-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}@example.com`);
+  await page.fill('#wSignPass', 'correct horse battery'); await page.check('#wSignAgree'); await page.click('#wSignGo');
+  await page.waitForFunction(() => !document.querySelector('#wSignDlg').open, null, { timeout: 10000 });
+};
+
 (async () => {
   const bh = await chromium.launch({ args: ARGS }), bv = await chromium.launch({ args: ARGS });
   const errs = [];
@@ -39,7 +49,7 @@ const wait = (p, fn, arg, ms = 10000) => p.waitForFunction(fn, arg, { timeout: m
     await v.click('#wTabChat');
     await v.click('#wCards [data-card="poll"] .wv-vote button:nth-child(2)');
     check('viewer: vote counted', await wait(v, () => document.querySelector('#wCards [data-card="poll"] .wv-vote button.mine')));
-    await v.click('#wMe'); await v.fill('#wName', 'Jordan'); await v.press('#wName', 'Enter');
+    await signUp(v, 'Jordan');
     await v.fill('#wCards [data-card="queue"] input', 'Jordan#42'); await v.click('#wCards [data-card="queue"] .btn.primary');
     check('viewer: in the play-with-me line', await wait(v, () => /in line/i.test(document.querySelector('#wCards [data-card="queue"]')?.textContent || '')));
     await v.fill('#wText', 'This is :hype: right now'); await v.click('#wSend');
@@ -57,11 +67,11 @@ const wait = (p, fn, arg, ms = 10000) => p.waitForFunction(fn, arg, { timeout: m
     const v2 = await mk(bv);
     await v2.goto(B + '/w/' + code);
     await wait(v2, () => document.querySelectorAll('#wMsgs li.row').length >= 2);
-    await v2.click('#wMe'); await v2.fill('#wName', 'Sam'); await v2.press('#wName', 'Enter');
-    await v2.hover('#wMsgs li.row'); await v2.click('#wMsgs li.row .wv-acts button[aria-label="Like"]');
+    await signUp(v2, 'Sam');
+    await v2.click('#wMsgs li.row button.wv-like');
     await v2.fill('#wText', '@Jordan same question here'); await v2.click('#wSend');
     check('viewer: an @mention of them is highlighted', await wait(v, () => document.querySelector('#wMsgs li.mention')));
-    check('likes reach everyone', await wait(v, () => /♥ 1/.test(document.querySelector('#wMsgs li.row .wv-like')?.textContent || '')));
+    check('likes reach everyone', await wait(v, () => document.querySelector('#wMsgs li.row .wv-like span')?.textContent === '1'));
     check('host: live poll counts', await wait(a, () => (window.__gather.pollCounts || []).reduce((s, n) => s + n, 0) >= 1));
     await v2.hover('#wMsgs li.row'); await v2.click('#wMsgs li.row .wv-acts button[aria-label="Report spam"]');
     await v.screenshot({ path: SP + '/store-viewer-chat.png' });

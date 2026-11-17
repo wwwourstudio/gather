@@ -53,7 +53,7 @@ async function main() {
     const port = process.env.TEST_PORT || '8090';
     process.env.GATHER_URL = `http://localhost:${port}`;
     // a stand-in OAuth client ID so the Google features are switched on (google.test.js mocks Google itself)
-    const env = { ...process.env, PORT: port, ALLOW_ANON_STUDIOS: '1', GOOGLE_CLIENT_ID: process.env.GOOGLE_CLIENT_ID || 'test-client.apps.googleusercontent.com' };
+    const env = { ...process.env, PORT: port, ALLOW_ANON_STUDIOS: '1', SIGNUP_LIMIT: '200', GOOGLE_CLIENT_ID: process.env.GOOGLE_CLIENT_ID || 'test-client.apps.googleusercontent.com' };
     for (const k of ['REDIS_URL', 'KV_REST_API_URL', 'KV_REST_API_TOKEN', 'UPSTASH_REDIS_REST_URL', 'UPSTASH_REDIS_REST_TOKEN']) delete env[k];
     server = spawn(process.execPath, ['server.js'], { cwd: ROOT, env, stdio: 'ignore' });
     await waitFor(process.env.GATHER_URL + '/', 15_000);

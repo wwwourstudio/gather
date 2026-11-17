@@ -1,6 +1,7 @@
 // The public watch page (/w/<studio>): the show straight from the studio over WebRTC (no platform in between),
 // with the host's YouTube/Twitch/Kick players as a fallback, a live chat, reactions, super chats paid directly to
 // the host, and "Ask to join the stage". Viewers never need an account.
+import { configureGoogle, googleConfigured, googleSignInToken } from './google.js';
 const $ = (s) => document.querySelector(s);
 const safeDecode = (s) => { try { return decodeURIComponent(s); } catch { return ''; } };
 const code = safeDecode(location.pathname.split('/')[2] || '').toLowerCase().replace(/[^a-z0-9-]/g, '');
@@ -32,6 +33,7 @@ export function embedFor(kind, raw, host = location.hostname) {
 }
 
 // ---------------------------------------------------------------- state
+const ACCT = { user: null, av: '', then: null, up: false };
 const W = { info: null, shown: new Set(), source: 'direct', iframe: '', direct: { state: 'idle', pc: null, gen: 0 }, lastReacts: null };
 const store = {
   get(k, d) { try { const v = localStorage.getItem('gather:w:' + k); return v == null ? d : JSON.parse(v); } catch { return d; } },
@@ -111,7 +113,7 @@ function renderChat(items) {
   const log = $('#wMsgs'), atBottom = log.scrollHeight - log.scrollTop - log.clientHeight < 40;
   for (const m of items) {
     if (W.muted.has(String(m.name).toLowerCase())) continue;
-    const old = log.querySelector(`[data-id="${CSS.escape(m.id)}"] .wv-like`); if (old) old.textContent = m.likes ? `♥ ${m.likes}` : '';
+    const old = log.querySelector(`[data-id="${CSS.escape(m.id)}"] .wv-like span`); if (old) old.textContent = m.likes ? String(m.likes) : '';
     const key = m.id + ':' + (m.status || '');
     if (W.shown.has(key)) continue;
     if (W.booted && sess?.named && m.name !== sess.name && new RegExp('@' + sess.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b', 'i').test(m.text)) toast(`${m.name} mentioned you.`);
@@ -139,20 +141,24 @@ function msgEl(m) {
   if (!mine && sess?.named && new RegExp('@' + sess.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b', 'i').test(m.text)) li.classList.add('mention');
   if (m.paid) { const a = document.createElement('span'); a.className = 'amt'; a.textContent = m.paid; li.append(a); const b = document.createElement('b'); b.textContent = m.name; li.append(b, richText(m.text)); return li; }
   // avatar · name · time · text, then like / reply / more on hover
-  const av = document.createElement('span'); av.className = 'wv-av'; av.style.background = nameColor(m.name); av.textContent = (m.name || '?').trim().split(/\s+/).slice(0, 2).map((w) => w[0]).join('').toUpperCase(); av.setAttribute('aria-hidden', 'true');
+  const av = document.createElement('span'); av.className = 'wv-av'; av.style.background = nameColor(m.name);
+  if (m.av && /^data:image\/(jpeg|png|webp);base64,/.test(m.av)) { av.style.background = 'none'; queueMicrotask(() => { const im = document.createElement('img'); im.src = m.av; im.alt = ''; av.replaceChildren(im); }); } av.textContent = (m.name || '?').trim().split(/\s+/).slice(0, 2).map((w) => w[0]).join('').toUpperCase(); av.setAttribute('aria-hidden', 'true');
   const body = document.createElement('div');
   const head = document.createElement('div'); head.className = 'wv-mh';
   const b = document.createElement('b'); b.textContent = m.name; if (!mine) b.style.color = nameColor(m.name);
   const t = document.createElement('time'); const d = new Date(m.ts || Date.now()); t.dateTime = d.toISOString(); t.textContent = d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
   head.append(b, t);
   if (m.q) { const q = document.createElement('span'); q.className = 'wv-qb'; q.innerHTML = '<svg class="i" aria-hidden="true"><use href="/icons.svg#i-hand"/></svg>Question'; head.append(q); }
-  const lk = document.createElement('span'); lk.className = 'wv-like'; lk.textContent = m.likes ? `♥ ${m.likes}` : ''; head.append(lk);
+  const lk = document.createElement('button'); lk.type = 'button'; lk.className = 'wv-like'; lk.dataset.likeFor = m.id;
+  lk.setAttribute('aria-label', 'Like'); lk.setAttribute('aria-pressed', String(W.liked?.has(m.id) || false));
+  lk.innerHTML = '<svg class="i" aria-hidden="true"><use href="/icons.svg#i-heart"/></svg><span></span>'; lk.querySelector('span').textContent = m.likes ? String(m.likes) : '';
+  if (String(m.id).startsWith('mine-')) lk.disabled = true; else lk.onclick = () => likeMsg(m.id, lk);
+  const gap = document.createElement('span'); gap.className = 'wv-sp'; head.append(gap, lk);
   body.append(head, richText(m.text));
   const acts = document.createElement('div'); acts.className = 'wv-acts';
   const mk = (txt, label, fn) => { const k = document.createElement('button'); k.type = 'button'; k.textContent = txt; k.setAttribute('aria-label', label); k.title = label; k.onclick = fn; return k; };
   if (!String(m.id).startsWith('mine-')) {
-    const like = mk('♥', 'Like', () => likeMsg(m.id, like)); like.setAttribute('aria-pressed', String(W.liked.has(m.id)));
-    acts.append(like, mk('↩', 'Reply', () => { const x = $('#wText'); x.value = `@${m.name} ` + x.value.replace(/^@\S+\s/, ''); x.focus(); }));
+    acts.append(mk('↩', 'Reply', () => { const x = $('#wText'); x.value = `@${m.name} ` + x.value.replace(/^@\S+\s/, ''); x.focus(); }));
     if (!mine) acts.append(mk('⚑', 'Report spam', () => reportMsg(m.id, li)), mk('🔇', `Mute ${m.name} for me`, () => muteName(m.name)));
   }
   li.append(av, body, acts);
@@ -350,12 +356,12 @@ $('#wReacts').replaceChildren(...REACTS.map((e) => {
 
 // ---------------------------------------------------------------- chat
 function showErr(sel, msg) { const e = $(sel); e.textContent = msg || ''; e.hidden = !msg; }
-function renderMe() { $('#wMe').textContent = sess?.name || 'Name'; }
-$('#wMe').onclick = () => { $('#wName').value = sess?.named ? sess.name : store.get('name', ''); showErr('#wNameErr', ''); $('#wNameDlg').showModal(); $('#wName').select(); };
+function renderMe() { $('#wMe').textContent = ACCT?.user?.name || (sess?.named ? sess.name : '') || 'Sign in'; }
+
 let naming = null;
 async function setName(name) {
   naming = (async () => { await ensureSession();
-  sess = { ...(await api('whello', { ...creds(), name })), named: true }; store.set('sess:' + code, sess); store.set('name', name);
+  sess = { ...(await api('whello', { ...creds(), name, ...acctBody() })), named: true }; store.set('sess:' + code, sess); store.set('name', name);
   renderMe(); })();
   try { await naming; } finally { naming = null; }
 }
@@ -372,7 +378,9 @@ $('#wCompose').addEventListener('submit', async (e) => {
   const text = $('#wText').value.trim();
   if (!text) return;
   showErr('#wErr', '');
+  if (!ACCT.user) { ACCT.then = () => $('#wCompose').requestSubmit(); return openSignIn(); }
   try {
+    if (!sess?.signed) await joinSigned();
     if (naming) await naming.catch(() => {});
     await ensureSession(); renderMe();
     const asking = $('#wAsk').getAttribute('aria-pressed') === 'true';
@@ -380,7 +388,7 @@ $('#wCompose').addEventListener('submit', async (e) => {
     if (asking) { setAsk(false); toast('Question sent. The host sees it highlighted.'); }
     $('#wText').value = '';
     W.shown.add(r.id + ':');
-    $('#wMsgs').append(msgEl({ id: r.id, name: sess.name, text, ts: Date.now(), q: asking })); $('#wMsgs').scrollTop = $('#wMsgs').scrollHeight;
+    $('#wMsgs').append(msgEl({ id: r.id, name: sess.name, text, ts: Date.now(), q: asking, av: ACCT.av })); $('#wMsgs').scrollTop = $('#wMsgs').scrollHeight;
   } catch (err) {
     if (err.status === 401) { await renew().catch(() => {}); return showErr('#wErr', 'Your chat session ended. Send again.'); }
     showErr('#wErr', err.message);
@@ -520,7 +528,7 @@ W.muted = new Set(store.get('muted', []));
 async function likeMsg(id, btn) {
   if (W.liked.has(id)) return;
   W.liked.add(id); store.set('liked:' + code, [...W.liked].slice(-300)); btn?.setAttribute('aria-pressed', 'true');
-  const lk = $(`[data-id="${CSS.escape(id)}"] .wv-like`); if (lk) { const n = (Number(lk.textContent.replace(/\D/g, '')) || 0) + 1; lk.textContent = `♥ ${n}`; }
+  const lk = $(`[data-id="${CSS.escape(id)}"] .wv-like span`); if (lk) lk.textContent = String((Number(lk.textContent) || 0) + 1);
   try { await ensureSession(); await api('wsend', { ...creds(), type: 'like', msg: id }); } catch {}
 }
 async function reportMsg(id, li) {
@@ -799,3 +807,88 @@ $('#wRecSend').onclick = async () => {
 $('#wVoiceDlg').addEventListener('close', () => { if (VQ.rec?.state === 'recording') voiceStop(); });
 $('#wHand').onclick = voiceOpen;
 $('#wMic').onclick = voiceOpen;
+
+
+// ---------------------------------------------------------------- signing in to chat
+// Watching needs nothing. Chatting needs an account (Google, or email and password), so every message carries a real
+// name and, if the viewer has one, their photo. It's the same account as the studio: signing in here signs in there.
+const acctToken = () => { try { return JSON.parse(localStorage.getItem('gather:acctToken') || 'null') || ''; } catch { return ''; } };
+const acctBody = () => (ACCT.user && acctToken() ? { acct: acctToken(), ...(ACCT.av ? { av: ACCT.av } : {}) } : {});
+async function acctApi(action, body = {}) {
+  const t = acctToken();
+  const r = await fetch(`/api/account?action=${action}`, { method: 'POST', headers: { 'Content-Type': 'application/json', ...(t ? { Authorization: `Bearer ${t}` } : {}) }, body: JSON.stringify(body) });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) { const e = new Error(j.error || 'Something went wrong. Try again.'); e.status = r.status; throw e; }
+  return j;
+}
+/** A 48-pixel copy of the account photo, small enough to travel with each chat message. */
+async function smallAvatar(src) {
+  if (!src) return '';
+  try {
+    const img = new Image(); img.src = src; await img.decode();
+    const c = document.createElement('canvas'); c.width = c.height = 48; const x = c.getContext('2d');
+    const s = Math.min(img.naturalWidth, img.naturalHeight);
+    x.drawImage(img, (img.naturalWidth - s) / 2, (img.naturalHeight - s) / 2, s, s, 0, 0, 48, 48);
+    const out = c.toDataURL('image/jpeg', 0.8); return out.length <= 9000 ? out : '';
+  } catch { return ''; }
+}
+async function setAccount(user, token) {
+  if (token) localStorage.setItem('gather:acctToken', JSON.stringify(token));
+  ACCT.user = user; ACCT.av = await smallAvatar(user?.avatar);
+  renderMe();
+}
+/** Join (or re-join) the chat as the signed-in account. */
+async function joinSigned() {
+  await ensureSession();
+  sess = { ...(await api('whello', { ...creds(), name: ACCT.user.name, ...acctBody() })), named: true };
+  store.set('sess:' + code, sess); renderMe();
+}
+function renderSignMode() {
+  const up = ACCT.up;
+  $('#wSignH').textContent = up ? 'Create your account' : 'Sign in to chat';
+  $('#wSignNameRow').hidden = $('#wSignAgreeRow').hidden = !up;
+  $('#wSignGo').textContent = up ? 'Create account and chat' : 'Sign in';
+  $('#wSignQ').textContent = up ? 'Have an account?' : 'New here?';
+  $('#wSignMode').textContent = up ? 'Sign in' : 'Create an account';
+  $('#wSignPass').autocomplete = up ? 'new-password' : 'current-password';
+  showErr('#wSignErr', '');
+}
+let googleReady = null;
+function openSignIn() {
+  renderSignMode();
+  googleReady ||= api('config', {}).then((c) => { configureGoogle(c.googleClientId); }).catch(() => {});
+  googleReady.then(() => { $('#wGoogle').hidden = $('#wOr').hidden = $('#wSignLegal').hidden = !googleConfigured(); });
+  $('#wSignDlg').showModal();
+}
+async function signedIn(r) {
+  await setAccount(r.user, r.token);
+  $('#wSignDlg').close();
+  await joinSigned().catch((err) => showErr('#wErr', err.message));
+  toast(`Signed in as ${r.user.name}.`);
+  const next = ACCT.then; ACCT.then = null; if (next) next();
+}
+$('#wSignMode').onclick = () => { ACCT.up = !ACCT.up; renderSignMode(); };
+$('#wGoogle').onclick = async () => {
+  showErr('#wSignErr', ''); $('#wGoogle').setAttribute('aria-busy', 'true');
+  try { const accessToken = await googleSignInToken(); await signedIn(await acctApi('google', { accessToken, agree: true })); }
+  catch (err) { showErr('#wSignErr', err.message); }
+  finally { $('#wGoogle').removeAttribute('aria-busy'); }
+};
+$('#wSignForm').addEventListener('submit', async (e) => {
+  e.preventDefault(); showErr('#wSignErr', '');
+  const email = $('#wSignEmail').value.trim(), password = $('#wSignPass').value;
+  if (!email || !password) return showErr('#wSignErr', 'Type your email and password.');
+  if (ACCT.up && !$('#wSignAgree').checked) return showErr('#wSignErr', 'Tick the box to agree to the Terms and Privacy policy first.');
+  $('#wSignGo').setAttribute('aria-busy', 'true');
+  try { await signedIn(await acctApi(ACCT.up ? 'signup' : 'login', ACCT.up ? { email, password, name: $('#wSignName').value.trim(), agree: true } : { email, password })); }
+  catch (err) { showErr('#wSignErr', err.message); }
+  finally { $('#wSignGo').removeAttribute('aria-busy'); }
+});
+$('#wSignDlg').addEventListener('close', () => { if (!ACCT.user) ACCT.then = null; });
+// Signed in already (here or in the studio): pick the account up quietly.
+if (acctToken()) acctApi('me').then((r) => setAccount(r.user)).catch(() => {});
+// Your name chip: signed-out viewers sign in from it; signed-in viewers can sign out.
+$('#wMe').onclick = () => {
+  if (!ACCT.user) return openSignIn();
+  if (confirm(`Signed in as ${ACCT.user.name}. Sign out of the chat?`)) { localStorage.removeItem('gather:acctToken'); ACCT.user = null; ACCT.av = ''; renew().then(renderMe).catch(() => {}); toast('Signed out.'); }
+};

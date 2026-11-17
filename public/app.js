@@ -667,6 +667,7 @@ async function onServer(m) {
     }
     case 'state': S.state = m.state; renderAll(); break;
     case 'chat': addMsg(m.msg); break;
+    case 'like': setLikes(m.id, m.n, m.from); break;
     case 'feed': for (const it of m.items || []) addExternal(it); break;
     case 'viewer-want': viewerWant(m.vid); break;
     case 'vsignal': viewerSignal(m.from, m.data); break;
@@ -1234,6 +1235,7 @@ function addExternal(m) {
   if (m.paid) { const amt = document.createElement('span'); amt.className = 'paid-amt'; amt.textContent = m.paid; who.append(amt); }
   const txt = document.createElement('div'); txt.className = 'txt'; txt.textContent = m.text;
   li.append(who, txt, msgActions(m));
+  chatShell(li, { id: m.id, name: m.name, ts: m.ts, av: m.av, likes: m.likes });
   appendLog(li);
   applyModeration(li);
   const log = $('#msgs'); while (log.children.length > 300) log.firstChild.remove();
@@ -1286,6 +1288,42 @@ function timeoutMenu() {
   timeoutPop.append(menu);
   document.body.append(timeoutPop);
   return timeoutPop;
+}
+// Every chat line: avatar, name, time, a like button, then the message.
+const CHAT_HUES = [210, 262, 330, 20, 145, 190, 45, 290];
+function chatColor(name) { let h = 0; for (const c of String(name || '')) h = (h * 31 + c.charCodeAt(0)) >>> 0; return `hsl(${CHAT_HUES[h % CHAT_HUES.length]} 70% 58%)`; }
+function chatAvatar(name, img) {
+  const a = document.createElement('span'); a.className = 'cav'; a.setAttribute('aria-hidden', 'true');
+  if (img && /^data:image\/(jpeg|png|webp);base64,/.test(img)) { const i = document.createElement('img'); i.src = img; i.alt = ''; a.append(i); }
+  else { a.style.background = chatColor(name); a.textContent = String(name || '?').trim().split(/\s+/).slice(0, 2).map((w) => w[0] || '').join('').toUpperCase() || '?'; }
+  return a;
+}
+function chatTime(ts) { const t = document.createElement('time'); const d = new Date(ts || Date.now()); t.dateTime = d.toISOString(); t.textContent = d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }); return t; }
+const LIKED = new Set();
+function likeBtn(id, n = 0) {
+  const b = document.createElement('button'); b.type = 'button'; b.className = 'clike'; b.dataset.like = id;
+  b.setAttribute('aria-label', 'Like'); b.setAttribute('aria-pressed', String(LIKED.has(id)));
+  b.innerHTML = '<svg class="i" aria-hidden="true"><use href="/icons.svg#i-heart"/></svg><span></span>';
+  b.querySelector('span').textContent = n ? String(n) : '';
+  b.onclick = () => {
+    if (!S.studio || LIKED.has(id)) return;
+    LIKED.add(id); b.setAttribute('aria-pressed', 'true');
+    const sp = b.querySelector('span'); sp.textContent = String((Number(sp.textContent) || 0) + 1);
+    b.classList.remove('pop'); void b.offsetWidth; b.classList.add('pop');
+    wsSend({ type: 'like', id });
+  };
+  return b;
+}
+function setLikes(id, n, from) {
+  if (from === S.id) LIKED.add(id);
+  for (const b of document.querySelectorAll(`#msgs [data-like="${CSS.escape(id)}"]`)) { b.querySelector('span').textContent = n ? String(n) : ''; b.setAttribute('aria-pressed', String(LIKED.has(id))); }
+}
+/** Wrap a message: avatar on the left, then the name line (with time and like) and the words. */
+function chatShell(li, { id, name, ts, av, likes }) {
+  const who = li.querySelector('.who');
+  if (who) { who.append(chatTime(ts)); const sp = document.createElement('span'); sp.className = 'cgrow'; who.append(sp, likeBtn(id, likes)); }
+  li.classList.add('has-av');
+  li.prepend(chatAvatar(name, av));
 }
 function msgActions(m) {
   const bar = document.createElement('div'); bar.className = 'mact';
@@ -3557,8 +3595,7 @@ function addMsg(msg) {
   li.className = 'msg' + (mine ? ' me' : '');
   const who = document.createElement('div'); who.className = 'who';
   const b = document.createElement('b'); b.textContent = mine ? 'You' : msg.name;
-  const time = document.createElement('span'); time.textContent = new Date(msg.ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-  who.append(b, time);
+  who.append(b);
   const txt = document.createElement('div'); txt.className = 'txt';
   // Linkify safely: text nodes + anchors only.
   const parts = msg.text.split(/(https?:\/\/[^\s<]+)/g);
@@ -3570,6 +3607,7 @@ function addMsg(msg) {
   pushFeed(fm);
   setMsgData(li, fm);
   li.append(who, txt, msgActions(fm));
+  chatShell(li, { id: msg.id, name: msg.name, ts: msg.ts });
   appendLog(li);
   applyModeration(li);
   if (!mine && S.tab !== 'chat') { S.unread++; $('#chatBadge').hidden = false; }

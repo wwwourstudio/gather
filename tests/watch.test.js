@@ -2,6 +2,16 @@
 // (a claim until the host confirms), and the rules around them. API checks first, then one full browser run.
 const { chromium } = require('playwright');
 const B = process.env.GATHER_URL || 'http://localhost:8080';
+// Chatting on the watch page needs an account: sign up from the "Sign in to chat" box (email + password).
+const signUp = async (page, name) => {
+  if (!(await page.isVisible('#wSignDlg'))) await page.click('#wMe');
+  await page.waitForSelector('#wSignDlg[open]');
+  if (!(await page.isVisible('#wSignNameRow'))) await page.click('#wSignMode');
+  await page.fill('#wSignName', name); await page.fill('#wSignEmail', `${name.toLowerCase()}-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}@example.com`);
+  await page.fill('#wSignPass', 'correct horse battery'); await page.check('#wSignAgree'); await page.click('#wSignGo');
+  await page.waitForFunction(() => !document.querySelector('#wSignDlg').open, null, { timeout: 10000 });
+};
+
 const post = (a, b) => fetch(`${B}/api/studio?action=${a}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(b) }).then(async (r) => ({ status: r.status, ...(await r.json().catch(() => ({}))) }));
 const feed = (code) => fetch(`${B}/api/studio?action=wfeed&studio=${code}`).then(async (r) => ({ cache: r.headers.get('cache-control') || '', ...(await r.json()) }));
 let ok = true;
@@ -69,8 +79,9 @@ const check = (name, cond, detail = '') => { console.log(`${cond ? 'ok  ' : 'FAI
     check('chat collapses from its header, and a Chat tab appears', await w.evaluate(() => document.querySelector('#wv').classList.contains('no-chat')) && await w.isVisible('#wChatReopen'));
     await w.click('#wChatReopen');
     check('…and the Chat tab brings it back', await w.evaluate(() => !document.querySelector('#wv').classList.contains('no-chat')) && await w.isVisible('#wText'));
-    await w.click('#wMe'); await w.fill('#wName', 'Jordan'); await w.press('#wName', 'Enter');
     await w.fill('#wText', 'Hello from the watch page'); await w.click('#wSend');
+    check('a signed-out viewer who sends a message is asked to sign in', await w.waitForSelector('#wSignDlg[open]', { timeout: 5000 }).then(() => true).catch(() => false));
+    await signUp(w, 'Jordan'); // the message waiting in the box goes out once they're signed in
     const inStudio = await a.waitForFunction(() => [...document.querySelectorAll('#msgs .msg.ext')].some((li) => /Hello from the watch page/.test(li.textContent)), null, { timeout: 10000 }).then(() => true).catch(() => false);
     check('viewer chat reaches the studio chat', inStudio);
     await w.click('#wSuperBtn'); await w.click('#wAmounts button:has-text("$10")'); await w.fill('#wScName', 'Jordan'); await w.fill('#wScText', 'Shout-out!');
