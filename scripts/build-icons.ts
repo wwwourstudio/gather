@@ -17,7 +17,7 @@ const ICONS = [
   'monitor', 'monitor-up', 'palette', 'pause', 'phone', 'play', 'plus', 'qr-code', 'radio', 'repeat', 'rotate-ccw', 'search', 'send', 'shield-check',
   'sliders-horizontal', 'sparkles', 'square', 'trash-2', 'upload', 'user', 'users', 'video', 'video-off', 'x',
   'activity', 'log-in', 'user-plus', 'monitor-x', 'presentation', 'command',
-  'volume-2', 'volume-x', 'maximize', 'hand', 'smile', 'scissors', 'heart', 'monitor-play', 'clapperboard', 'reply', 'share-2',
+  'volume-2', 'volume-x', 'maximize', 'hand', 'smile', 'scissors', 'heart', 'monitor-play', 'clapperboard', 'reply', 'share-2', 'star',
   ['pip', 'picture-in-picture-2'], ['tip', 'circle-dollar-sign'], // [id in the sprite, Lucide file]
 ] as const;
 
