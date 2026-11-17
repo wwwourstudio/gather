@@ -30,6 +30,7 @@ const URL0 = process.env.GATHER_URL || 'http://localhost:8080';
     // The scene strip is one tab stop; arrows move inside it.
     const stops = await page.evaluate(() => [...document.querySelectorAll('#sceneStrip > *')].filter((b) => b.tabIndex >= 0).length);
     check('the scene strip is a single tab stop', stops === 1, `${stops} stops`);
+    await page.waitForSelector('#sceneStrip [tabindex="0"]');
     await page.focus('#sceneStrip [tabindex="0"]');
     const before = await focused(); await page.keyboard.press('ArrowRight'); const after = await focused();
     check('arrow keys move between scenes', before !== after, `${before} → ${after}`);
