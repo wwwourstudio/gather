@@ -26,8 +26,8 @@ const wait = (p, fn, arg, ms = 10000) => p.waitForFunction(fn, arg, { timeout: m
 
     const v = await mk(bv);
     await v.goto(B + '/w/' + short); // the short link, as a viewer would type it
-    check('watch page: Raise hand, no call-in “Ask to join”', await wait(v, () => !document.querySelector('#wHand').hidden) && !(await v.$('#wJoin')));
-    await v.click('#wHand'); await v.fill('#wVoiceName', 'Jordan');
+    check('watch page: voice questions from the chat box, no call-in “Ask to join”', await wait(v, () => !document.querySelector('#wMic').hidden) && !(await v.$('#wJoin')));
+    await v.click('#wMic'); await v.fill('#wVoiceName', 'Jordan');
     await v.click('#wRecBtn'); await v.waitForTimeout(3200); await v.click('#wRecBtn');
     check('a recording is ready to listen back', await wait(v, () => !document.querySelector('#wRecPlay').hidden && !document.querySelector('#wRecSend').disabled));
     await v.click('#wRecSend');

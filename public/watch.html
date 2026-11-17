@@ -117,27 +117,32 @@
           </div>
         </div>
       <div class="wv-strip">
-          <div class="wv-reacts" id="wReacts" role="group" aria-label="React"></div>
           <div class="wv-hype" id="wHype" title="Hype: how much the room is reacting"><span>🔥</span><i><b id="wHypeBar"></b></i><em id="wHypeLvl">Warm</em></div>
           <div class="wv-sources" id="wTabs" role="tablist" aria-label="Watch on" hidden></div>
           <div class="wv-links" id="wLinks"></div>
           <span class="wv-sp"></span>
           <button class="btn wv-clip" id="wClip" type="button" hidden><svg class="i" aria-hidden="true"><use href="/icons.svg#i-scissors"/></svg><span>Clip</span></button>
-          <button class="btn wv-hand" id="wHand" type="button" hidden><svg class="i" aria-hidden="true"><use href="/icons.svg#i-hand"/></svg><span>Raise hand</span></button>
           <button class="btn wv-supers" id="wSuperStrip" type="button" hidden><svg class="i" aria-hidden="true"><use href="/icons.svg#i-tip"/></svg><span>Super chat</span></button>
         </div>
         <div class="wv-host-sk" aria-hidden="true"><span class="sk sk-circle"></span><div><span class="sk sk-line" style="--w:46%"></span><span class="sk sk-line" style="--w:28%"></span><span class="sk sk-line sm" style="--w:64%"></span></div></div>
       <section class="wv-host" id="wHost" aria-label="About the streamer" hidden>
+        <h2 class="wv-host-title" id="wHostTitle">Live show</h2>
         <div class="wv-host-top">
           <span class="wv-host-av" id="wHostAv" aria-hidden="true"></span>
           <div class="wv-host-id">
-            <h2 id="wHostTitle">Live show</h2>
-            <p><b id="wHostName"></b><span id="wHostHandle"></span><span id="wHostMeta"></span></p>
+            <p class="wv-host-name"><b id="wHostName"></b><span class="wv-host-live" id="wHostLive" hidden>Live</span></p>
+            <p class="wv-host-sub"><span id="wHostHandle"></span><span id="wHostSubs"></span></p>
           </div>
+          <button type="button" class="btn wv-subscribe" id="wSub" hidden><svg class="i" aria-hidden="true"><use href="/icons.svg#i-bell"/></svg><span id="wSubText">Subscribe</span></button>
+          <span class="wv-host-sp"></span>
           <div class="wv-share" role="group" aria-label="Share this show"><button type="button" class="wv-sh" data-share="x" aria-label="Share on X" data-tip="X"><svg aria-hidden="true"><use href="/brands.svg#b-x"/></svg></button><button type="button" class="wv-sh" data-share="facebook" aria-label="Share on Facebook" data-tip="Facebook"><svg aria-hidden="true"><use href="/brands.svg#b-facebook"/></svg></button><button type="button" class="wv-sh" data-share="linkedin" aria-label="Share on LinkedIn" data-tip="LinkedIn"><svg aria-hidden="true"><use href="/brands.svg#b-linkedin"/></svg></button><button type="button" class="wv-sh" data-share="reddit" aria-label="Share on Reddit" data-tip="Reddit"><svg aria-hidden="true"><use href="/brands.svg#b-reddit"/></svg></button><button type="button" class="wv-sh" data-share="whatsapp" aria-label="Share on WhatsApp" data-tip="WhatsApp"><svg aria-hidden="true"><use href="/brands.svg#b-whatsapp"/></svg></button><button type="button" class="wv-sh copy" id="wShare" aria-label="Copy this page’s link" data-tip="Copy link"><svg class="i" aria-hidden="true"><use href="/icons.svg#i-link"/></svg></button></div>
         </div>
-        <p class="wv-host-about" id="wHostAbout"></p>
-        <ul class="wv-host-links" id="wHostLinks"></ul>
+        <div class="wv-host-desc" id="wHostDesc">
+          <p class="wv-host-meta" id="wHostMeta"></p>
+          <p class="wv-host-about" id="wHostAbout"></p>
+          <button type="button" class="wv-more" id="wHostMore" hidden>Show more</button>
+          <ul class="wv-host-links" id="wHostLinks"></ul>
+        </div>
       </section>
       </div>
 
@@ -180,6 +185,26 @@
   </main>
 </div>
 
+<dialog class="modal" id="wSubDlg" aria-labelledby="wSubH">
+  <div class="modal-card glass raised wv-sheet wv-subdlg">
+    <button type="button" class="icon-btn sm modal-close" data-close aria-label="Close"><svg class="i sm" aria-hidden="true"><use href="/icons.svg#i-x"/></svg></button>
+  <div class="wv-sub-badge"><svg class="i" aria-hidden="true"><use href="/icons.svg#i-bell-ring"/></svg></div>
+  <div id="wSubAsk">
+    <h2 id="wSubH">Never miss <span id="wSubWho">a show</span></h2>
+    <p class="sub">Get one email the moment they go live. No spam, unsubscribe in one click.</p>
+    <form class="wv-subform" id="wSubForm" autocomplete="on">
+      <label class="fld"><span>Email</span><input class="input" id="wSubEmail" type="email" inputmode="email" autocomplete="email" placeholder="you@example.com" required></label>
+      <button class="btn primary block" id="wSubGo"><svg class="i" aria-hidden="true"><use href="/icons.svg#i-bell"/></svg>Subscribe</button>
+      <p class="wv-err" id="wSubErr" hidden></p>
+    </form>
+  </div>
+  <div id="wSubDone" hidden>
+    <h2>Check your inbox</h2>
+    <p class="sub" id="wSubDoneP">We sent a confirmation link. Tap it and you’re in.</p>
+    <form method="dialog"><button class="btn block">Done</button></form>
+  </div>
+  </div>
+</dialog>
 <dialog class="modal" id="wSuperDlg" aria-labelledby="wSuperH">
   <form method="dialog" class="modal-card glass raised wv-sheet" id="wSuperForm">
     <button type="button" class="icon-btn sm modal-close" data-close aria-label="Close"><svg class="i sm" aria-hidden="true"><use href="/icons.svg#i-x"/></svg></button>

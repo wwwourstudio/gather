@@ -105,7 +105,7 @@ function render(info) {
   $('#wSuperBtn').hidden = !w.supers || w.chat === false;
   $('#wSuperStrip').hidden = $('#wSuperBtn').hidden; // the same super chat, where viewers already look
   // Voice questions replace the old call-in: raise a hand, record, the host decides.
-  $('#wHand').hidden = $('#wMic').hidden = w.voice === false || !navigator.mediaDevices?.getUserMedia || !window.MediaRecorder;
+  $('#wMic').hidden = w.voice === false || !navigator.mediaDevices?.getUserMedia || !window.MediaRecorder;
   $('#wChatState').textContent = !info.found ? '' : w.chat === false ? 'Chat is off' : w.slow ? `Slow mode · ${w.slow}s` : '';
   $('#wCompose').hidden = !info.found || w.chat === false;
   renderChat(info.chat || []);
@@ -357,7 +357,7 @@ function floatReacts(r) {
   W.mine = {};
 }
 W.mine = {};
-$('#wReacts').replaceChildren(...REACTS.map((e) => {
+$('#wReacts')?.replaceChildren(...REACTS.map((e) => {
   const b = document.createElement('button'); b.type = 'button'; b.textContent = e; b.setAttribute('aria-label', 'React ' + e);
   b.onclick = async () => {
     floatOne(e); W.mine[e] = (W.mine[e] || 0) + 1;
@@ -823,7 +823,6 @@ $('#wRecSend').onclick = async () => {
   } catch (e) { showErr('#wVoiceErr', e.message); $('#wRecSend').disabled = false; }
 };
 $('#wVoiceDlg').addEventListener('close', () => { if (VQ.rec?.state === 'recording') voiceStop(); });
-$('#wHand').onclick = voiceOpen;
 $('#wMic').onclick = voiceOpen;
 
 
@@ -916,14 +915,16 @@ $('#wMe').onclick = () => {
 function initialsOf(n) { return String(n || '?').trim().split(/\s+/).slice(0, 2).map((w) => w[0] || '').join('').toUpperCase() || '?'; }
 function renderHost(info) {
   const card = $('#wHost');
-  if (!info.found && !info.ended) { card.hidden = true; return; }
+  if (!info.found && !info.ended && !(info.offline && info.host)) { card.hidden = true; return; }
   card.hidden = false;
   const h = info.host || {}, w = info.watch || {};
-  $('#wHostTitle').textContent = info.title || 'Live show';
+  $('#wHostTitle').textContent = info.offline ? `${h.name || 'This streamer'} isn’t live right now` : info.title || 'Live show';
   $('#wHostName').textContent = h.name || 'The host';
   $('#wHostHandle').textContent = h.handle ? '@' + h.handle : '';
   const live = info.live?.on || W.direct.state === 'live';
-  $('#wHostMeta').textContent = info.ended ? 'Show ended' : [live ? (info.live?.on ? `Live for ${clockText(info.live.since)}` : 'On air now') : 'Not on air', info.viewers ? `${info.viewers} watching` : ''].filter(Boolean).join(' · ');
+  $('#wHostLive').hidden = !live || !!info.ended || !!info.offline;
+  renderSub(h);
+  $('#wHostMeta').textContent = info.offline ? 'Subscribe to get an email when they go live.' : info.ended ? 'Show ended' : [live ? (info.live?.on ? `Live for ${clockText(info.live.since)}` : 'On air now') : 'Not on air', info.viewers ? `${info.viewers} watching` : ''].filter(Boolean).join(' · ');
   const av = $('#wHostAv');
   if (!av.dataset.done) {
     av.textContent = initialsOf(h.name); av.style.background = nameColor(h.name || '?');
@@ -954,3 +955,78 @@ document.querySelectorAll('[data-share]').forEach((b) => b.addEventListener('cli
 $('#wShareTop').onclick = () => { if (navigator.share) navigator.share({ title: document.title, url: location.origin + location.pathname }).catch(() => {}); else $('#wHost').scrollIntoView({ behavior: 'smooth', block: 'center' }); };
 
 $('#wEmptyShare').onclick = () => $('#wShareTop').click();
+
+// ---------------------------------------------------------------- subscribe: an email when the streamer goes live
+const SUBS = { get: () => { try { return JSON.parse(localStorage.getItem('gather:subs') || '{}'); } catch { return {}; } },
+  set: (o) => { try { localStorage.setItem('gather:subs', JSON.stringify(o)); } catch {} } };
+const subKey = (h) => (h?.handle || h?.name || '').toLowerCase();
+function renderSub(h) {
+  const btn = $('#wSub'), on = !!SUBS.get()[subKey(h)];
+  W.subHost = h;
+  btn.hidden = !h?.alerts;
+  btn.classList.toggle('on', on);
+  btn.setAttribute('aria-pressed', String(on));
+  $('#wSubText').textContent = on ? 'Subscribed' : 'Subscribe';
+  btn.querySelector('use').setAttribute('href', '/icons.svg#i-' + (on ? 'bell-ring' : 'bell'));
+  const n = h?.subs || 0;
+  $('#wHostSubs').textContent = h?.alerts ? `${n.toLocaleString()} subscriber${n === 1 ? '' : 's'}` : '';
+}
+$('#wSub').onclick = async () => {
+  const h = W.subHost || {}, all = SUBS.get(), t = all[subKey(h)];
+  if (t) { // already subscribed here: one tap to stop
+    if (!confirm(`Stop getting emails when ${h.name || 'they'} go live?`)) return;
+    try { await api('wunsub', { t: t === true ? '' : t }); } catch {}
+    delete all[subKey(h)]; SUBS.set(all); renderSub(h); toast('Unsubscribed. You won’t get live alerts.');
+    return;
+  }
+  $('#wSubWho').textContent = h.name ? `${h.name} live` : 'a show';
+  $('#wSubAsk').hidden = false; $('#wSubDone').hidden = true; $('#wSubErr').hidden = true;
+  if (!$('#wSubEmail').value && ACCT?.user?.email) $('#wSubEmail').value = ACCT.user.email;
+  $('#wSubDlg').showModal(); $('#wSubEmail').focus();
+};
+$('#wSubForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const go = $('#wSubGo'); go.disabled = true; $('#wSubErr').hidden = true;
+  try {
+    const r = await api('wsub', { studio: W.info?.handle || W.code || code, email: $('#wSubEmail').value.trim(), origin: location.origin });
+    if (r.already) { const all = SUBS.get(); all[subKey(W.subHost)] = all[subKey(W.subHost)] || true; SUBS.set(all); renderSub(W.subHost); $('#wSubDlg').close(); toast('You’re already subscribed.'); return; }
+    $('#wSubDoneP').textContent = `We sent a link to ${$('#wSubEmail').value.trim()}. Tap it and you’re in.`;
+    $('#wSubAsk').hidden = true; $('#wSubDone').hidden = false;
+  } catch (err) { $('#wSubErr').textContent = err.message; $('#wSubErr').hidden = false; }
+  finally { go.disabled = false; }
+});
+// Landing here from an email: confirm the subscription, or unsubscribe.
+(async () => {
+  const q = new URLSearchParams(location.search), ok = q.get('subok'), off = q.get('unsub');
+  if (!ok && !off) return;
+  q.delete('subok'); q.delete('unsub');
+  history.replaceState(null, '', location.pathname + (q.toString() ? '?' + q : ''));
+  try {
+    if (ok) {
+      const r = await api('wsubok', { t: ok });
+      const all = SUBS.get(); all[(r.handle || r.name).toLowerCase()] = r.t; SUBS.set(all);
+      if (W.subHost) renderSub(W.subHost);
+      toast(`You’re subscribed. We’ll email you when ${r.name || 'they'} go live.`);
+    } else {
+      const r = await api('wunsub', { t: off });
+      const all = SUBS.get(); for (const k of Object.keys(all)) if (all[k] === off) delete all[k]; SUBS.set(all);
+      if (W.subHost) renderSub(W.subHost);
+      toast(r.name ? `Unsubscribed from ${r.name}. No more live alerts.` : 'Unsubscribed.');
+    }
+  } catch (err) { toast(err.message, true); }
+})();
+// The about text shows in full when it's short; longer ones open with "Show more".
+$('#wHostMore').onclick = () => { const on = $('#wHostDesc').classList.toggle('open'); $('#wHostMore').textContent = on ? 'Show less' : 'Show more'; };
+new ResizeObserver(() => { const p = $('#wHostAbout'); $('#wHostMore').hidden = !$('#wHostDesc').classList.contains('open') && p.scrollHeight <= p.clientHeight + 2; }).observe($('#wHostAbout'));
+// The video leaves exactly the card's height free under it (desktop), however much the streamer wrote.
+new ResizeObserver(() => {
+  const box = $('#wStageBox'), card = $('#wHost');
+  if (innerWidth <= 900 || card.hidden) box.style.removeProperty('--hostH');
+  else box.style.setProperty('--hostH', card.offsetHeight + 12 + 'px');
+}).observe($('#wHost'));
+
+// Phones: the streamer card starts as one line (photo, name, Subscribe); a tap opens the title, share and about.
+$('#wHost').addEventListener('click', (e) => {
+  if (innerWidth > 900 || e.target.closest('button, a')) return;
+  $('#wHost').classList.toggle('open');
+});
