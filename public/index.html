@@ -52,56 +52,29 @@
       <!-- Landing: what you see before you're in a studio -->
       <div class="landing" id="landing">
         <div class="land-copy">
-          <p class="land-kicker"><span class="lk-dot"></span>Free · nothing to install · up to six on stage</p>
-          <h1>Go live from your browser.<br><span>Bring your audience home.</span></h1>
-          <p class="land-sub">Host with guests, stream to YouTube and Twitch at once, and give viewers a page of your own to watch, chat, ask and tip.</p>
+          <h1>Your show, live from the browser.</h1>
+          <p class="land-sub">Bring guests on stage, stream to YouTube and Twitch, and give viewers one page of your own to watch and chat.</p>
           <form class="slate" id="landClaim" autocomplete="off" aria-label="Claim your watch page">
-            <label class="slate-host" for="landHandle" id="landHost">gather/w/</label>
+            <label class="slate-host" for="landHandle" id="landHost">/w/</label>
             <input id="landHandle" maxlength="24" spellcheck="false" autocapitalize="off" placeholder="yourname" aria-describedby="landClaimNote">
-            <button class="btn primary lg" id="landClaimGo">Claim it</button>
+            <button class="btn primary" id="landClaimGo">Claim it</button>
           </form>
-          <p class="slate-note" id="landClaimNote">One watch page for every show. Viewers bookmark it once.</p>
+          <p class="slate-note" id="landClaimNote">Your link: <b id="landLink"></b></p>
           <div class="land-cta">
-            <button class="btn lg" id="enterStage"><svg class="i" aria-hidden="true"><use href="/icons.svg#i-radio"/></svg>Start a show now</button>
-            <span class="land-or">or</span>
+            <button class="btn" id="enterStage">Start a show now</button>
             <form class="land-join" id="landJoin" autocomplete="off">
               <input class="input" id="landCode" placeholder="Invite link or code" aria-label="Invite link or studio code" spellcheck="false">
-              <button class="btn lg" id="landJoinGo">Join</button>
+              <button class="btn" id="landJoinGo">Join</button>
             </form>
           </div>
+          <ol class="land-steps">
+            <li><b>Claim your link</b><span>The same address every show, so viewers bookmark it once.</span></li>
+            <li><b>Bring guests on stage</b><span>Up to five people join from a link. No installs, no accounts.</span></li>
+            <li><b>Go live</b><span>On your page, and on YouTube, Twitch or Kick at the same time.</span></li>
+          </ol>
           <div class="land-foot">
             <button class="btn link" id="heroSchedule">Schedule a show for later</button>
-            <span aria-hidden="true">·</span>
             <p class="land-legal"><a href="/privacy">Privacy</a> · <a href="/terms">Terms</a></p>
-          </div>
-        </div>
-        <div class="land-art" aria-hidden="true">
-          <div class="la-studio">
-            <div class="la-chrome"><i></i><i></i><i></i><span>Building in public</span><b class="la-golive"><svg class="i"><use href="/icons.svg#i-radio"/></svg>Live 12:04</b></div>
-            <div class="la-body">
-              <div class="la-stage">
-                <div class="la-tile talking"><span class="la-mono">MO</span><span class="la-meter"><i></i><i></i><i></i><i></i></span><span class="la-name">Maya</span></div>
-                <div class="la-tile t2"><span class="la-mono">JL</span><span class="la-name">Jordan</span></div>
-                <div class="la-tile t3"><span class="la-mono">SK</span><span class="la-name">Sam</span></div>
-                <div class="la-lower"><b>Building in public</b><span>Episode 12 · Ask us anything</span></div>
-                <div class="la-badge"><svg class="i"><use href="/icons.svg#i-eye"/></svg>gather/w/<b class="la-handle">yourname</b></div>
-              </div>
-              <ul class="la-chat">
-                <li><b>ren</b>that demo was clean</li>
-                <li class="tip"><b>sam · $5</b>for the coffee fund</li>
-                <li class="ask"><svg class="i"><use href="/icons.svg#i-hand"/></svg><b>lee</b>asked a voice question</li>
-                <li><b>ana</b>first time here 👋</li>
-              </ul>
-            </div>
-          </div>
-          <div class="la-phone">
-            <div class="la-ph-bar"><span class="la-live">Live</span><span class="la-ph-url">/w/<b class="la-handle">yourname</b></span></div>
-            <div class="la-ph-video"><span class="la-ph-pic"><i></i><i></i><i></i></span></div>
-            <ul class="la-ph-chat">
-              <li class="tip"><b>sam · $5</b>for the coffee fund</li>
-              <li><b>ana</b>first time here 👋</li>
-            </ul>
-            <div class="la-ph-input"><span>Say something…</span><i></i></div>
           </div>
         </div>
       </div>

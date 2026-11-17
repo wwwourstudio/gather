@@ -4892,7 +4892,6 @@ $('#enterTop').onclick = openInvite;
 $('#heroSchedule').onclick = () => openWizard();
 $('#enterStage').onclick = () => needAccountThen(() => openEnter('create'));
 // The landing's slate: claim a permanent watch-page name (signing up if needed), then open a studio.
-$('#landHost').textContent = location.host.replace(/^www\./, '') + '/w/';
 const landNote = (msg, err) => { $('#landClaimNote').textContent = msg; $('#landClaimNote').classList.toggle('err', !!err); };
 async function claimLanding(h) {
   $('#landClaimGo').setAttribute('aria-busy', 'true');
@@ -4910,15 +4909,13 @@ $('#landClaim').addEventListener('submit', (e) => {
   if (!acct.user) { landPending = h; landNote('Create a free account to keep this name. It takes a name, an email and a password.'); return openAccount('up'); }
   claimLanding(h);
 });
-$('#landHandle').addEventListener('input', () => {
-  landNote('One watch page for every show. Viewers bookmark it once.');
-  // The preview below updates as you type: your page's link appears on the stream badge and the viewer's phone.
-  const h = $('#landHandle').value.trim().toLowerCase().replace(/[^a-z0-9-]/g, '').slice(0, 24) || 'yourname';
-  $$('.la-handle').forEach((el) => (el.textContent = h));
-});
+// The note under the field spells out the whole link as you type it.
+const landLink = () => { if (!$('#landLink')) return; $('#landLink').textContent = `${location.host.replace(/^www\./, '')}/w/${$('#landHandle').value.trim().toLowerCase().replace(/[^a-z0-9-]/g, '') || 'yourname'}`; };
+$('#landHandle').addEventListener('input', () => { $('#landClaimNote').classList.remove('err'); $('#landClaimNote').innerHTML = 'Your link: <b id="landLink"></b>'; landLink(); });
+landLink();
 function renderLandSlate() {
   const h = acct.user?.handle;
-  if (h && document.activeElement !== $('#landHandle')) { $('#landHandle').value = h; $$('.la-handle').forEach((el) => (el.textContent = h)); }
+  if (h && document.activeElement !== $('#landHandle')) { $('#landHandle').value = h; landLink(); }
   $('#landClaimGo').textContent = h ? 'Start a show' : 'Claim it';
 }
 renderLandSlate();
