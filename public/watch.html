@@ -17,6 +17,8 @@
 <body>
 <!-- One screen, no page scroll: header, then the video with its control strip, then (beside or below) the chat. -->
 <div class="wv" id="wv">
+  <!-- The same live picture, blurred and enlarged behind the whole page, so the page takes on the show's colours. -->
+  <div class="wv-ambient" aria-hidden="true"><video id="wAmbientVid" muted playsinline autoplay disablepictureinpicture></video></div>
   <header class="wv-top">
     <a class="wv-logo" href="/" aria-label="gather home">gather<i>.</i></a>
     <div class="wv-title">
@@ -30,6 +32,7 @@
 
   <main class="wv-main">
     <section class="wv-stagecol" aria-label="Video">
+      <button class="wv-chat-reopen" id="wChatReopen" type="button" aria-label="Show chat (C)" data-tip="Show chat (C)"><svg class="i" aria-hidden="true"><use href="/icons.svg#i-message-square"/></svg><span>Chat</span><b class="wv-unread" id="wUnread" hidden></b></button>
       <div class="wv-stagebox" id="wStageBox">
         <div class="wv-player" id="wPlayerWrap" tabindex="-1">
           <div class="wv-video" id="wPlayer" hidden></div>
@@ -65,7 +68,7 @@
     </section>
 
     <aside class="wv-chat" id="wChat" aria-label="Live chat">
-      <header class="wv-chat-head"><div class="wv-tabs" role="tablist"><button type="button" role="tab" id="wTabChat" aria-selected="true">Live chat</button><button type="button" role="tab" id="wTabShop" aria-selected="false" hidden>Shop</button><button type="button" role="tab" id="wTabAbout" aria-selected="false">About</button></div><span class="wv-meta" id="wChatState"></span></header>
+      <header class="wv-chat-head"><div class="wv-tabs" role="tablist"><button type="button" role="tab" id="wTabChat" aria-selected="true">Live chat</button><button type="button" role="tab" id="wTabShop" aria-selected="false" hidden>Shop</button><button type="button" role="tab" id="wTabAbout" aria-selected="false">About</button></div><span class="wv-meta" id="wChatState"></span><button class="icon-btn sm wv-collapse" id="wChatCollapse" type="button" aria-label="Collapse chat (C)" data-tip="Collapse chat (C)"><svg class="i sm" aria-hidden="true"><use href="/icons.svg#i-chevron-right"/></svg></button></header>
       <section class="wv-about" id="wAbout" hidden aria-label="About this show">
         <h2 id="wAboutTitle"></h2>
         <p class="wv-meta" id="wAboutMeta"></p>

@@ -64,6 +64,11 @@ const check = (name, cond, detail = '') => { console.log(`${cond ? 'ok  ' : 'FAI
     const plays = await w.waitForFunction(() => document.querySelector('#wDirect')?.videoWidth > 0, null, { timeout: 30000 }).then(() => true).catch(() => false);
     check('the watch page plays the studio directly over WebRTC', plays);
     check('…and says "On air" with a viewer count', (await w.textContent('#wLiveText')) === 'On air' && /watching/.test(await w.textContent('#wViewers')));
+    check('the page glows with the live picture (blurred copy behind it)', await w.evaluate(() => document.querySelector('#wv').classList.contains('glow') && !!document.querySelector('#wAmbientVid').srcObject));
+    await w.click('#wChatCollapse');
+    check('chat collapses from its header, and a Chat tab appears', await w.evaluate(() => document.querySelector('#wv').classList.contains('no-chat')) && await w.isVisible('#wChatReopen'));
+    await w.click('#wChatReopen');
+    check('…and the Chat tab brings it back', await w.evaluate(() => !document.querySelector('#wv').classList.contains('no-chat')) && await w.isVisible('#wText'));
     await w.click('#wMe'); await w.fill('#wName', 'Jordan'); await w.press('#wName', 'Enter');
     await w.fill('#wText', 'Hello from the watch page'); await w.click('#wSend');
     const inStudio = await a.waitForFunction(() => [...document.querySelectorAll('#msgs .msg.ext')].some((li) => /Hello from the watch page/.test(li.textContent)), null, { timeout: 10000 }).then(() => true).catch(() => false);

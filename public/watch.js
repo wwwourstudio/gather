@@ -116,6 +116,7 @@ function renderChat(items) {
     if (W.shown.has(key)) continue;
     if (W.booted && sess?.named && m.name !== sess.name && new RegExp('@' + sess.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b', 'i').test(m.text)) toast(`${m.name} mentioned you.`);
     W.shown.add(key);
+    if (W.booted && $('#wv').classList.contains('no-chat')) { const u = $('#wUnread'); u.textContent = Math.min(99, (+u.textContent || 0) + 1); u.hidden = false; } // count what arrives while chat is folded
     log.querySelector(`[data-id="${CSS.escape(m.id)}"]`)?.remove();
     log.querySelector(`[data-sc="${CSS.escape(m.sc || '')}"]`)?.remove(); // my own pending claim, now confirmed
     log.append(msgEl(m));
@@ -235,7 +236,7 @@ async function startDirect() {
   const stream = new MediaStream(); video.srcObject = stream;
   pc.ontrack = (e) => { stream.addTrack(e.track); video.play().catch(() => {}); };
   // Switch from "Connecting…" to the picture only when a real frame has arrived, so viewers never see a black box.
-  video.addEventListener('loadeddata', () => { if (gen !== D.gen) return; D.state = 'live'; D.video = video; render(W.info); setMuted(video.muted); if (W.q !== 'auto') setQuality(W.q); }, { once: true });
+  video.addEventListener('loadeddata', () => { if (gen !== D.gen) return; D.state = 'live'; D.video = video; setAmbient(stream); render(W.info); setMuted(video.muted); if (W.q !== 'auto') setQuality(W.q); }, { once: true });
   pc.onicecandidate = (e) => { if (e.candidate) api('wrtcSignal', { ...creds(), data: { candidate: e.candidate } }).catch(() => {}); };
   pc.onconnectionstatechange = () => {
     if (pc.connectionState === 'connected' && D.state !== 'live') D.state = 'connecting'; // "live" once a frame shows
@@ -285,8 +286,16 @@ $('#wFull').onclick = () => {
 };
 document.addEventListener('fullscreenchange', () => { if (!document.fullscreenElement) $('#wv').classList.remove('theater'); if (document.fullscreenElement && innerHeight > innerWidth) setFill(true); });
 addEventListener('keydown', (e) => { if (e.key === 'Escape' && $('#wv').classList.contains('theater') && !document.fullscreenElement) $('#wv').classList.remove('theater'); });
+// The ambient glow behind the page plays the same stream (decoded once by the browser), blurred by CSS.
+function setAmbient(stream) {
+  const a = $('#wAmbientVid'); if (!a) return;
+  a.srcObject = stream || null; $('#wv').classList.toggle('glow', !!stream);
+  if (stream) a.play().catch(() => {});
+}
 function toggleChat() { const off = $('#wv').classList.toggle('no-chat'); $('#wChatToggle').setAttribute('aria-pressed', String(off)); $('#wChatToggle').setAttribute('aria-label', off ? 'Show chat (C)' : 'Hide chat (C)'); store.set('noChat', off); }
 $('#wChatToggle').onclick = toggleChat;
+$('#wChatCollapse').onclick = toggleChat;
+$('#wChatReopen').onclick = () => { toggleChat(); $('#wUnread').hidden = true; $('#wUnread').textContent = ''; $('#wText')?.focus(); };
 if (store.get('noChat', false) && innerWidth > 900) toggleChat();
 // Touch: tap the video to show the controls for a few seconds.
 $('#wPlayerWrap').addEventListener('pointerdown', (e) => { if (e.pointerType !== 'mouse') { $('#wPlayerWrap').classList.add('show-ctrls'); clearTimeout(W.ctrlT); W.ctrlT = setTimeout(() => $('#wPlayerWrap').classList.remove('show-ctrls'), 3500); } });
