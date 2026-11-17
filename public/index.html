@@ -553,37 +553,46 @@
   <div class="modal-card glass raised wide">
     <form method="dialog"><button class="icon-btn sm modal-close" aria-label="Close"><svg class="i sm" aria-hidden="true"><use href="/icons.svg#i-x"/></svg></button></form>
     <h2 id="liveH">Go live</h2>
+    <p class="live-lede">Stream to any mix of platforms at once. Your watch page streams too, always.</p>
     <div class="form live-body">
-
-          <div class="fld live-sec" id="liveSec"><span>Destinations <em>stream to several at once</em></span>
-            <ul class="dest-list" id="destList"></ul>
-            <div class="row">
-              <select id="destAdd" aria-label="Add a destination"><option value="">+ Add a destination</option><option value="youtube">YouTube</option><option value="twitch">Twitch</option><option value="kick">Kick</option><option value="facebook">Facebook</option><option value="x">X</option><option value="rumble">Rumble</option><option value="custom">Other (RTMP)</option></select>
-            </div>
-            <p class="hint" id="liveNote">Stream keys stay in this browser. Copy each one from the platform’s live dashboard.</p>
-            <button type="button" class="btn live block" id="liveBtn">Go live</button>
-            <p class="hint live-why" id="liveWhy" hidden></p>
-            <p class="hint live-stats" id="liveStats" hidden></p>
-            <div class="row" id="watchRow" hidden><button type="button" class="btn sm" id="watchCopy">Copy watch page link</button><span class="hint" style="margin:0">One page for viewers, with the live player and links to every platform.</span></div>
-            <div class="soft-card" id="liveOff" hidden><p><b>Going live isn’t available on this site yet.</b> You can record your show now and upload it to YouTube or anywhere else afterwards.</p><button type="button" class="btn sm" id="liveOffRec">Record instead</button></div>
-          </div>
-          <hr>
-          <div class="fld"><span>Format</span>
-            <div class="seg block" role="radiogroup" aria-label="Stage format" id="aspectSeg">
-              <button type="button" role="radio" data-aspect="16:9">Landscape 16:9</button>
-              <button type="button" role="radio" data-aspect="9:16">Vertical 9:16</button>
-            </div>
-            <p class="hint" style="margin-top:0">Vertical suits TikTok, Instagram Reels and YouTube Shorts. Recordings follow the format.</p>
-          </div>
-          <hr>
-          <div class="go-card">
-            <div><b>Plan a stream</b><span>Schedule a show with emailed invites, reminders and a thumbnail.</span></div>
-            <button class="btn" id="wizOpen">Plan a stream</button>
-          </div>
-          <div class="fld up-block" id="upBlock"><span>Upcoming</span>
-            <div id="upSignin" class="soft-card"><p>Sign in to schedule streams, email invites and keep them here.</p><button type="button" class="btn sm" id="upSigninBtn">Create an account or sign in</button></div>
-            <div id="upWrap" hidden><ul class="up-list" id="upList"></ul><p class="hint" id="upEmpty">Nothing scheduled. Use Plan a stream to add one.</p></div>
-          </div>
+      <section class="live-sec" id="liveSec" aria-label="Where to stream">
+        <h3 class="live-label">Stream to</h3>
+        <div class="plat-grid">
+          <button type="button" class="plat-tile" data-plat="youtube" style="--c:#ff2a3d"><i></i>YouTube</button>
+          <button type="button" class="plat-tile" data-plat="twitch" style="--c:#9b6bff"><i></i>Twitch</button>
+          <button type="button" class="plat-tile" data-plat="kick" style="--c:#53fc18"><i></i>Kick</button>
+          <button type="button" class="plat-tile" data-plat="facebook" style="--c:#1877f2"><i></i>Facebook</button>
+          <button type="button" class="plat-tile" data-plat="x" style="--c:#e7e9ea"><i></i>X</button>
+          <button type="button" class="plat-tile" data-plat="rumble" style="--c:#85c742"><i></i>Rumble</button>
+          <button type="button" class="plat-tile" data-plat="custom" style="--c:#8b9bb8"><i></i>Other</button>
+          <select id="destAdd" aria-label="Add a destination" tabindex="-1"><option value="">+ Add a destination</option><option value="youtube">YouTube</option><option value="twitch">Twitch</option><option value="kick">Kick</option><option value="facebook">Facebook</option><option value="x">X</option><option value="rumble">Rumble</option><option value="custom">Other (RTMP)</option></select>
+        </div>
+        <ul class="dest-list" id="destList"></ul>
+        <p class="hint" id="liveNote">Stream keys stay in this browser. Copy each one from the platform’s live dashboard.</p>
+        <div class="watch-card" id="watchRow" hidden>
+          <svg class="i" aria-hidden="true"><use href="/icons.svg#i-monitor-play"/></svg>
+          <span><b>Your watch page</b><small>Always on: the live player, chat and super chats.</small></span>
+          <button type="button" class="btn sm" id="watchCopy">Copy link</button>
+        </div>
+        <div class="soft-card" id="liveOff" hidden><p><b>Going live isn’t available on this site yet.</b> You can record your show now and upload it to YouTube or anywhere else afterwards.</p><button type="button" class="btn sm" id="liveOffRec">Record instead</button></div>
+      </section>
+      <section class="live-row" aria-label="Format">
+        <h3 class="live-label">Format</h3>
+        <div class="seg sm fmt-seg" role="radiogroup" aria-label="Stage format" id="aspectSeg">
+          <button type="button" role="radio" data-aspect="16:9"><i class="fmt-ic land" aria-hidden="true"></i>Landscape</button>
+          <button type="button" role="radio" data-aspect="9:16"><i class="fmt-ic vert" aria-hidden="true"></i>Vertical</button>
+        </div>
+      </section>
+      <div class="live-go">
+        <button type="button" class="btn live lg block" id="liveBtn">Go live</button>
+        <p class="hint live-why" id="liveWhy" hidden></p>
+        <p class="hint live-stats" id="liveStats" hidden></p>
+      </div>
+      <div class="live-later" id="upBlock">
+        <div class="live-later-row"><span>Not today?</span><button type="button" class="btn link" id="wizOpen">Plan a stream for later</button></div>
+        <div id="upSignin" class="soft-card"><p>Sign in to schedule streams, email invites and keep them here.</p><button type="button" class="btn sm" id="upSigninBtn">Create an account or sign in</button></div>
+        <div id="upWrap" hidden><ul class="up-list" id="upList"></ul><p class="hint" id="upEmpty" hidden>Nothing scheduled.</p></div>
+      </div>
     </div>
   </div>
 </dialog>

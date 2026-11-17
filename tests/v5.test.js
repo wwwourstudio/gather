@@ -37,7 +37,7 @@ const URL0 = process.env.GATHER_URL || 'http://localhost:8080';
     // Stream-key field: the host is typing when someone joins.
     await a.evaluate(() => { window.__gather.relayOn = true; });
     await a.click('#liveTop'); await a.waitForSelector('#liveDlg[open]');
-    await a.selectOption('#destAdd', 'youtube');
+    await a.click('.plat-tile[data-plat="youtube"]');
     await a.click('#destList li:last-child [data-k="key"]'); await a.keyboard.type('partial-key');
     await c.goto(URL0 + '/s/' + code); await c.waitForSelector('#enterDlg[open]'); await c.fill('#enterName', 'Sam Third'); await c.click('#enterGo');
     await a.waitForFunction(() => window.__gather.peers.size === 2, null, { timeout: 15000 });

@@ -2944,7 +2944,7 @@ const fmtLocal = (ms) => new Date(ms).toLocaleString([], { weekday: 'short', mon
 function renderUpcoming() {
   const ul = $('#upList');
   const rows = S.streams.filter((x) => x.status === 'scheduled' || (x.status === 'live' && Date.now() - x.when < 6 * 3600e3));
-  $('#upEmpty').hidden = !!rows.length;
+  $('#upEmpty').hidden = true; // "Plan a stream for later" already says it
   ul.replaceChildren(...rows.map((st) => {
     const li = document.createElement('li'); li.className = 'up-item';
     const top = document.createElement('div'); top.className = 'up-top';
@@ -3305,6 +3305,7 @@ function renderDests(force) {
     box.querySelectorAll('input, [data-del]').forEach((el) => { el.disabled = live; });
     return;
   }
+  $$('.plat-tile[data-plat]').forEach((t) => t.classList.toggle('added', t.dataset.plat !== 'custom' && list.some((d) => d.kind === t.dataset.plat)));
   box.replaceChildren(...list.map((d, i) => {
     const p = PLATFORMS[d.kind] || PLATFORMS.custom;
     const li = document.createElement('li'); li.className = 'dest' + (d.on ? '' : ' off');
@@ -3338,6 +3339,8 @@ $('#destAdd').onchange = (e) => {
   saveDests([...liveDests(), { kind, url: PLATFORMS[kind].url, key: '', on: true }]);
   $('#destList li:last-child [data-k="' + (PLATFORMS[kind].url ? 'key' : 'url') + '"]')?.focus();
 };
+// Platform tiles: one click adds that destination (the select stays as the single code path).
+$$('.plat-tile[data-plat]').forEach((t) => t.addEventListener('click', () => { const s = $('#destAdd'); s.value = t.dataset.plat; s.onchange({ target: s }); }));
 const readyDests = () => liveDests().filter((d) => d.on && /^rtmps?:\/\//i.test(d.url || '') && (d.key || d.kind === 'custom'));
 /** The public page viewers can watch a destination on, as the host typed it (optional). */
 function watchUrl(d) {
@@ -3351,7 +3354,7 @@ function fmtClock(ms) { const s = Math.floor(ms / 1000); return [Math.floor(s / 
 function renderLive() {
   const host = isHost(), L = S.live, on = L?.phase === 'live';
   $('#liveOff').hidden = S.relayOn;
-  for (const id of ['#destList', '#destAdd', '#liveNote', '#liveBtn']) $(id).hidden = !S.relayOn;
+  for (const id of ['#destList', '#liveNote', '#liveBtn']) $(id).hidden = !S.relayOn;
   $('#destAdd').parentElement.hidden = !S.relayOn;
   renderDests();
   const n = readyDests().length;
