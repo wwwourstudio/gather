@@ -11,7 +11,7 @@ const URL0 = process.env.GATHER_URL || 'http://localhost:8080';
   const page = await (await browser.newContext({ viewport: { width: 1440, height: 900 } })).newPage();
   page.on('pageerror', (e) => errs.push(e.message));
   const focused = () => page.evaluate(() => { const a = document.activeElement; return a ? a.id || a.getAttribute('aria-label') || a.textContent.trim().slice(0, 30) || a.tagName : ''; });
-  const tabTo = async (id, max) => { for (let n = 1; n <= max; n++) { await page.keyboard.press('Tab'); if ((await page.evaluate(() => document.activeElement?.id)) === id) return n; } return -1; };
+  const tabTo = async (id, max) => { const path = []; for (let n = 1; n <= max; n++) { await page.keyboard.press('Tab'); if ((await page.evaluate(() => document.activeElement?.id)) === id) return n; path.push(await focused()); } console.log(`  tab path looking for #${id}: ${path.join(' → ')}`); return -1; };
   try {
     await page.goto(URL0 + '/');
     // Landing → green room → studio, keyboard only.
