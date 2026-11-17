@@ -601,3 +601,11 @@ button.wv-like:disabled { opacity: 0.4; cursor: default; }
   .wv-host-av { width: 38px; height: 38px; font-size: 14px; }
   .btn.wv-subscribe { height: 36px; padding: 0 14px; }
 }
+
+/* Clip lives with the player controls (on hover); the bar under the video only shows when it has something in it,
+   and the picture takes its room back when it doesn't. */
+.wv-strip:not(:has(.btn:not([hidden]), .wv-hype:not([hidden]), .wv-sources:not([hidden]), .wv-links > *)) { display: none; }
+.wv-stagebox { --pw: min(100cqw, (100cqh - var(--stripH, 56px) - var(--hostH, 0px)) * 16 / 9); }
+.wv-stagebox:not(:has(.wv-strip .btn:not([hidden]), .wv-strip .wv-hype:not([hidden]), .wv-strip .wv-sources:not([hidden]), .wv-strip .wv-links > *)) { --stripH: 0px; }
+@media (max-width: 900px) { .wv-stagebox { --pw: 100%; } }
+@media (max-width: 900px) and (orientation: landscape) and (max-height: 500px) { .wv-stagebox { --pw: min(100cqw, (100cqh - var(--stripH, 56px)) * 16 / 9); } }

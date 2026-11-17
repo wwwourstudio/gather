@@ -108,6 +108,7 @@
             <input class="wv-vol" id="wVol" type="range" min="0" max="1" step="0.05" value="1" aria-label="Volume">
             <span class="wv-badge" id="wDelay" hidden></span>
             <span class="wv-sp"></span>
+            <button class="wv-c" id="wClip" type="button" hidden aria-label="Clip the last 30 seconds" data-tip="Clip the last 30 s"><svg class="i" aria-hidden="true"><use href="/icons.svg#i-scissors"/></svg></button>
             <button class="wv-c wv-txt" id="wCC" type="button" aria-pressed="false" aria-label="Captions" data-tip="Captions">CC</button>
             <button class="wv-c wv-txt" id="wQual" type="button" aria-label="Quality" data-tip="Quality">Auto</button>
             <button class="wv-c wv-txt" id="wFill" type="button" aria-pressed="false" aria-label="Fill the screen" data-tip="Fill the screen (vertical phones)">Fill</button>
@@ -121,7 +122,6 @@
           <div class="wv-sources" id="wTabs" role="tablist" aria-label="Watch on" hidden></div>
           <div class="wv-links" id="wLinks"></div>
           <span class="wv-sp"></span>
-          <button class="btn wv-clip" id="wClip" type="button" hidden><svg class="i" aria-hidden="true"><use href="/icons.svg#i-scissors"/></svg><span>Clip</span></button>
           <button class="btn wv-supers" id="wSuperStrip" type="button" hidden><svg class="i" aria-hidden="true"><use href="/icons.svg#i-tip"/></svg><span>Super chat</span></button>
         </div>
         <div class="wv-host-sk" aria-hidden="true"><span class="sk sk-circle"></span><div><span class="sk sk-line" style="--w:46%"></span><span class="sk sk-line" style="--w:28%"></span><span class="sk sk-line sm" style="--w:64%"></span></div></div>
