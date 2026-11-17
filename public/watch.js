@@ -199,12 +199,19 @@ function renderSources(info) {
   if (W.source === 'direct' && W.direct.state === 'off' && embeds.length) W.source = embeds[0].embed;
   if (W.source !== 'direct' && !embeds.some((l) => l.embed === W.source)) W.source = 'direct';
   $('#wTabs').hidden = tabs.length < 2;
-  $('#wTabs').replaceChildren(...tabs.map((t) => {
-    const b = document.createElement('button'); b.type = 'button'; b.className = 'btn sm' + (t.id === W.source ? ' on' : ''); b.setAttribute('role', 'tab'); b.setAttribute('aria-selected', String(t.id === W.source));
-    b.textContent = t.label; b.onclick = () => { W.source = t.id; renderSources(W.info); };
-    return b;
-  }));
-  $('#wLinks').replaceChildren(...links.map((l) => { const a = document.createElement('a'); a.className = 'btn sm ghost'; a.href = l.url; a.target = '_blank'; a.rel = 'noopener'; a.textContent = `Open on ${nameOf(l)}`; return a; }));
+  // Rebuild the tabs only when they change (not on every feed), so a click or keyboard focus is never lost mid-render.
+  const tkey = JSON.stringify(tabs);
+  if (W.tabsKey !== tkey) {
+    W.tabsKey = tkey;
+    $('#wTabs').replaceChildren(...tabs.map((t) => {
+      const b = document.createElement('button'); b.type = 'button'; b.className = 'btn sm'; b.setAttribute('role', 'tab'); b.dataset.src = t.id;
+      b.textContent = t.label; b.onclick = () => { W.source = t.id; renderSources(W.info); };
+      return b;
+    }));
+  }
+  for (const b of $('#wTabs').children) { const on = b.dataset.src === W.source; b.classList.toggle('on', on); b.setAttribute('aria-selected', String(on)); }
+  const lkey = JSON.stringify(links);
+  if (W.linksKey !== lkey) W.linksKey = lkey, $('#wLinks').replaceChildren(...links.map((l) => { const a = document.createElement('a'); a.className = 'btn sm ghost'; a.href = l.url; a.target = '_blank'; a.rel = 'noopener'; a.textContent = `Open on ${nameOf(l)}`; return a; }));
   showPlayer(info);
 }
 function showPlayer(info) {
