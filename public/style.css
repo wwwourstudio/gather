@@ -908,7 +908,6 @@ body.deck-closed .deck { padding-bottom: var(--sp-2); }
 .psec[open] > summary::after, .sec-fold[open] > summary::after { transform: rotate(-135deg); margin-bottom: -3px; }
 .psec-body { display: grid; gap: var(--sp-3); padding: var(--sp-1) var(--sp-4) var(--sp-4); }
 .psec-body .dup { display: none; }
-.psec-body > .fld:has(> .dup) { gap: 0; }
 .psec-body hr { margin: var(--sp-1) 0; }
 .psec-body .tip-row:first-child { padding-top: 0; }
 
@@ -942,6 +941,17 @@ body.deck-closed .deck { padding-bottom: var(--sp-2); }
 .inbox-lists .hint { margin: 0; }
 .inbox-lists:has(#vmList:empty):has(#scList:empty) > :not(.inbox-empty) { display: none; }
 .inbox-lists:not(:has(#vmList:empty)) > .inbox-empty, .inbox-lists:not(:has(#scList:empty)) > .inbox-empty { display: none; }
-.psec > summary > b, .sec-fold > summary > b { flex: 1; min-width: 0; } /* title takes the slack, so the count and arrow sit at the right edge */
 .psec > summary .hint:empty, .sec-fold > summary .hint:empty { display: none; }
 .psec-body > .btn.link { margin: 0; justify-self: start; } /* links sit inside the card edge */
+
+/* Nothing in a panel may be wider than the panel: every grid track and card can shrink, so a long link or
+   name is cut with an ellipsis instead of pushing the cards past the sidebar's edge. */
+.panel-body { grid-template-columns: minmax(0, 1fr); }
+.panel-body > *, .watch-sec, .watch-sec > *, .psec, .sec-fold, .psec-body, .psec-body > *, .toggle-group, .toggle-row > span, .sub-row > span { min-width: 0; }
+.psec-body { grid-template-columns: minmax(0, 1fr); }
+.toggle-row > span > b, .toggle-row > span > small { overflow-wrap: anywhere; }
+/* Section headers: the title never wraps; a hint beside it is cut short if there isn't room. */
+.psec > summary > b, .sec-fold > summary > b { flex: 1 0 auto; white-space: nowrap; }
+.psec > summary .hint, .sec-fold > summary .hint { flex: 0 1 auto; min-width: 0; }
+/* A labelled block inside a section (Media library, Layers, Templates…) uses the same 12px rhythm inside. */
+.psec-body > .fld:has(> .dup) { gap: var(--sp-3); }

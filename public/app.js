@@ -1045,15 +1045,8 @@ function drawShapeEl(e) {
   g.save(); g.globalAlpha = e.opacity ?? 1; g.fillStyle = e.color || '#000000'; rr(r.x, r.y, r.w, r.h, e.radius || 0); g.fill(); g.restore();
 }
 function drawChrome() {
-  const paper = BGS[S.state.brand.bg]?.[4];
-  const ink = paper ? 'rgba(17,24,39,' : 'rgba(255,255,255,';
   g.textBaseline = 'middle';
-  if (S.state.title && S.studio) { // a title saved from an earlier studio never shows on the empty home stage
-    g.textAlign = 'left'; g.font = `700 14px ${stageFont()}`; g.fillStyle = ink + '.8)';
-    const lg = stageElements().find((e) => e.type === 'logo' && !e.hidden);
-    const hasLogoTL = assetImg(S.state.brand.logo) && lg && lg.x < .2 && lg.y < .12;
-    g.fillText(S.state.title.toUpperCase().split('').join(String.fromCharCode(8202)), 30, hasLogoTL ? H - 22 : 22);
-  }
+  // The show title is no longer drawn on the stage: it lives in the header and on the watch page.
   if (window.__shopReady) { drawProduct(); drawPoll(); drawWatchBadge(); }
 }
 // The program is painted tier by tier: stage → media → (brand frame) → overlays → chat → ticker → system.
