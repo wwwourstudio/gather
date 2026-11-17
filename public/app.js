@@ -5572,3 +5572,7 @@ function drawWatchBadge() {
     d.addEventListener('toggle', () => { if (d.open) folded.delete(d.dataset.sec); else folded.add(d.dataset.sec); store.set('foldedSecs', [...folded]); });
   }
 }
+
+// Keyboard users get focus rings everywhere; pointer users don't see a ring left on a header button after a click.
+addEventListener('keydown', (e) => { if (e.key === 'Tab' || e.key.startsWith('Arrow')) document.body.classList.add('kbd'); }, true);
+addEventListener('pointerdown', () => document.body.classList.remove('kbd'), true);

@@ -960,3 +960,17 @@ body.deck-closed .deck { padding-bottom: var(--sp-2); }
 .pay-box { display: grid; gap: var(--sp-3); }
 .pay-box .pay-status { margin: 0; padding: var(--sp-2) var(--sp-3); border-radius: var(--r-sm); background: var(--surface-2); font-size: var(--fs-12); }
 [data-sec="supers"] > summary .hint { color: var(--ink-2); }
+
+/* ---------------------------------------------------------------- header order
+   Inside a studio: the show's actions first (Watch page, Invite, Go live), then a divider, then the utilities
+   (Help, Settings, your account) at the far right. */
+body:not(.pre) .top-actions > #recPill { order: 0; }
+body:not(.pre) .top-actions > #watchTop { order: 1; }
+body:not(.pre) .top-actions > #enterTop { order: 2; }
+body:not(.pre) .top-actions > #liveTop { order: 3; margin-right: var(--sp-2); }
+body:not(.pre) .top-actions > #helpTop { order: 4; position: relative; margin-left: var(--sp-2); }
+body:not(.pre) .top-actions > #helpTop::before { content: ""; position: absolute; left: calc(-1 * var(--sp-2) - 1px); top: 7px; bottom: 7px; width: 1px; background: var(--line-2); }
+body:not(.pre) .top-actions > #settingsTop { order: 5; }
+body:not(.pre) .top-actions > #userBtn { order: 6; }
+/* The focus ring is for keyboard users: after a mouse click (or a dialog closing) the header doesn't keep a ring. */
+body:not(.kbd) .top :focus-visible { box-shadow: none; outline: none; }
