@@ -997,7 +997,6 @@ body:not(.pre) .rail-btn.on { background: var(--fill-active); box-shadow: inset 
 body:not(.pre) .stage-card { background: transparent; border: 0; box-shadow: none; -webkit-backdrop-filter: none; backdrop-filter: none; padding: var(--sp-2) var(--sp-3) var(--sp-3); }
 body:not(.pre) .stage { border-radius: 14px; box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.10), 0 30px 80px -30px rgba(0, 0, 0, 0.85); }
 body:not(.pre) .deck { background: transparent; border: 0; padding: 0 var(--sp-3) var(--sp-1); -webkit-backdrop-filter: none; backdrop-filter: none; }
-body:not(.pre) .deck-body { height: 96px; }
 body:not(.pre) .scene { background: var(--glass-bg); -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur); border-color: var(--glass-border); }
 
 /* Inside the side panel: no rules between header and body; section cards are a lighter frost. */
@@ -1018,3 +1017,19 @@ body:not(.pre) .scene { background: var(--glass-bg); -webkit-backdrop-filter: va
   .backdrop .amb { display: none; }
   .glass { background: var(--surface); -webkit-backdrop-filter: none; backdrop-filter: none; }
 }
+
+/* ---------------------------------------------------------------- V6: less on screen at once */
+/* Scenes: smaller cards; the 1–9 shortcut shows only when you point at a card. */
+body:not(.pre) .scene { width: 108px; }
+body:not(.pre) .deck-body:has(.deck-layer.on .scenes) { height: 94px; }
+.scene .sc-name kbd { opacity: 0; transition: opacity var(--dur) var(--ease-out); }
+.scene:hover .sc-name kbd, .scene:focus-visible .sc-name kbd { opacity: 1; }
+/* Super chats: the payment fields appear once super chats are switched on. */
+.psec-body:has(#wpSupers:not(:checked)) > #wpPayBox { display: none; }
+/* Getting started: a single quiet line, not a banner in the middle of the controls. */
+.guide { gap: var(--sp-2); }
+.guide .guide-dots, .guide .guide-prog { display: none; }
+.guide .guide-text { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: var(--fs-13); color: var(--ink-2); }
+.guide .guide-text b { font-weight: 600; color: var(--ink); }
+.guide .guide-text::before { content: "Next: "; color: var(--ink-3); }
+.guide #guideGo { --btn-bg: var(--fill); --btn-bg-hover: var(--fill-hover); --btn-ink: var(--accent-text); border-color: var(--glass-border); }
