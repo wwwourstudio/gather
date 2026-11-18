@@ -78,7 +78,7 @@ function clockText(since) {
 }
 function render(info) {
   // A show that was on and now isn't has ended: keep its name and host, stop the frozen picture, say so.
-  if (info.found) { if (W.ended) setTimeout(startDirect, 0); W.last = { title: info.title, host: info.host, watch: info.watch }; W.ended = false; }
+  if (info.found) { if (W.ended) setTimeout(startDirect, 0); W.last = { title: info.title, host: info.host, watch: info.watch, links: info.live?.links?.length ? info.live.links : W.last?.links || [] }; W.ended = false; }
   else if (W.last && !info.unclaimed && !info.offline) {
     if (!W.ended) { W.ended = true; stopDirect(); W.direct.state = 'idle'; }
     info = { ...info, ended: true, title: W.last.title, host: W.last.host };
@@ -167,11 +167,12 @@ function msgEl(m) {
   const acts = document.createElement('span'); acts.className = 'wv-acts';
   const mk = (icon, label, fn) => { const k = document.createElement('button'); k.type = 'button'; k.innerHTML = `<svg class="i" aria-hidden="true"><use href="/icons.svg#i-${icon}"/></svg>`; k.setAttribute('aria-label', label); k.title = label; k.onclick = fn; return k; };
   if (!String(m.id).startsWith('mine-')) {
-    acts.append(mk('reply', 'Reply', () => { const x = $('#wText'); x.value = `@${m.name} ` + x.value.replace(/^@\S+\s/, ''); x.focus(); }));
+    acts.append(mk('reply', 'Reply', () => setReply(m)));
     if (!mine) acts.append(mk('flag', 'Report spam', () => reportMsg(m.id, li)), mk('volume-x', `Mute ${m.name} for me`, () => muteName(m.name)));
   }
   head.append(gap, acts, lk);
-  body.append(head, richText(m.text));
+  if (m.re?.n) { const q = document.createElement('span'); q.className = 'wv-re'; q.textContent = `${m.re.n}: ${m.re.t || ''}`; body.append(head, q, richText(m.text)); }
+  else body.append(head, richText(m.text));
   li.append(av, body);
   return li;
 }
@@ -233,8 +234,9 @@ function showPlayer(info) {
     $('#wCtrls').hidden = !playing; $('#wUnmute').hidden = !playing || !v.muted;
     $('#wEmpty').hidden = !!playing;
     $('#wEmptyActs').hidden = !!info.found;
-    $('#wEmptyH').textContent = info.ended ? 'That’s a wrap.' : info.offline ? `${info.name} isn’t live right now.` : info.unclaimed ? `${location.host}/w/${info.handle} isn’t anyone’s page yet.` : !info.found ? 'This show isn’t on right now.' : W.direct.state === 'connecting' ? 'Connecting to the studio…' : W.direct.state === 'full' ? 'The direct stream is full right now.' : 'Waiting for the show to start.';
-    $('#wEmptyP').textContent = info.ended ? `${info.host?.name || 'The host'} ended the show. Keep this page open: it starts playing by itself the next time they go live.` : info.offline ? 'Keep this page open — it starts playing by itself the moment they go on.' : info.unclaimed ? 'Claim it for free in the gather studio: Show → Your watch page.' : !info.found ? 'Check the link with the host.' : W.direct.state === 'full' ? 'Watch on one of the platforms below, or try again in a minute.' : 'This page starts playing by itself.';
+    renderEmptyExtras(info);
+    $('#wEmptyH').textContent = info.ended ? 'That’s a wrap.' : info.offline && info.next ? info.next.title : info.offline ? `${info.name} isn’t live right now.` : info.unclaimed ? `${location.host}/w/${info.handle} isn’t anyone’s page yet.` : !info.found ? 'This show isn’t on right now.' : W.direct.state === 'connecting' ? 'Connecting to the studio…' : W.direct.state === 'full' ? 'The direct stream is full right now.' : 'Waiting for the show to start.';
+    $('#wEmptyP').textContent = info.offline && info.next ? countdownText(info.next.when) : info.ended ? `${info.host?.name || 'The host'} ended the show. Keep this page open: it starts playing by itself the next time they go live.` : info.offline ? 'Keep this page open — it starts playing by itself the moment they go on.' : info.unclaimed ? 'Claim it for free in the gather studio: Show → Your watch page.' : !info.found ? 'Check the link with the host.' : W.direct.state === 'full' ? 'Watch on one of the platforms below, or try again in a minute.' : 'This page starts playing by itself.';
   } else if (W.iframe !== W.source) {
     W.iframe = W.source;
     const f = document.createElement('iframe');
@@ -405,11 +407,13 @@ $('#wCompose').addEventListener('submit', async (e) => {
     if (naming) await naming.catch(() => {});
     await ensureSession(); renderMe();
     const asking = $('#wAsk').getAttribute('aria-pressed') === 'true';
-    const r = await api('wsend', { ...creds(), type: asking ? 'question' : 'chat', text });
+    const re = W.reply ? { n: W.reply.name, t: String(W.reply.text || '').slice(0, 80) } : undefined;
+    const r = await api('wsend', { ...creds(), type: asking ? 'question' : 'chat', text, re });
+    setReply(null);
     if (asking) { setAsk(false); toast('Question sent. The host sees it highlighted.'); }
     $('#wText').value = '';
     W.shown.add(r.id + ':');
-    $('#wMsgs').append(msgEl({ id: r.id, name: sess.name, text, ts: Date.now(), q: asking, av: ACCT.av })); $('#wMsgs').scrollTop = $('#wMsgs').scrollHeight;
+    $('#wMsgs').append(msgEl({ id: r.id, name: sess.name, text, ts: Date.now(), q: asking, av: ACCT.av, re })); $('#wMsgs').scrollTop = $('#wMsgs').scrollHeight;
   } catch (err) {
     if (err.status === 401) { await renew().catch(() => {}); return showErr('#wErr', 'Your chat session ended. Send again.'); }
     showErr('#wErr', err.message);
@@ -1074,3 +1078,40 @@ function renderGoal(info) {
   $('#wGoalN').textContent = `$${Math.round(raised).toLocaleString()} of $${goal.target.toLocaleString()}`;
   $('#wGoal').classList.toggle('done', p >= 100);
 }
+
+// ---------------------------------------------------------------- replies
+function setReply(m) {
+  W.reply = m ? { name: m.name, text: m.text } : null;
+  $('#wReplyTo').hidden = !m;
+  if (m) { $('#wReplyName').textContent = m.name; $('#wText').focus(); }
+}
+$('#wReplyX').onclick = () => setReply(null);
+
+// ---------------------------------------------------------------- between shows: countdown, reminder, replay
+function countdownText(when) {
+  const ms = when - Date.now();
+  if (ms <= 0) return 'Starting any minute. This page plays by itself.';
+  const d = Math.floor(ms / 864e5), h = Math.floor(ms / 36e5) % 24, m = Math.floor(ms / 6e4) % 60, s = Math.floor(ms / 1e3) % 60;
+  const at = new Date(when).toLocaleString([], { weekday: 'short', hour: 'numeric', minute: '2-digit' });
+  return `Starts in ${d ? d + 'd ' : ''}${d || h ? h + 'h ' : ''}${m}m ${d ? '' : s + 's'} · ${at}`.replace(/\s+·/, ' ·');
+}
+setInterval(() => { const i = W.info; if (i?.offline && i.next && !$('#wEmpty').hidden) $('#wEmptyP').textContent = countdownText(i.next.when); }, 1000);
+function renderEmptyExtras(info) {
+  const acts = $('#wEmptyActs');
+  const key = `${!!(info.offline && info.host?.alerts)}|${info.ended ? (W.last?.links || [])[0]?.url || '' : ''}`;
+  if (acts.dataset.k === key) return; acts.dataset.k = key;
+  for (const x of acts.querySelectorAll('.extra')) x.remove();
+  const add = (el) => { el.classList.add('extra'); acts.prepend(el); };
+  if (info.offline && info.host?.alerts) { const b = document.createElement('button'); b.type = 'button'; b.className = 'btn sm primary'; b.innerHTML = '<svg class="i" aria-hidden="true"><use href="/icons.svg#i-bell"/></svg>Remind me'; b.onclick = () => $('#wSub').click(); add(b); }
+  const replay = info.ended && (W.last?.links || [])[0];
+  if (replay) { const a = document.createElement('a'); a.className = 'btn sm primary'; a.href = replay.url; a.target = '_blank'; a.rel = 'noopener'; a.innerHTML = '<svg class="i" aria-hidden="true"><use href="/icons.svg#i-play"/></svg>Watch the replay'; add(a); }
+}
+
+// ---------------------------------------------------------------- keyboard: T theater, H heart, ? the list
+addEventListener('keydown', (e) => {
+  if (e.metaKey || e.ctrlKey || e.altKey || ['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement?.tagName) || document.querySelector('dialog[open]')) return;
+  const k = e.key.toLowerCase();
+  if (k === 't') { e.preventDefault(); $('#wv').classList.toggle('theater'); }
+  else if (k === 'h') { e.preventDefault(); sendReact('❤️'); }
+  else if (e.key === '?') { e.preventDefault(); $('#wKeysDlg').showModal(); }
+});

@@ -472,3 +472,19 @@ button.wv-like:disabled { opacity: 0.4; cursor: default; }
 .wv-reactpick[hidden] { display: none; }
 .wv-reactpick button { width: 36px; height: 36px; border-radius: 999px; font-size: 19px; }
 .wv-reactpick button:hover { background: rgba(255, 255, 255, 0.12); transform: scale(1.15); }
+
+/* replies: who you're answering above the box, and the quote on the message */
+.wv-replyto { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 4px 6px 4px 10px; border-radius: 8px; background: rgba(255, 255, 255, 0.05); color: var(--ink-2); font-size: 12px; }
+.wv-replyto[hidden] { display: none; }
+.wv-replyto span { display: inline-flex; align-items: center; gap: 6px; min-width: 0; }
+.wv-replyto .i { width: 14px; height: 14px; }
+.wv-replyto b { color: var(--ink); }
+.wv-re { display: block; margin: 2px 0 3px; padding-left: 8px; border-left: 2px solid rgba(255, 255, 255, 0.18); color: var(--ink-3); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* the shortcuts list */
+.wv-keys { position: relative; max-width: 360px; }
+.wv-keys .modal-close { position: absolute; top: 12px; right: 12px; }
+.wv-keys h2 { margin: 0 0 8px; }
+.wv-keys dl { display: grid; grid-template-columns: auto 1fr; gap: 10px 14px; margin: 0; align-items: center; }
+.wv-keys dt { margin: 0; }
+.wv-keys dd { margin: 0; color: var(--ink-2); font-size: 14px; }
+.wv-keys kbd { display: inline-grid; place-items: center; min-width: 28px; height: 28px; padding: 0 8px; border-radius: 8px; background: rgba(255, 255, 255, 0.08); box-shadow: inset 0 -2px 0 rgba(0, 0, 0, 0.35), 0 0 0 1px rgba(255, 255, 255, 0.12); font: 700 13px var(--font-ui); }

@@ -168,6 +168,7 @@
       <button class="wv-newer" id="wNewer" type="button" hidden>New messages ↓</button>
       <form class="wv-compose" id="wCompose" autocomplete="off">
         <div class="wv-composer">
+          <div class="wv-replyto" id="wReplyTo" hidden><span><svg class="i" aria-hidden="true"><use href="/icons.svg#i-reply"/></svg>Replying to <b id="wReplyName"></b></span><button type="button" class="icon-btn sm" id="wReplyX" aria-label="Cancel reply"><svg class="i sm" aria-hidden="true"><use href="/icons.svg#i-x"/></svg></button></div>
           <div class="wv-inputwrap">
             <input class="input" id="wText" maxlength="300" placeholder="Say something…" aria-label="Chat message" enterkeyhint="send">
             <button class="wv-send" id="wSend" type="submit" aria-label="Send"><svg class="i" aria-hidden="true"><use href="/icons.svg#i-send"/></svg></button>
@@ -189,6 +190,20 @@
   </main>
 </div>
 
+<dialog class="modal" id="wKeysDlg" aria-labelledby="wKeysH">
+  <div class="modal-card glass raised wv-sheet wv-keys">
+    <button type="button" class="icon-btn sm modal-close" data-close aria-label="Close"><svg class="i sm" aria-hidden="true"><use href="/icons.svg#i-x"/></svg></button>
+    <h2 id="wKeysH">Keyboard shortcuts</h2>
+    <dl>
+      <dt><kbd>M</kbd></dt><dd>Mute or unmute</dd>
+      <dt><kbd>F</kbd></dt><dd>Full screen</dd>
+      <dt><kbd>T</kbd></dt><dd>Theater mode</dd>
+      <dt><kbd>C</kbd></dt><dd>Show or hide the chat</dd>
+      <dt><kbd>H</kbd></dt><dd>Send a heart</dd>
+      <dt><kbd>?</kbd></dt><dd>This list</dd>
+    </dl>
+  </div>
+</dialog>
 <dialog class="modal" id="wSubDlg" aria-labelledby="wSubH">
   <div class="modal-card glass raised wv-sheet wv-subdlg">
     <button type="button" class="icon-btn sm modal-close" data-close aria-label="Close"><svg class="i sm" aria-hidden="true"><use href="/icons.svg#i-x"/></svg></button>
