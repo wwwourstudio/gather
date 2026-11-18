@@ -16,16 +16,18 @@ const wait = (p, fn, arg, ms = 10000) => p.waitForFunction(fn, arg, { timeout: m
     const a = await mk(bh);
     await a.goto(B + '/'); await a.click('#enterStage'); await a.fill('#enterName', 'Maya Host'); await a.click('#enterGo');
     await a.waitForSelector('#inviteDlg[open]'); const code = (await a.textContent('#inviteCode')).trim();
-    check('invite dialog shows the watch link', (await a.textContent('#inviteWatch')).includes('/w/' + code));
+    const short = await a.evaluate(() => window.__gather.short);
+    check('the studio has a short watch link', /^[a-z2-9]{5}$/.test(short || ''), short);
+    check('invite dialog shows the short watch link', (await a.textContent('#inviteWatch')).endsWith('/w/' + short));
     await a.keyboard.press('Escape');
     check('the header has a Watch page button', await a.isVisible('#watchTop'));
     check('the call-in section is gone', !(await a.$('#callinCard')) && !(await a.$('#callinUrl')));
     check('the stream shows a “Watch & chat live” badge', await a.evaluate(() => { const c = document.querySelector('#stageCanvas'), g = c.getContext('2d'); const d = g.getImageData(c.width - 120, c.height - 60, 40, 20).data; let dark = 0; for (let i = 0; i < d.length; i += 4) if (d[i] < 40 && d[i + 1] < 40 && d[i + 2] < 60) dark++; return dark > 100; }));
 
     const v = await mk(bv);
-    await v.goto(B + '/w/' + code);
-    check('watch page: Raise hand, no call-in “Ask to join”', await wait(v, () => !document.querySelector('#wHand').hidden) && !(await v.$('#wJoin')));
-    await v.click('#wHand'); await v.fill('#wVoiceName', 'Jordan');
+    await v.goto(B + '/w/' + short); // the short link, as a viewer would type it
+    check('watch page: voice questions from the chat box, no call-in “Ask to join”', await wait(v, () => !document.querySelector('#wMic').hidden) && !(await v.$('#wJoin')));
+    await v.click('#wMic'); await v.fill('#wVoiceName', 'Jordan');
     await v.click('#wRecBtn'); await v.waitForTimeout(3200); await v.click('#wRecBtn');
     check('a recording is ready to listen back', await wait(v, () => !document.querySelector('#wRecPlay').hidden && !document.querySelector('#wRecSend').disabled));
     await v.click('#wRecSend');

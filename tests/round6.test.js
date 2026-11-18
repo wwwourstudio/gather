@@ -17,12 +17,15 @@ const SP = process.argv[2];
   console.log('  guest sees layers:', await G(b, () => window.__gather.state.elements.map((e) => e.type).sort().join(',')));
   // edit mode
   await a.click('[data-tab="look"]'); await a.click('.look-seg:visible [data-look="layouts"]'); await a.click('#editToggle');
-  const box = async (type, n = 0) => a.locator(`.ebox[data-id="${await G(a, ([t, i]) => window.__gather.state.elements.filter((e) => e.type === t)[i].id, [type, n])}"]`);
+  // Edit boxes are drawn on the next frame after edit mode turns on: wait for each before measuring it (CI is slower).
+  const box = async (type, n = 0) => { const l = a.locator(`.ebox[data-id="${await G(a, ([t, i]) => window.__gather.state.elements.filter((e) => e.type === t)[i].id, [type, n])}"]`); await l.waitFor({ state: 'visible', timeout: 5000 }); return l; };
   const el = (type, n = 0) => G(a, ([t, i]) => { const e = window.__gather.state.elements.filter((x) => x.type === t)[i]; return { ...e }; }, [type, n]);
-  const st = await a.locator('#stage').boundingBox();
+  // Measure only once the element is drawn with a size: under a loaded CI machine boundingBox() can come back null.
+  const rect = async (loc) => { await loc.waitFor({ state: 'visible', timeout: 8000 }); for (let i = 0; i < 40; i++) { const r = await loc.boundingBox(); if (r && r.width > 0) return r; await a.waitForTimeout(100); } throw new Error('never got a size: ' + loc); };
+  const st = await rect(a.locator('#stage'));
   // 2 drag camera 1 into camera 2: blocked
   const before = await el('slot', 0), cam2 = await el('slot', 1);
-  const b0 = await (await box('slot', 0)).boundingBox();
+  const b0 = await rect(await box('slot', 0));
   await a.mouse.move(b0.x + b0.width / 2, b0.y + b0.height / 2); await a.mouse.down();
   await a.mouse.move(b0.x + b0.width / 2 + st.width * 0.3, b0.y + b0.height / 2, { steps: 12 });
   const blockedShown = await a.locator('.ebox.blocking').count();
@@ -37,8 +40,8 @@ const SP = process.argv[2];
   // layers that paint nothing yet (no logo set, no banner shown) appear on the stage once picked in Layers
   const pick = async (type) => { await a.click(`#elList .el-row[data-id="${(await el(type)).id}"] .el-pick`); await a.waitForTimeout(150); };
   await pick('logo');
-  const logoBox = await (await box('logo')).boundingBox();
-  const cam = await (await box('slot', 1)).boundingBox();
+  const logoBox = await rect(await box('logo'));
+  const cam = await rect(await box('slot', 1));
   await a.mouse.move(logoBox.x + logoBox.width / 2, logoBox.y + logoBox.height / 2); await a.mouse.down(); await a.keyboard.down("Alt");
   await a.mouse.move(cam.x + 60, cam.y + 60, { steps: 10 }); await a.mouse.up(); await a.keyboard.up('Alt'); await a.waitForTimeout(300);
   const logo = await el('logo');
@@ -46,7 +49,7 @@ const SP = process.argv[2];
   // 5 lock: dragging does nothing
   await a.click(`#elList .el-row[data-id="${(await el('banner')).id}"] .layer-toggle[aria-label^="Lock"]`); await a.waitForTimeout(200);
   await pick('banner');
-  const ban = await el('banner'), bb = await (await box('banner')).boundingBox();
+  const ban = await el('banner'), bb = await rect(await box('banner'));
   await a.mouse.move(bb.x + bb.width / 2, bb.y + bb.height / 2); await a.mouse.down(); await a.mouse.move(bb.x + 300, bb.y - 200, { steps: 6 }); await a.mouse.up();
   const ban2 = await el('banner');
   console.log('5 locked lower third did not move:', ban.x === ban2.x && ban.y === ban2.y && !!ban2.locked);
@@ -79,4 +82,4 @@ const SP = process.argv[2];
   console.log('9 overlaps in the edited scene:', left.length ? left.join(',') : 'none');
   console.log('errors A', a.errs, 'B', b.errs, 'A2', a2.errs);
   await browser.close();
-})().catch((e) => { console.log('FAIL', e.message.split('\n').slice(0, 4).join(' | ')); process.exit(1); });
+})().catch((e) => { console.log('FAIL', e.message.split('\n').slice(0, 4).join(' | '), '@', (e.stack || '').split('\n').find((l) => l.includes('round6')) || ''); process.exit(1); });

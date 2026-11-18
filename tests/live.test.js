@@ -50,10 +50,10 @@ const check = (name, cond, detail = '') => { console.log(`${cond ? 'ok  ' : 'FAI
 
   // two destinations: YouTube (server URL edited to the local stand-in) and a custom RTMP server
   await a.click('#liveTop');
-  await a.selectOption('#destAdd', 'youtube');
+  await a.click('.plat-tile[data-plat="youtube"]');
   await a.fill('#destList li:nth-child(1) [data-k="url"]', `rtmp://127.0.0.1:${sinks[0].port}/live`); await a.press('#destList li:nth-child(1) [data-k="url"]', 'Tab');
   await a.fill('#destList li:nth-child(1) [data-k="key"]', sinks[0].key); await a.press('#destList li:nth-child(1) [data-k="key"]', 'Tab');
-  await a.selectOption('#destAdd', 'custom');
+  await a.click('.plat-tile[data-plat="custom"]');
   await a.fill('#destList li:nth-child(2) [data-k="url"]', `rtmp://127.0.0.1:${sinks[1].port}/live`); await a.press('#destList li:nth-child(2) [data-k="url"]', 'Tab');
   await a.fill('#destList li:nth-child(2) [data-k="key"]', sinks[1].key); await a.press('#destList li:nth-child(2) [data-k="key"]', 'Tab');
   await a.fill('#destList li:nth-child(1) [data-k="watch"]', 'https://www.youtube.com/watch?v=dQw4w9WgXcQ'); await a.press('#destList li:nth-child(1) [data-k="watch"]', 'Tab');

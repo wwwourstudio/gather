@@ -4,7 +4,7 @@
  * in dark and light, and checks the token contract in the live page:
  *   control heights 28/34/42 · radii 6/8/12 · icons 16/20 at stroke 1.75 · Inter for UI ·
  *   tabular numbers · 150ms ease-out UI motion · ~0ms under prefers-reduced-motion ·
- *   docked regions are flat (no blur, no shadow); real glass only on .raised and .on-media.
+ *   docked regions are frosted glass: translucent fill, backdrop blur, a faint light edge.
  *
  *   node scripts/ui-kit.ts            # → audit/screens/ui-kit/, exits 1 if a check fails
  */
@@ -88,7 +88,7 @@ async function main(): Promise<void> {
   check(/Plus Jakarta Sans/.test(m.displayFont), `display font is Plus Jakarta Sans (got ${m.displayFont})`);
   check(m.tnum.includes('tabular-nums'), `.num uses tabular numbers (got ${m.tnum})`);
   check(m.motion[0] === '0.15s' && /cubic-bezier\(0\.22, 1, 0\.36, 1\)/.test(m.motion[1]), `UI motion 150ms ease-out (got ${m.motion.join(' ')})`);
-  check(m.glass[0] === 'rgb(15, 21, 36)' && m.glass[1] === 'none' && m.glass[2] === 'rgb(29, 37, 55)' && m.glass[3] === 'none', `docked panels are flat: surface, no blur, hairline, no shadow (got ${m.glass.join(' | ')})`);
+  check(/rgba\(13, 19, 34, 0\.6\d*\)/.test(m.glass[0]) && /blur\(28px\)/.test(m.glass[1]) && /rgba\(255, 255, 255, 0\.08\)/.test(m.glass[2]), `docked panels are frosted glass: translucent, blurred, light edge (got ${m.glass.join(' | ')})`);
 
   // ---- every state, both themes
   await states(p, 'dark');
@@ -118,13 +118,13 @@ async function main(): Promise<void> {
   // ---- the app uses only primitives' icon set and fonts
   await p.goto(`${BASE}/`); await p.waitForTimeout(800);
   const app = await p.evaluate(() => ({
-    rawSvgs: [...document.querySelectorAll('svg:not(.i):not(.g-logo)')].filter((s) => !s.closest('.media-sink')).length, // .g-logo: Google's required brand mark on the sign-in button
+    rawSvgs: [...document.querySelectorAll('svg:not(.i):not(.g-logo):not(.brand-mark)')].filter((s) => !s.closest('.media-sink')).length, // .g-logo: Google's required brand mark on the sign-in button; .brand-mark: gather's own logo
     sprite: document.querySelectorAll('svg.i use[href^="/icons.svg#i-"]').length,
     fonts: [...new Set([...document.querySelectorAll('body *')].filter((e) => (e as HTMLElement).checkVisibility?.()).map((e) => getComputedStyle(e).fontFamily.split(',')[0].replace(/"/g, '').trim()))],
   }));
   check(app.rawSvgs === 0, `app has no hand-drawn SVG icons (found ${app.rawSvgs})`);
   check(app.sprite > 20, `app icons come from the Lucide sprite (${app.sprite})`);
-  check(app.fonts.every((f) => ['Inter', 'Plus Jakarta Sans'].includes(f)), `app UI uses only Inter + Plus Jakarta Sans (found ${app.fonts.join(', ')})`);
+  check(app.fonts.every((f) => ['Inter', 'Plus Jakarta Sans', 'JetBrains Mono'].includes(f)), `app UI uses only Inter + Plus Jakarta Sans, with JetBrains Mono for links and codes (found ${app.fonts.join(', ')})`);
   check(errors.length === 0, `no page errors (${errors.join('; ')})`);
 
   await browser.close();

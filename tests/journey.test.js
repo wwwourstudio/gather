@@ -11,9 +11,11 @@ const URL0 = process.env.GATHER_URL || 'http://localhost:8080';
   const page = await (await browser.newContext({ viewport: { width: 1440, height: 900 } })).newPage();
   page.on('pageerror', (e) => errs.push(e.message));
   const focused = () => page.evaluate(() => { const a = document.activeElement; return a ? a.id || a.getAttribute('aria-label') || a.textContent.trim().slice(0, 30) || a.tagName : ''; });
-  const tabTo = async (id, max) => { for (let n = 1; n <= max; n++) { await page.keyboard.press('Tab'); if ((await page.evaluate(() => document.activeElement?.id)) === id) return n; } return -1; };
+  const tabTo = async (id, max) => { const path = []; for (let n = 1; n <= max; n++) { await page.keyboard.press('Tab'); if ((await page.evaluate(() => document.activeElement?.id)) === id) return n; path.push(await focused()); } console.log(`  tab path looking for #${id}: ${path.join(' → ')}`); return -1; };
   try {
     await page.goto(URL0 + '/');
+    await page.waitForFunction(() => !!window.__gather, null, { timeout: 15000 }); // the app has started and wired its buttons
+    await page.waitForLoadState('networkidle').catch(() => {});
     // Landing → green room → studio, keyboard only.
     const toCreate = await tabTo('enterStage', 10);
     check('Create a studio is reachable by Tab', toCreate > 0, `${toCreate} tab(s)`);
@@ -30,6 +32,7 @@ const URL0 = process.env.GATHER_URL || 'http://localhost:8080';
     // The scene strip is one tab stop; arrows move inside it.
     const stops = await page.evaluate(() => [...document.querySelectorAll('#sceneStrip > *')].filter((b) => b.tabIndex >= 0).length);
     check('the scene strip is a single tab stop', stops === 1, `${stops} stops`);
+    await page.waitForSelector('#sceneStrip [tabindex="0"]');
     await page.focus('#sceneStrip [tabindex="0"]');
     const before = await focused(); await page.keyboard.press('ArrowRight'); const after = await focused();
     check('arrow keys move between scenes', before !== after, `${before} → ${after}`);

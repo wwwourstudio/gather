@@ -17,13 +17,16 @@ const ICONS = [
   'monitor', 'monitor-up', 'palette', 'pause', 'phone', 'play', 'plus', 'qr-code', 'radio', 'repeat', 'rotate-ccw', 'search', 'send', 'shield-check',
   'sliders-horizontal', 'sparkles', 'square', 'trash-2', 'upload', 'user', 'users', 'video', 'video-off', 'x',
   'activity', 'log-in', 'user-plus', 'monitor-x', 'presentation', 'command',
+  'volume-2', 'volume-x', 'maximize', 'hand', 'smile', 'scissors', 'heart', 'monitor-play', 'clapperboard', 'reply', 'share-2', 'star', 'bell', 'bell-ring', 'mail', 'badge-check',
+  ['pip', 'picture-in-picture-2'], ['tip', 'circle-dollar-sign'], // [id in the sprite, Lucide file]
 ] as const;
 
 function main(): void {
   const src = process.argv[2];
   if (!src || !fs.existsSync(src)) { console.error('Usage: node scripts/build-icons.ts <lucide-static/icons dir>'); process.exit(1); }
-  const symbols = ICONS.map((name) => {
-    const raw = fs.readFileSync(path.join(src, `${name}.svg`), 'utf8');
+  const symbols = ICONS.map((entry) => {
+    const [name, file] = typeof entry === 'string' ? [entry, entry] : entry;
+    const raw = fs.readFileSync(path.join(src, `${file}.svg`), 'utf8');
     const body = raw.replace(/<!--[\s\S]*?-->/g, '').replace(/^[\s\S]*?<svg[^>]*>/, '').replace(/<\/svg>\s*$/, '')
       .replace(/\s+/g, ' ').replace(/ \/>/g, '/>').replace(/> </g, '><').trim();
     return `<symbol id="i-${name}" viewBox="0 0 24 24">${body}</symbol>`;

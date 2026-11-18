@@ -547,7 +547,7 @@ function lostStudio() {
   const code = S.studio;
   pollGen++; outbox = [];
   teardownPeers();
-  S.studio = null; S.id = null; S.tok = null;
+  S.studio = null; S.id = null; S.tok = null; S.short = "";
   setPhase('reconnecting');
   setTimeout(() => join(code).catch((e) => { if (e.status === 403) return kickedOut(e.message); toast(e.message, { err: true }); setPhase('offline'); }), 800);
 }
@@ -596,7 +596,7 @@ async function onServer(m) {
   switch (m.type) {
     case 'joined': {
       const wasHosting = isHost() && !S.studio;
-      S.id = m.id; S.tok = m.tok; S.studio = m.studio; S.host = m.host;
+      S.id = m.id; S.tok = m.tok; S.studio = m.studio; S.host = m.host; S.short = m.short || "";
       S.local.joinedAt = Date.now();
       S.iceServers = await iceConfig(m.iceServers);
       const pre = S.state;
@@ -667,6 +667,7 @@ async function onServer(m) {
     }
     case 'state': S.state = m.state; renderAll(); break;
     case 'chat': addMsg(m.msg); break;
+    case 'like': setLikes(m.id, m.n, m.from); break;
     case 'feed': for (const it of m.items || []) addExternal(it); break;
     case 'viewer-want': viewerWant(m.vid); break;
     case 'vsignal': viewerSignal(m.from, m.data); break;
@@ -1045,16 +1046,10 @@ function drawShapeEl(e) {
   g.save(); g.globalAlpha = e.opacity ?? 1; g.fillStyle = e.color || '#000000'; rr(r.x, r.y, r.w, r.h, e.radius || 0); g.fill(); g.restore();
 }
 function drawChrome() {
-  const paper = BGS[S.state.brand.bg]?.[4];
-  const ink = paper ? 'rgba(17,24,39,' : 'rgba(255,255,255,';
   g.textBaseline = 'middle';
-  if (S.state.title && S.studio) { // a title saved from an earlier studio never shows on the empty home stage
-    g.textAlign = 'left'; g.font = `700 14px ${stageFont()}`; g.fillStyle = ink + '.8)';
-    const lg = stageElements().find((e) => e.type === 'logo' && !e.hidden);
-    const hasLogoTL = assetImg(S.state.brand.logo) && lg && lg.x < .2 && lg.y < .12;
-    g.fillText(S.state.title.toUpperCase().split('').join(String.fromCharCode(8202)), 30, hasLogoTL ? H - 22 : 22);
-  }
+  // The show title is no longer drawn on the stage: it lives in the header and on the watch page.
   if (window.__shopReady) { drawProduct(); drawPoll(); drawWatchBadge(); }
+  drawGoal(); drawWaves();
 }
 // The program is painted tier by tier: stage → media → (brand frame) → overlays → chat → ticker → system.
 const TIER_Z = Object.fromEntries(TIERS.map((x) => [x.id, x.z]));
@@ -1229,18 +1224,21 @@ const seenFeed = new Set();
 function addExternal(m) {
   if (seenFeed.has(m.id)) return;
   seenFeed.add(m.id);
+  const em = String(m.text || '').trim(); // a message that's only emoji ("🔥🔥🔥") rises on the stream too
+  if (em && em.length <= 24 && /^(\p{Extended_Pictographic}|\p{Emoji_Modifier}|\u200d|\ufe0f|\s)+$/u.test(em)) for (const e of [...em.matchAll(/\p{Extended_Pictographic}/gu)].slice(0, 4)) reactFloat(e[0]);
   pushFeed(m);
   const li = document.createElement('li');
   li.className = 'msg ext' + (m.paid ? ' paid' : '');
   setMsgData(li, m);
   const who = document.createElement('div'); who.className = 'who';
-  const badge = document.createElement('span'); badge.className = 'pill caps src-' + m.src; badge.textContent = SRC_NAME[m.src] || m.src;
+  const badge = document.createElement('span'); badge.className = 'pill caps src-' + m.src; badge.textContent = m.src === 'watch' ? 'Watch' : SRC_NAME[m.src] || m.src;
   const b = document.createElement('b'); b.textContent = m.name; if (m.color) b.style.color = m.color;
   who.append(badge, b);
-  if (m.q) { const q = document.createElement('span'); q.className = 'q-badge'; q.textContent = '✋ Question'; who.append(q); }
+  if (m.q) { const q = document.createElement('span'); q.className = 'q-badge'; q.textContent = 'Question'; who.append(q); }
   if (m.paid) { const amt = document.createElement('span'); amt.className = 'paid-amt'; amt.textContent = m.paid; who.append(amt); }
   const txt = document.createElement('div'); txt.className = 'txt'; txt.textContent = m.text;
   li.append(who, txt, msgActions(m));
+  chatShell(li, { id: m.id, name: m.name, ts: m.ts, av: m.av, likes: m.likes });
   appendLog(li);
   applyModeration(li);
   const log = $('#msgs'); while (log.children.length > 300) log.firstChild.remove();
@@ -1293,6 +1291,42 @@ function timeoutMenu() {
   timeoutPop.append(menu);
   document.body.append(timeoutPop);
   return timeoutPop;
+}
+// Every chat line: avatar, name, time, a like button, then the message.
+const CHAT_HUES = [210, 262, 330, 20, 145, 190, 45, 290];
+function chatColor(name) { let h = 0; for (const c of String(name || '')) h = (h * 31 + c.charCodeAt(0)) >>> 0; return `hsl(${CHAT_HUES[h % CHAT_HUES.length]} 70% 58%)`; }
+function chatAvatar(name, img) {
+  const a = document.createElement('span'); a.className = 'cav'; a.setAttribute('aria-hidden', 'true');
+  if (img && /^data:image\/(jpeg|png|webp);base64,/.test(img)) { const i = document.createElement('img'); i.src = img; i.alt = ''; a.append(i); }
+  else { a.style.background = chatColor(name); a.textContent = String(name || '?').trim().split(/\s+/).slice(0, 2).map((w) => w[0] || '').join('').toUpperCase() || '?'; }
+  return a;
+}
+function chatTime(ts) { const t = document.createElement('time'); const d = new Date(ts || Date.now()); t.dateTime = d.toISOString(); t.textContent = d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }); return t; }
+const LIKED = new Set();
+function likeBtn(id, n = 0) {
+  const b = document.createElement('button'); b.type = 'button'; b.className = 'clike'; b.dataset.like = id;
+  b.setAttribute('aria-label', 'Like'); b.setAttribute('aria-pressed', String(LIKED.has(id)));
+  b.innerHTML = '<svg class="i" aria-hidden="true"><use href="/icons.svg#i-heart"/></svg><span></span>';
+  b.querySelector('span').textContent = n ? String(n) : '';
+  b.onclick = () => {
+    if (!S.studio || LIKED.has(id)) return;
+    LIKED.add(id); b.setAttribute('aria-pressed', 'true');
+    const sp = b.querySelector('span'); sp.textContent = String((Number(sp.textContent) || 0) + 1);
+    b.classList.remove('pop'); void b.offsetWidth; b.classList.add('pop');
+    wsSend({ type: 'like', id });
+  };
+  return b;
+}
+function setLikes(id, n, from) {
+  if (from === S.id) LIKED.add(id);
+  for (const b of document.querySelectorAll(`#msgs [data-like="${CSS.escape(id)}"]`)) { b.querySelector('span').textContent = n ? String(n) : ''; b.setAttribute('aria-pressed', String(LIKED.has(id))); }
+}
+/** Wrap a message: avatar on the left, then the name line (with time and like) and the words. */
+function chatShell(li, { id, name, ts, av, likes }) {
+  const who = li.querySelector('.who');
+  if (who) { who.append(chatTime(ts)); const sp = document.createElement('span'); sp.className = 'cgrow'; who.append(sp, likeBtn(id, likes)); }
+  li.classList.add('has-av');
+  li.prepend(chatAvatar(name, av));
 }
 function msgActions(m) {
   const bar = document.createElement('div'); bar.className = 'mact';
@@ -1364,7 +1398,7 @@ function renderGoogle() {
 }
 api('config').then((c) => {
   configureGoogle(c.googleClientId); renderGoogle();
-  S.houseAI = c.houseAI || null; renderAIPanel();
+  S.houseAI = c.houseAI || null; S.houseVoice = c.houseVoice || null; renderAIPanel(); renderProducerUI(); renderVoiceNames();
   S.relayOn = !!c.relay; renderLive();
   S.requireAccount = !!c.requireAccount;
   if (c.builtInTurn) $('#turnHint').textContent = 'gather’s built-in relay already connects guests on strict corporate and mobile networks. Add your own only if you need to.';
@@ -1415,7 +1449,7 @@ const ELEMENT_DEFAULTS = {
   media: () => ({ type: 'media', x: .025, y: .07, w: .7, h: .86, radius: 12 }),
   ai: () => ({ type: 'ai', x: .62, y: .07, w: .355, h: .62, size: 22 }),
   tip: () => ({ type: 'tip', x: .025, y: .64, w: .34, h: .31, provider: 'paypal', url: '', label: 'Support the show' }),
-  callin: () => ({ type: 'callin', x: .66, y: .66, w: .31, h: .28, url: S.studio ? `${location.origin}/w/${S.studio}` : '', label: 'Watch & chat live', phone: '' }), // the watch-link card (QR + address)
+  callin: () => ({ type: 'callin', x: .66, y: .66, w: .31, h: .28, url: S.studio ? watchLinkUrl() : '', label: 'Watch & chat live', phone: '' }), // the watch-link card (QR + address)
   shape: () => ({ type: 'shape', x: .4, y: .4, w: .2, h: .2, color: '#0b1020', opacity: 1, radius: 0, label: '' }),
 };
 const px720 = (x, y, w, h) => ({ x: x / 1280, y: y / 720, w: w / 1280, h: h / 720 });
@@ -2345,36 +2379,56 @@ function actChip(a, withOpen = true) {
   }
   return li;
 }
+// The AI's conversation lives in the live chat, in time order with everything else: each item is one <li> in
+// #msgs keyed by data-aid, replaced in place as it streams.
+const aiShown = new Set();
+function aiItemLi(it, host, shown) {
+  const li = document.createElement('li'); li.className = 'msg ai-msg ' + it.role + (it.error ? ' error' : '');
+  li.dataset.aid = it.id; li.dataset.src = 'ai';
+  if (it.role === 'user') {
+    const who = document.createElement('div'); who.className = 'who';
+    const b = document.createElement('b'); b.textContent = 'You'; const to = document.createElement('span'); to.textContent = '→ ' + S.aiName;
+    who.append(b, to);
+    const t = document.createElement('div'); t.className = 'bubble'; t.textContent = it.text; li.append(who, t); return li;
+  }
+  const who = document.createElement('div'); who.className = 'who';
+  const orb = document.createElement('i'); orb.className = 'orb'; orb.setAttribute('aria-hidden', 'true');
+  const nm = document.createElement('b'); nm.textContent = S.aiName;
+  const via = document.createElement('span'); via.textContent = AI_NAME[it.provider] ? 'AI · ' + AI_NAME[it.provider] : 'AI';
+  who.append(orb, nm, via);
+  const txt = document.createElement('div'); txt.className = 'txt'; txt.textContent = plainMd(it.text || '') || (it.done ? '' : ' ');
+  if (!it.done) txt.classList.add('streaming');
+  li.append(who, txt);
+  if (it.actions?.length) { const ul = document.createElement('ul'); ul.className = 'act-chips'; ul.append(...it.actions.map(actChip)); li.append(ul); }
+  if (host && it.done && !it.error && it.text) {
+    const row = document.createElement('div'); row.className = 'msg-tools';
+    const on = shown?.id === it.id;
+    const st = document.createElement('button'); st.type = 'button'; st.className = 'btn sm' + (on ? ' on' : ''); st.dataset.stage = it.id;
+    st.textContent = on ? 'On stage' : 'Show on stage'; st.setAttribute('aria-pressed', on);
+    st.onclick = () => (on ? takeAnswerOff() : showAnswer(it.id));
+    const cp = document.createElement('button'); cp.type = 'button'; cp.className = 'btn sm ghost'; cp.textContent = 'Copy';
+    cp.onclick = () => navigator.clipboard?.writeText(plainMd(it.text)).then(() => toast('Copied.'), () => toast('Couldn’t copy.', { err: true }));
+    row.append(st, cp); li.append(row);
+  }
+  return li;
+}
 function renderAILog() {
-  const log = $('#aiLog');
+  const log = $('#msgs');
   if (!log) return;
   const host = isHost(), shown = aiOnStage() ? stageAnswer() : null;
-  log.replaceChildren(...S.ai.items.map((it) => {
-    const li = document.createElement('li'); li.className = 'ai-msg ' + it.role + (it.error ? ' error' : '');
-    li.dataset.id = it.id;
-    if (it.role === 'user') { const t = document.createElement('div'); t.className = 'bubble'; t.textContent = it.text; li.append(t); return li; }
-    const who = document.createElement('div'); who.className = 'who';
-    const nm = document.createElement('b'); nm.textContent = S.aiName;
-    const via = document.createElement('span'); via.textContent = AI_NAME[it.provider] || '';
-    who.append(nm, via);
-    const txt = document.createElement('div'); txt.className = 'txt'; txt.textContent = plainMd(it.text || '') || (it.done ? '' : ' ');
-    if (!it.done) txt.classList.add('streaming');
-    li.append(who, txt);
-    if (it.actions?.length) { const ul = document.createElement('ul'); ul.className = 'act-chips'; ul.append(...it.actions.map(actChip)); li.append(ul); }
-    if (host && it.done && !it.error && it.text) {
-      const row = document.createElement('div'); row.className = 'msg-tools';
-      const on = shown?.id === it.id;
-      const st = document.createElement('button'); st.type = 'button'; st.className = 'btn sm' + (on ? ' on' : ''); st.dataset.stage = it.id;
-      st.textContent = on ? 'On stage' : 'Show on stage'; st.setAttribute('aria-pressed', on);
-      st.onclick = () => (on ? takeAnswerOff() : showAnswer(it.id));
-      const cp = document.createElement('button'); cp.type = 'button'; cp.className = 'btn sm ghost'; cp.textContent = 'Copy';
-      cp.onclick = () => navigator.clipboard?.writeText(plainMd(it.text)).then(() => toast('Copied.'), () => toast('Couldn’t copy.', { err: true }));
-      row.append(st, cp); li.append(row);
-    }
-    return li;
-  }));
-  $('#aiEmpty').hidden = !!S.ai.items.length;
-  const body = log.closest('.panel-body'); if (body) body.scrollTop = body.scrollHeight;
+  const ids = new Set(S.ai.items.map((it) => it.id));
+  for (const li of log.querySelectorAll('li[data-aid]')) if (!ids.has(li.dataset.aid)) { li.remove(); aiShown.delete(li.dataset.aid); }
+  for (const it of S.ai.items) {
+    const cur = log.querySelector(`li[data-aid="${CSS.escape(it.id)}"]`);
+    if (cur) { cur.replaceWith(aiItemLi(it, host, shown)); continue; }
+    if (aiShown.has(it.id)) continue; // trimmed off the top of a long chat: don't bring it back at the bottom
+    aiShown.add(it.id); appendLog(aiItemLi(it, host, shown));
+    if (S.tab !== 'chat' && it.role === 'assistant') { S.unread++; $('#chatBadge').hidden = false; }
+  }
+  if (!S.ai.items.length) aiShown.clear();
+  $('#chatEmpty').hidden = !!log.children.length;
+  const last = S.ai.items[S.ai.items.length - 1];
+  if (last && !last.done) { const body = log.parentElement; if (body.scrollHeight - body.scrollTop - body.clientHeight < 160) body.scrollTop = body.scrollHeight; }
 }
 /** Put one answer in the AI window, adding the window to the stage (without changing the scene) if needed. */
 function showAnswer(id) {
@@ -2412,14 +2466,35 @@ function renderAIPanel() {
   $('#aiInput').disabled = !host; $('#aiAsk').disabled = !host || S.ai.busy;
   if (S.ai.busy) $('#aiAsk').setAttribute('aria-busy', 'true'); else $('#aiAsk').removeAttribute('aria-busy');
   $('#aiHostNote').hidden = host;
+  $('#chatToAi').textContent = 'Ask ' + S.aiName; $('#chatFilterAi').textContent = S.aiName;
+  $('#aiInput').placeholder = `Ask ${S.aiName} or tell it what to do…`;
+  $('#chatHint').textContent = host ? `Studio only · @${S.aiName} asks your AI` : 'Only people in the studio see this';
+  if (!host && S.chatTo === 'ai') setChatTo('chat', false);
   renderAILog();
 }
+// The AI tab is its settings; talking to it happens in the live chat.
 function setAiSetup(open, focus = true) {
-  $('#aiSetup').hidden = !open; $('#aiSetupBtn').setAttribute('aria-expanded', open); $('#aiSetupBtn').classList.toggle('on', open);
-  if (open && focus) (store.get('aiKey:' + S.aiProv, '') ? $('#aiName') : $('#aiKey')).focus();
+  if (!open) return;
+  if (focus) { setTab('ai'); (store.get('aiKey:' + S.aiProv, '') ? $('#aiName') : $('#aiKey')).focus(); }
 }
-$('#aiSetupBtn').onclick = () => setAiSetup($('#aiSetup').hidden);
-$('#aiSetupDone').onclick = () => { setAiSetup(false); $('#aiInput').focus(); };
+$('#aiSetupBtn').onclick = () => setTab('ai');
+$('#aiSetupDone').onclick = () => { setTab('chat'); setChatTo('ai'); };
+/** Who the composer sends to: the studio chat or your AI. */
+function setChatTo(to, focus = true) {
+  if (to === 'ai' && !isHost()) to = 'chat';
+  S.chatTo = to;
+  $$('#chatTo [data-to]').forEach((b) => { const on = b.dataset.to === to; b.classList.toggle('on', on); b.setAttribute('aria-checked', on); });
+  $('#chatForm').hidden = to === 'ai'; $('#aiForm').hidden = to !== 'ai'; $('#aiEmpty').hidden = to !== 'ai';
+  document.querySelector('[data-panel="chat"]').classList.toggle('to-ai', to === 'ai');
+  if (focus) (to === 'ai' ? $('#aiInput') : $('#chatInput')).focus();
+}
+$$('#chatTo [data-to]').forEach((b) => b.addEventListener('click', () => setChatTo(b.dataset.to)));
+// Filters: everything, or just viewers, questions, super chats or the AI.
+$$('#chatFilter [data-f]').forEach((b) => b.addEventListener('click', () => {
+  $$('#chatFilter [data-f]').forEach((x) => { const on = x === b; x.classList.toggle('on', on); x.setAttribute('aria-selected', on); });
+  $('#msgs').dataset.f = b.dataset.f;
+  const body = $('#msgs').parentElement; body.scrollTop = body.scrollHeight;
+}));
 $$('#aiProv button').forEach((b) => b.addEventListener('click', () => { S.aiProv = b.dataset.prov; store.set('aiProv', S.aiProv); renderAIPanel(); }));
 $('#aiKey').addEventListener('change', (e) => { store.set('aiKey:' + S.aiProv, e.target.value.trim()); toast(e.target.value.trim() ? `${AI_NAME[S.aiProv]} key saved in this browser.` : 'Key removed.'); renderAIPanel(); });
 $('#aiModel').addEventListener('change', (e) => store.set('aiModel:' + S.aiProv, e.target.value.trim()));
@@ -2910,7 +2985,7 @@ const fmtLocal = (ms) => new Date(ms).toLocaleString([], { weekday: 'short', mon
 function renderUpcoming() {
   const ul = $('#upList');
   const rows = S.streams.filter((x) => x.status === 'scheduled' || (x.status === 'live' && Date.now() - x.when < 6 * 3600e3));
-  $('#upEmpty').hidden = !!rows.length;
+  $('#upEmpty').hidden = true; // "Plan a stream for later" already says it
   ul.replaceChildren(...rows.map((st) => {
     const li = document.createElement('li'); li.className = 'up-item';
     const top = document.createElement('div'); top.className = 'up-top';
@@ -3271,6 +3346,7 @@ function renderDests(force) {
     box.querySelectorAll('input, [data-del]').forEach((el) => { el.disabled = live; });
     return;
   }
+  $$('.plat-tile[data-plat]').forEach((t) => t.classList.toggle('added', t.dataset.plat !== 'custom' && list.some((d) => d.kind === t.dataset.plat)));
   box.replaceChildren(...list.map((d, i) => {
     const p = PLATFORMS[d.kind] || PLATFORMS.custom;
     const li = document.createElement('li'); li.className = 'dest' + (d.on ? '' : ' off');
@@ -3304,6 +3380,8 @@ $('#destAdd').onchange = (e) => {
   saveDests([...liveDests(), { kind, url: PLATFORMS[kind].url, key: '', on: true }]);
   $('#destList li:last-child [data-k="' + (PLATFORMS[kind].url ? 'key' : 'url') + '"]')?.focus();
 };
+// Platform tiles: one click adds that destination (the select stays as the single code path).
+$$('.plat-tile[data-plat]').forEach((t) => t.addEventListener('click', () => { const s = $('#destAdd'); s.value = t.dataset.plat; s.onchange({ target: s }); }));
 const readyDests = () => liveDests().filter((d) => d.on && /^rtmps?:\/\//i.test(d.url || '') && (d.key || d.kind === 'custom'));
 /** The public page viewers can watch a destination on, as the host typed it (optional). */
 function watchUrl(d) {
@@ -3311,13 +3389,13 @@ function watchUrl(d) {
   if (w && !/^https?:\/\//i.test(w)) w = 'https://' + w;
   return /^https:\/\//i.test(w) ? w : '';
 }
-const watchLink = () => `${location.origin}/w/${S.studio}`;
+const watchLink = () => watchLinkUrl();
 $('#watchCopy').onclick = () => copy(watchLink(), 'Watch page link copied.');
 function fmtClock(ms) { const s = Math.floor(ms / 1000); return [Math.floor(s / 3600), Math.floor(s / 60) % 60, s % 60].map((n, i) => (i ? String(n).padStart(2, '0') : n)).join(':').replace(/^0:/, ''); }
 function renderLive() {
   const host = isHost(), L = S.live, on = L?.phase === 'live';
   $('#liveOff').hidden = S.relayOn;
-  for (const id of ['#destList', '#destAdd', '#liveNote', '#liveBtn']) $(id).hidden = !S.relayOn;
+  for (const id of ['#destList', '#liveNote', '#liveBtn']) $(id).hidden = !S.relayOn;
   $('#destAdd').parentElement.hidden = !S.relayOn;
   renderDests();
   const n = readyDests().length;
@@ -3520,8 +3598,7 @@ function addMsg(msg) {
   li.className = 'msg' + (mine ? ' me' : '');
   const who = document.createElement('div'); who.className = 'who';
   const b = document.createElement('b'); b.textContent = mine ? 'You' : msg.name;
-  const time = document.createElement('span'); time.textContent = new Date(msg.ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-  who.append(b, time);
+  who.append(b);
   const txt = document.createElement('div'); txt.className = 'txt';
   // Linkify safely: text nodes + anchors only.
   const parts = msg.text.split(/(https?:\/\/[^\s<]+)/g);
@@ -3533,6 +3610,7 @@ function addMsg(msg) {
   pushFeed(fm);
   setMsgData(li, fm);
   li.append(who, txt, msgActions(fm));
+  chatShell(li, { id: msg.id, name: msg.name, ts: msg.ts });
   appendLog(li);
   applyModeration(li);
   if (!mine && S.tab !== 'chat') { S.unread++; $('#chatBadge').hidden = false; }
@@ -3550,6 +3628,12 @@ $('#chatForm').addEventListener('submit', (e) => {
   const v = $('#chatInput').value.trim();
   if (!v) return;
   if (!S.studio) return toast('Enter a studio to chat.');
+  // "@Sam …" in the chat goes to your AI instead (host only).
+  const at = isHost() && new RegExp('^@' + (S.aiName || 'Sam').replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b[\\s,:]*', 'i').exec(v);
+  if (at && v.length > at[0].length) {
+    $('#chatInput').value = ''; autoGrow($('#chatInput'));
+    $('#aiInput').value = v.slice(at[0].length); $('#aiForm').requestSubmit(); return;
+  }
   wsSend({ type: 'chat', text: v });
   $('#chatInput').value = ''; autoGrow($('#chatInput'));
 });
@@ -3557,6 +3641,7 @@ $('#chatForm').addEventListener('submit', (e) => {
 // ---------------------------------------------------------------- rendering
 function setPhase(p) {
   S.phase = p;
+  document.body.classList.toggle('syncing', p === 'connecting' || p === 'reconnecting'); // skeletons until the studio arrives
   const pill = $('#statusPill');
   pill.dataset.state = p === 'online' ? 'online' : p === 'offline' ? 'offline' : 'connecting';
   $('#statusText').textContent = { offline: 'Offline', connecting: 'Connecting…', online: '', reconnecting: 'Reconnecting…' }[p];
@@ -3614,10 +3699,13 @@ function renderCrew() {
       list.insertBefore(li, add);
     }
     list.insertBefore(li, add); // keep join order
-    $('.nm', li).textContent = p.me ? `${p.name} (you)` : p.name;
+    $('.nm', li).textContent = p.name; li.classList.toggle('me', !!p.me);
     const nameRow = $('.crew-name', li);
-    nameRow.querySelector('.muted-ic')?.remove();
-    if (!p.mic) nameRow.insertAdjacentHTML('beforeend', `<span class="muted-ic" role="img" aria-label="Muted">${icon('mic-off', { size: 'sm' })}</span>`);
+    nameRow.querySelector('.muted-ic')?.remove(); nameRow.querySelector('.host-tag')?.remove();
+    if (p.id === S.host) nameRow.insertAdjacentHTML('beforeend', '<span class="host-tag">Host</span>');
+    else if (p.me) nameRow.insertAdjacentHTML('beforeend', '<span class="host-tag you">You</span>');
+    $('.crew-thumb .mic-off', li)?.remove();
+    if (!p.mic) $('.crew-thumb', li).insertAdjacentHTML('beforeend', `<span class="mic-off" role="img" aria-label="Muted">${icon('mic-off', { size: 'sm' })}</span>`);
     const ini = $('.ini', li); ini.hidden = !!p.cam;
     const bg = assetImg(p.offbg);
     ini.style.backgroundImage = bg ? `url("${bg.src}")` : '';
@@ -3626,11 +3714,10 @@ function renderCrew() {
     else { span.textContent = initials(p.name); span.style.backgroundImage = ''; span.classList.remove('has-av'); }
     const tags = $('.tagrow', li); tags.replaceChildren();
     const on = S.state.stage.includes(p.id);
-    if (p.id === S.host) tags.insertAdjacentHTML('beforeend', '<span class="pill caps on-media">Host</span>');
-    tags.insertAdjacentHTML('beforeend', on ? '<span class="pill caps accent">On stage</span>' : '<span class="pill caps on-media">Backstage</span>'); // "Live" only ever means broadcasting
+    tags.insertAdjacentHTML('beforeend', on ? '<span class="cstate on"><i></i>On stage</span>' : '<span class="cstate"><i></i>Backstage</span>'); // "Live" only ever means broadcasting
     $('.crew-thumb', li).classList.toggle('pickable', host);
     $('.crew-thumb', li).title = host ? (on ? `Click to send ${p.me ? 'yourself' : p.name} backstage` : `Click to put ${p.me ? 'yourself' : p.name} on stage`) : '';
-    if (p.sharing) tags.insertAdjacentHTML('beforeend', '<span class="pill caps on-media">Presenting</span>');
+    if (p.sharing) tags.insertAdjacentHTML('beforeend', '<span class="cstate pres">Presenting</span>');
     li.classList.toggle('on-stage', on);
     $('.crew-tools', li).hidden = !host;
     const st = $('.ct-stage', li); st.setAttribute('aria-label', on ? 'Take off stage' : 'Put on stage'); st.setAttribute('aria-pressed', String(on));
@@ -3798,6 +3885,19 @@ $('#panelToggle').onclick = () => {
 $$('.look-seg [data-look]').forEach((b) => b.addEventListener('click', () => setTab(b.dataset.look)));
 $('#helpTop').onclick = () => openDlg('helpDlg');
 $('#settingsTop').onclick = () => openDlg('settingsDlg');
+// Settings: one scrolling column of section cards; the sidebar jumps to a section and follows the scroll.
+{
+  const body = $('#settingsBody'), btns = $$('.set-nav-btn');
+  const mark = (k) => btns.forEach((b) => { const on = b.dataset.set === k; b.classList.toggle('on', on); if (on) b.setAttribute('aria-current', 'true'); else b.removeAttribute('aria-current'); });
+  btns.forEach((b) => b.addEventListener('click', () => { const sec = $('#set-' + b.dataset.set); body.scrollTo({ top: sec.offsetTop - body.offsetTop - 8, behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' }); mark(b.dataset.set); }));
+  body.addEventListener('scroll', () => {
+    if (body.scrollTop + body.clientHeight >= body.scrollHeight - 4) return mark(btns[btns.length - 1].dataset.set);
+    let cur = btns[0].dataset.set;
+    for (const sec of body.querySelectorAll('.set-sec')) if (sec.offsetTop - body.offsetTop - 40 <= body.scrollTop) cur = sec.dataset.set;
+    mark(cur);
+  }, { passive: true });
+  mark('general');
+}
 $('#liveTop').onclick = () => openDlg('liveDlg');
 
 function sceneList() {
@@ -4523,17 +4623,30 @@ function renderProducerUI() {
   if (!host || !S.studio) setCmd(false);
   if (document.activeElement !== $('#aiName')) $('#aiName').value = S.aiName;
   $('#aiWake').checked = !!S.aiWake;
-  const v = store.get('aiVoice', 'browser');
+  const v = voiceMode();
   $$('#aiVoiceSeg button').forEach((b) => b.classList.toggle('on', b.dataset.voice === v));
   $('#aiVoiceNameRow').hidden = v !== 'openai';
   $('#aiVoiceTest').hidden = v === 'off';
-  $('#aiVoiceName').value = store.get('aiVoiceName', 'alloy');
-  $('#aiVoiceNote').textContent = v === 'openai' ? (store.get('aiKey:openai', '') ? 'Everyone in the stream and the recording hears it.' : 'Needs a ChatGPT (OpenAI) key, saved under ChatGPT above.') : v === 'browser' ? 'Only you hear this voice.' : `${S.aiName} replies without speaking.`;
+  $('#aiVoiceName').value = voiceName();
+  $('#aiVoiceNote').textContent = v === 'openai' ? (store.get('aiKey:openai', '') || S.houseVoice ? 'A natural voice. Everyone in the stream and the recording hears it.' : 'Needs a ChatGPT (OpenAI) key, saved under ChatGPT above.') : v === 'browser' ? 'Your device’s own voice. Only you hear it.' : `${S.aiName} replies without speaking.`;
 }
 $('#aiName').addEventListener('input', (e) => { S.aiName = e.target.value.trim().slice(0, 20) || 'Sam'; store.set('aiName', S.aiName); renderProducerUI(); renderAILog(); });
 $('#aiWake').onchange = (e) => { S.aiWake = e.target.checked; store.set('aiWake', S.aiWake); syncCaptions(); toast(S.aiWake ? `Say “Hey ${S.aiName}” and then what you need.` : 'Wake word off.'); };
 $$('#aiVoiceSeg button').forEach((b) => b.addEventListener('click', () => { store.set('aiVoice', b.dataset.voice); renderProducerUI(); }));
-$('#aiVoiceName').onchange = (e) => store.set('aiVoiceName', e.target.value);
+$('#aiVoiceName').onchange = (e) => store.set(elevenVoice() ? 'aiVoiceName:eleven' : 'aiVoiceName', e.target.value);
+// The natural "Stream" voice is the default whenever this server has a house voice; otherwise the device's voice.
+function voiceMode() { return store.get('aiVoice', null) || (S.houseVoice ? 'openai' : 'browser'); }
+// Without an OpenAI key of your own, the house voice service picks the list of voices.
+function elevenVoice() { return !store.get('aiKey:openai', '') && S.houseVoice?.provider === 'elevenlabs'; }
+function voiceName() { return elevenVoice() ? store.get('aiVoiceName:eleven', 'rachel') : store.get('aiVoiceName', 'coral'); }
+function renderVoiceNames() {
+  const list = elevenVoice() ? [['rachel', 'Rachel · warm'], ['sarah', 'Sarah · bright'], ['elli', 'Elli · young'], ['adam', 'Adam · deep'], ['josh', 'Josh · friendly'], ['antoni', 'Antoni · smooth']]
+    : [['coral', 'Coral · warm'], ['sage', 'Sage · calm'], ['ash', 'Ash · clear'], ['ballad', 'Ballad · soft'], ['verse', 'Verse · lively'], ['nova', 'Nova · bright'], ['alloy', 'Alloy · neutral'], ['echo', 'Echo · low'], ['fable', 'Fable · British'], ['onyx', 'Onyx · deep'], ['shimmer', 'Shimmer · light']];
+  const sel = $('#aiVoiceName'), key = list.map((x) => x[0]).join();
+  if (sel.dataset.list !== key) { sel.dataset.list = key; sel.replaceChildren(...list.map(([v, t]) => { const o = document.createElement('option'); o.value = v; o.textContent = t; return o; })); }
+  sel.value = voiceName();
+}
+renderVoiceNames();
 $('#aiVoiceTest').onclick = () => speak(`Hi, I'm ${S.aiName}. Ready when you are.`);
 // The command bar floats over the stage only while you're using it: open it from the dock or with "/".
 function setCmd(open) {
@@ -4662,14 +4775,15 @@ async function askProducer(text) {
 }
 // Voice out: OpenAI voice goes into the stream mix; the browser voice is heard only by the host.
 async function speak(text) {
-  const mode = store.get('aiVoice', 'browser');
+  const mode = voiceMode();
   if (mode === 'off' || !text) return;
   setAiStatus('speaking');
   try {
     if (mode === 'openai') {
       const key = store.get('aiKey:openai', '');
-      if (!key) throw new Error('Add a ChatGPT (OpenAI) key in the AI panel for the stream voice.');
-      const res = await fetch('/api/ai', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mode: 'tts', apiKey: key, text, voice: store.get('aiVoiceName', 'alloy') }) });
+      const house = !key && S.houseVoice && S.studio ? { studio: S.studio, id: S.id, tok: S.tok } : null;
+      if (!key && !house) throw new Error('Add a ChatGPT (OpenAI) key in the AI panel for the stream voice.');
+      const res = await fetch('/api/ai', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mode: 'tts', apiKey: key || undefined, house: house || undefined, text, voice: voiceName() }) });
       if (!res.ok) { const j = await res.json().catch(() => ({})); throw new Error(j.error || 'The voice request failed.'); }
       const ctx = audioCtx();
       const buf = await ctx.decodeAudioData(await res.arrayBuffer());
@@ -4680,16 +4794,36 @@ async function speak(text) {
       await new Promise((r) => { src.onended = r; src.start(); });
       mix.dispose(); syncMedia(); S.aiAnalyser = null;
     } else if ('speechSynthesis' in window) {
-      await new Promise((r) => {
-        const u = new SpeechSynthesisUtterance(text);
-        const v = speechSynthesis.getVoices().find((x) => /^en/i.test(x.lang) && /natural|google|samantha|aria|jenny/i.test(x.name));
-        if (v) u.voice = v;
-        u.onend = r; u.onerror = r; speechSynthesis.speak(u);
-        setTimeout(r, 30000);
-      });
+      await deviceSpeak(text);
     }
   } catch (e) { toast(e.message, { err: true }); }
   finally { if (S.aiStatus === 'speaking') setAiStatus('idle'); }
+}
+// The device's own voice, made as good as it can be: the most natural English voice it has (Edge's "Natural"
+// neural voices, Chrome's Google voices, Apple's enhanced/premium ones), a lively pace, and one sentence at a time
+// (Chrome cuts a long utterance off after about 15 seconds).
+function bestDeviceVoice() {
+  const all = speechSynthesis.getVoices().filter((x) => /^en(-|_|$)/i.test(x.lang));
+  const score = (x) => (/natural|neural/i.test(x.name) ? 50 : 0) + (/premium|enhanced/i.test(x.name) ? 40 : 0) + (/^google/i.test(x.name) ? 30 : 0)
+    + (/aria|jenny|guy|ava|andrew|emma|brian|samantha|serena|daniel|karen|moira/i.test(x.name) ? 15 : 0) + (/en-us/i.test(x.lang) ? 5 : 0) + (x.localService ? 0 : 3)
+    - (/compact|espeak|zira|david|fred|albert|bad news|bells|boing|bubbles|cellos|jester|organ|trinoids|whisper|zarvox|wobble/i.test(x.name) ? 60 : 0);
+  return all.sort((a, b) => score(b) - score(a))[0] || null;
+}
+async function deviceSpeak(text) {
+  if (!speechSynthesis.getVoices().length) await new Promise((r) => { speechSynthesis.addEventListener('voiceschanged', r, { once: true }); setTimeout(r, 1200); });
+  const voice = bestDeviceVoice();
+  const parts = String(text).replace(/\$(\d+(?:\.\d\d)?)/g, '$1 dollars').match(/[^.!?]+[.!?]*\s*/g) || [text];
+  speechSynthesis.cancel();
+  for (const p of parts) {
+    if (!p.trim()) continue;
+    await new Promise((r) => {
+      const u = new SpeechSynthesisUtterance(p.trim());
+      if (voice) { u.voice = voice; u.lang = voice.lang; }
+      u.rate = 1.04; u.pitch = 1;
+      u.onend = r; u.onerror = r; speechSynthesis.speak(u);
+      setTimeout(r, 15000);
+    });
+  }
 }
 function aiVoiceLevel() {
   const an = S.aiAnalyser;
@@ -4912,17 +5046,20 @@ function chime() {
 // A short tour for hosts: each step lights up one part of the studio and says what it's for. It runs once,
 // the first time you host, and any time from Help → "Take the studio tour". Steps whose part isn't on screen
 // (say, a panel that's folded away) are skipped.
+// One sweep around the screen, never doubling back: the stage and what's under it, the bottom bar left to right,
+// the panel rail top to bottom, then the header left to right, ending on Go live.
 const TOUR = [
   ['#stage', 'Your show', 'What you see here is exactly what viewers see and what gets recorded.'],
   ['#sceneStrip', 'Scenes', 'Switch layouts in one click, or press 1–9. Save your own from Look → Layout.'],
   ['.deck-tabs [data-deck="people"]', 'Guests and backstage', 'New guests wait backstage. Click someone’s picture to put them on stage, or back off it.'],
-  ['#shareBtn', 'Present', 'Share your screen, slides, a video or an image.'],
+  ['#shareBtn', 'Present', 'Share your screen, slides, a video, an image or a game.'],
   ['#recBtn', 'Record', 'Record the show in this browser, then download it or save it to Google Drive.'],
-  ['.rail-btn[data-tab="show"]', 'Show', 'Banners, a scrolling ticker, live captions, the chat overlay and the call-in card.'],
-  ['.rail-btn[data-tab="look"]', 'Look', 'Arrange the stage and set your brand: colours, logo, backgrounds and fonts.'],
   ['#aiDock', 'Your AI producer', 'Ask it anything on air, or tell it to switch scenes, show a banner or find a video. Press / any time.'],
-  ['#enterTop', 'Invite', 'Send guests the link. They don’t need an account. The footer has a copy button too.'],
-  ['#liveTop', 'Go live', 'Stream to YouTube, Twitch and more at once, and get a watch page for viewers.'],
+  ['.rail-btn[data-tab="show"]', 'Show', 'Your watch page, super chats, voice questions, the shop and polls, banners and the ticker.'],
+  ['.rail-btn[data-tab="look"]', 'Look', 'Arrange the stage and set your brand: colours, logo, backgrounds and fonts.'],
+  ['#enterTop', 'Invite', 'Send guests the link. They don’t need an account.'],
+  ['#watchTop', 'Watch page', 'Your own page for viewers: the show, live chat and super chats. Share this link anywhere.'],
+  ['#liveTop', 'Go live', 'Stream to YouTube, Twitch and more at once. Your watch page works without it.'],
 ];
 const tour = { i: 0, steps: [] };
 const visible = (el) => !!el && el.getClientRects().length > 0 && getComputedStyle(el).visibility !== 'hidden';
@@ -4954,6 +5091,7 @@ function placeTour() {
   if (top < 8) top = Math.min(vh - ch - 8, Math.max(8, r.top + r.height / 2 - ch / 2)); // tall targets: beside
   let left = r.left + r.width / 2 - cw / 2;
   if (r.height > vh * 0.5 && r.right + gap + cw < vw) left = r.right + gap; // a big area (the stage): put the card next to it
+  if (r.left > vw - 140 && r.height < vh * 0.5) { left = r.left - gap - cw; top = Math.max(8, Math.min(vh - ch - 8, r.top + r.height / 2 - ch / 2)); } // the panel rail: beside it, not over it
   left = Math.max(8, Math.min(vw - cw - 8, left));
   Object.assign(card.style, { left: left + 'px', top: top + 'px' });
 }
@@ -5017,11 +5155,14 @@ setInterval(() => { if (S.studio && !S.rec && S.state?.rec?.on) renderDock(); },
 // Viewers watch the program straight from this browser over WebRTC (no platform in between), chat, react, send
 // super chats paid directly to the host, and ask to join the stage. A laptop can encode and upload the program
 // for a handful of viewers, so the host sets a cap; past it, viewers fall back to the platform players.
-const WATCH_DEFAULTS = { chat: true, supers: false, join: false, queue: false, voice: true, badge: true, direct: true, cap: 6, slow: 0, min: 2, about: '', links: [], pay: { paypal: '', venmo: '', cashapp: '', stripe: '' } };
+const WATCH_DEFAULTS = { chat: true, supers: false, join: false, queue: false, voice: true, badge: true, direct: true, cap: 6, slow: 0, min: 2, about: '', pin: '', goal: { label: '', target: 0 }, reactsOnStream: true, links: [], pay: { paypal: '', venmo: '', cashapp: '', stripe: '' } };
 const watchCfg = () => ({ ...WATCH_DEFAULTS, ...(S.state.watch || {}), pay: { ...WATCH_DEFAULTS.pay, ...(S.state.watch?.pay || {}) } });
 // Signed-in hosts with a watch-page name share gather…/w/<name>, which follows them from show to show.
 const myHandle = () => (isHost() && acct.user?.handle) || '';
-const watchLinkUrl = () => `${location.origin}/w/${myHandle() || S.studio}`;
+// Your claimed name, else this studio's short link (/w/k7m2x); the long studio code is only a fallback.
+const watchSlug = () => myHandle() || S.short || S.studio;
+const watchLinkUrl = () => `${location.origin}/w/${watchSlug()}`;
+const watchLinkText = () => watchLinkUrl().replace(/^https?:\/\/(www\.)?/, '');
 const VIEW = new Map(); // viewer id -> { pc }
 S.viewers = VIEW; // for the console and tests
 let programStream = null;
@@ -5036,6 +5177,8 @@ function programTracks() {
   audioCtx();
   const fps = S.local.pres?.game ? 60 : 30;
   if (!programStream || programStream.fps !== fps || programStream.getVideoTracks()[0]?.readyState !== 'live') { programStream = canvas.captureStream(fps); programStream.fps = fps; }
+  // The program is text, slides and faces: tell the encoder sharpness matters more than smoothness (games: motion).
+  const vt = programStream.getVideoTracks()[0]; if (vt) vt.contentHint = S.local.pres?.game ? 'motion' : 'detail';
   return [programStream.getVideoTracks()[0], recDest?.stream.getAudioTracks()[0]].filter(Boolean);
 }
 async function viewerWant(vid) {
@@ -5067,12 +5210,19 @@ async function viewerWant(vid) {
   catch (e) { console.warn('viewer offer failed', e); closeViewer(vid); }
   renderWatchSec();
 }
+// WebRTC starts every connection at a few hundred kbps and ramps up over ~10 s, so viewers first saw a 320x180
+// picture. Start video at 2 Mbps (never below 800 kbps) so the first frames are already sharp. Chrome reads these
+// hints from the codec parameters of the answer; other browsers ignore them.
+function fastStart(sdp) {
+  return String(sdp || '').replace(/^(a=fmtp:\d+ [^\r\n]*)/gm, (line) => (/x-google-start-bitrate/.test(line) || /apt=|opus|telephone/i.test(line) ? line : line + ';x-google-start-bitrate=2000;x-google-min-bitrate=800'))
+    .replace(/^(a=rtpmap:(\d+) (VP8|VP9|H264|AV1)\/90000)\r?$/gm, (m, line, pt) => (new RegExp(`^a=fmtp:${pt} `, 'm').test(sdp) ? line : `${line}\r\na=fmtp:${pt} x-google-start-bitrate=2000;x-google-min-bitrate=800`));
+}
 async function viewerSignal(vid, d) {
   const v = VIEW.get(vid);
   if (!v || !d) return;
   // A viewer picked a quality on their player: scale only their stream.
   if (d.quality) { v.q = d.quality; for (const s of v.pc.getSenders()) if (s.track?.kind === 'video') tuneViewerSender(s, v.q); return; }
-  try { if (d.sdp) await v.pc.setRemoteDescription(d.sdp); else if (d.candidate) await v.pc.addIceCandidate(d.candidate).catch(() => {}); }
+  try { if (d.sdp) await v.pc.setRemoteDescription(d.sdp.type === 'answer' ? { type: 'answer', sdp: fastStart(d.sdp.sdp) } : d.sdp); else if (d.candidate) await v.pc.addIceCandidate(d.candidate).catch(() => {}); }
   catch (e) { console.warn('viewer signal', e); }
 }
 /** Viewer encoding: 2.5 Mbps at 30 fps; in game mode 60 fps (4 Mbps), keeping motion smooth over sharpness. */
@@ -5082,7 +5232,7 @@ function tuneViewerSender(sender, q) {
     const p = sender.getParameters();
     const scale = { 720: 1, 480: 1.5, 360: 2 }[q] || 1;
     p.encodings = [{ ...(p.encodings?.[0] || {}), maxBitrate: Math.round((game ? 4_000_000 : 2_500_000) / scale / scale), maxFramerate: game ? 60 : 30, scaleResolutionDownBy: scale }];
-    p.degradationPreference = game ? 'maintain-framerate' : 'balanced';
+    p.degradationPreference = game ? 'maintain-framerate' : 'maintain-resolution'; // short of bandwidth: drop frames, never blur
     sender.setParameters(p).catch(() => {});
   } catch {}
 }
@@ -5166,6 +5316,7 @@ async function refreshSupers() { if (!S.studio || !isHost()) return; try { for (
 
 // Reactions from the watch page float over the host's stage view (never into the program).
 function reactFloat(e) {
+  if (watchCfg().reactsOnStream !== false) { (S.waves ||= []).push({ e, t0: performance.now(), x: 0.78 + Math.random() * 0.16, dx: (Math.random() - 0.5) * 0.08, s: 0.9 + Math.random() * 0.5 }); if (S.waves.length > 60) S.waves.shift(); return; }
   const s = document.createElement('span'); s.className = 'react-float'; s.textContent = e; s.style.left = 10 + Math.random() * 80 + '%';
   $('#stage')?.append(s); setTimeout(() => s.remove(), 2600);
 }
@@ -5180,30 +5331,38 @@ function setWatch(patch) {
 function renderWatchSec() {
   if (!window.__watchReady || !$('#watchSec')) return; // renderAll can run before this part of the module loads
   const cfg = watchCfg(), on = !!S.studio;
-  $('#wpUrl').textContent = on ? watchLinkUrl().replace(/^https?:\/\//, '') : 'Enter your studio to get its watch link';
+  $('#wpUrl').textContent = on ? watchLinkText() : 'Enter your studio to get its watch link';
   for (const id of ['#wpCopy', '#wpCard', '#wpOpen']) $(id).disabled = !on;
   $('#wpCount').textContent = on && cfg.direct ? `${VIEW.size} of ${cfg.cap} watching directly` : '';
   for (const [id, k] of [['#wpChat', 'chat'], ['#wpSupers', 'supers'], ['#wpJoin', 'join'], ['#wpDirect', 'direct'], ['#wpVoice', 'voice'], ['#wpBadge', 'badge']]) if ($(id) && document.activeElement !== $(id)) $(id).checked = cfg[k] !== false && !!(cfg[k] ?? true);
   for (const k of Object.keys(PAY_NAME)) { const el = $('#wpPay-' + k); if (document.activeElement !== el) el.value = cfg.pay[k] || ''; }
   if (document.activeElement !== $('#wpCap')) $('#wpCap').value = String(cfg.cap);
   if (document.activeElement !== $('#wpAbout')) $('#wpAbout').value = cfg.about || '';
+  if (document.activeElement !== $('#wpPin')) $('#wpPin').value = cfg.pin || '';
+  if (document.activeElement !== $('#wpGoalLabel')) $('#wpGoalLabel').value = cfg.goal?.label || '';
+  if (document.activeElement !== $('#wpGoalTarget')) $('#wpGoalTarget').value = cfg.goal?.target || '';
+  $('#wpReacts').checked = cfg.reactsOnStream !== false;
   if (document.activeElement !== $('#wpLinks')) $('#wpLinks').value = (cfg.links || []).map((l) => `${l.label} | ${l.url}`).join('\n');
   if (document.activeElement !== $('#wpMin')) $('#wpMin').value = String(cfg.min);
-  $('#wpPayBox').hidden = !cfg.supers;
+  // Super chats: the payment fields are always shown, with one line saying what's left to do.
+  const payOn = Object.values(cfg.pay).some(Boolean);
+  $('#wpSupersState').textContent = cfg.supers && payOn ? 'On' : cfg.supers ? 'Needs a way to pay' : 'Off';
+  $('#wpPayStatus').textContent = !payOn ? 'Add at least one way to get paid. Viewers pay you directly; gather never touches the money.'
+    : cfg.supers ? 'Viewers see a Tip button in the chat on your watch page.' : 'Payments are set. Turn on super chats above to show the Tip button.';
   if (document.activeElement !== $('#wpQueue')) $('#wpQueue').checked = !!cfg.queue;
   if (window.__shopReady) { renderShop(); renderPoll(); renderEmotes(); }
-  $('#wpNoPay').hidden = !cfg.supers || Object.values(cfg.pay).some(Boolean);
+  $('#wpNoPay').hidden = true; // replaced by #wpPayStatus
   renderHandle();
 }
 function renderHandle() {
   const u = acct.user, h = u?.handle || '';
-  $('#wpHost').textContent = location.host + '/w/';
+  $('#wpHost').textContent = '/w/'; // the full address is spelled out in the note under the field
   if (document.activeElement !== $('#wpHandle')) $('#wpHandle').value = h;
   $('#wpHandle').disabled = $('#wpHandleSave').disabled = !u;
   $('#wpHandleSave').textContent = h ? 'Change' : 'Claim';
-  $('#wpHandleNote').textContent = !u ? 'Sign in to claim a name like /w/yourname. It’s free and always points at your current show.'
-    : h ? `Viewers can bookmark ${location.host}/w/${h}. Between shows it says you’re offline, then plays by itself when you go on.`
-    : 'Pick a name once; share one link forever.';
+  $('#wpHandleNote').textContent = !u ? 'Sign in to claim a name. It always points at your current show.'
+    : h ? `Same link every show: ${location.host.replace(/^www\./, '')}/w/${h}`
+    : 'Pick a name once and share one link forever.';
 }
 $('#wpHandleForm').addEventListener('submit', async (e) => {
   e.preventDefault();
@@ -5229,6 +5388,10 @@ $('#wpCard').onclick = () => {
 for (const [id, k] of [['#wpChat', 'chat'], ['#wpSupers', 'supers'], ['#wpJoin', 'join'], ['#wpDirect', 'direct'], ['#wpVoice', 'voice'], ['#wpBadge', 'badge']]) if ($(id)) $(id).onchange = (e) => setWatch({ [k]: e.target.checked });
 $('#wpCap').onchange = (e) => setWatch({ cap: Number(e.target.value) });
 $('#wpAbout').onchange = (e) => setWatch({ about: e.target.value.trim() });
+$('#wpPin').onchange = (e) => setWatch({ pin: e.target.value.trim() });
+const setGoal = () => setWatch({ goal: { label: $('#wpGoalLabel').value.trim().slice(0, 40), target: Math.max(0, Math.min(100000, Math.round(Number($('#wpGoalTarget').value) || 0))) } });
+$('#wpGoalLabel').onchange = setGoal; $('#wpGoalTarget').onchange = setGoal;
+$('#wpReacts').onchange = (e) => setWatch({ reactsOnStream: e.target.checked });
 $('#wpLinks').onchange = (e) => {
   const links = e.target.value.split('\n').map((line) => { const [a, b] = line.includes('|') ? line.split('|') : ['', line]; let url = (b || '').trim(); if (url && !/^https?:\/\//i.test(url)) url = 'https://' + url; return { label: a.trim() || url.replace(/^https?:\/\/(www\.)?/, '').split('/')[0], url }; }).filter((l) => /^https:\/\//.test(l.url)).slice(0, 6);
   setWatch({ links });
@@ -5489,6 +5652,7 @@ async function aiTranscribe(x) {
   } catch (e) { toast(e.message, { err: true }); }
 }
 function voiceRow(x, inChat) {
+  if (inChat) return voiceChatRow(x);
   const li = document.createElement('li'); li.className = (inChat ? 'msg ext vm-msg ' : 'sc-item ') + 'vm ' + (x.status || 'new'); li.dataset.vm = x.id;
   const top = document.createElement('div'); top.className = inChat ? 'who' : 'sc-top';
   const badge = document.createElement('span'); badge.className = 'pill caps src-watch'; badge.textContent = '🎙 Voice question';
@@ -5507,6 +5671,37 @@ function voiceRow(x, inChat) {
     btn('Delete', 'ghost', () => { if (vmPlaying?.id === x.id) vmPlaying.stop(); wsSend({ type: 'vmDel', id: x.id }); dropVoice(x.id); if (S.state.featured?.id === 'vm-' + x.id) setStage({ featured: null }); }),
   );
   li.append(top, txt, row);
+  return li;
+}
+function voiceChatRow(x) {
+  const li = document.createElement('li'); li.className = 'msg ext vm-msg vm ' + (x.status || 'new'); li.dataset.vm = x.id; li.dataset.src = 'watch';
+  const who = document.createElement('div'); who.className = 'who';
+  const b = document.createElement('b'); b.textContent = x.name;
+  const tag = document.createElement('span'); tag.className = 'pill caps src-voice'; tag.textContent = 'Voice';
+  who.append(b, tag);
+  const card = document.createElement('div'); card.className = 'vm-card';
+  const playing = vmPlaying?.id === x.id;
+  const play = document.createElement('button'); play.type = 'button'; play.className = 'vm-play' + (playing ? ' on' : '');
+  play.setAttribute('aria-label', playing ? 'Stop' : 'Preview: only you hear it'); play.dataset.tip = playing ? 'Stop' : 'Preview (only you hear it)';
+  play.innerHTML = `<svg class="i" aria-hidden="true"><use href="/icons.svg#i-${playing ? 'square' : 'play'}"/></svg>`;
+  play.onclick = () => (playing ? vmPlaying.stop() : playVoice(x, false));
+  const wave = document.createElement('span'); wave.className = 'vm-wave'; wave.setAttribute('aria-hidden', 'true');
+  for (let i = 0; i < 18; i++) { const bar = document.createElement('i'); bar.style.height = 30 + ((i * 37 + x.id.length * 13) % 70) + '%'; wave.append(bar); }
+  const dur = document.createElement('span'); dur.className = 'vm-dur'; dur.textContent = `0:${String(x.dur || 0).padStart(2, '0')}`;
+  const state = document.createElement('span'); state.className = 'vm-state'; state.textContent = x.status === 'aired' ? 'Played on air' : x.status === 'heard' ? 'Previewed' : 'New';
+  card.append(play, wave, dur, state);
+  const txt = document.createElement('p'); txt.className = 'vm-text';
+  txt.textContent = x.transcript ? `“${x.transcript}”` : 'No transcript yet.';
+  if (x.ai) { const sm = document.createElement('small'); sm.textContent = ' · AI transcript'; txt.append(sm); }
+  const row = document.createElement('div'); row.className = 'vm-acts';
+  const mk = (label, cls, icon, fn, tip) => { const k = document.createElement('button'); k.type = 'button'; k.className = 'btn sm ' + cls; k.innerHTML = icon ? `<svg class="i sm" aria-hidden="true"><use href="/icons.svg#i-${icon}"/></svg>` : ''; if (label) k.append(label); if (tip) { k.dataset.tip = tip; k.setAttribute('aria-label', tip); } k.onclick = fn; return k; };
+  row.append(
+    mk('Play on air', 'primary', 'radio', () => playVoice(x, true)),
+    ...(x.transcript && !x.ai ? [] : [mk('', 'ghost icon-only', 'sparkles', () => aiTranscribe(x), 'AI transcript')]),
+    mk('', 'ghost icon-only', 'trash-2', () => { if (vmPlaying?.id === x.id) vmPlaying.stop(); wsSend({ type: 'vmDel', id: x.id }); dropVoice(x.id); if (S.state.featured?.id === 'vm-' + x.id) setStage({ featured: null }); }, 'Delete'),
+  );
+  li.append(who, card, txt, row);
+  chatShell(li, { id: 'vm-' + x.id, name: x.name, ts: x.ts });
   return li;
 }
 function renderVoice() {
@@ -5531,12 +5726,13 @@ $('#watchTop').onclick = (ev) => {
 };
 $('#copyWatch').onclick = () => copy(watchLinkUrl(), 'Watch link copied.');
 $('#openWatch').onclick = () => window.open(watchLinkUrl(), '_blank', 'noopener');
-$('#inviteDlg').addEventListener('toggle', () => { if ($('#inviteDlg').open && S.studio) $('#inviteWatch').textContent = watchLinkUrl().replace(/^https?:\/\//, ''); });
+$('#inviteDlg').addEventListener('toggle', () => { if ($('#inviteDlg').open && S.studio) $('#inviteWatch').textContent = watchLinkText(); });
 /** On stream: "Watch & chat live · host/w/code", bottom right, unless the host turned it off or placed the QR card. */
 function drawWatchBadge() {
+  S.badgeRect = null;
   if (!S.studio || watchCfg().badge === false) return;
   if ((S.state.elements || []).some((e) => e.type === 'callin' && !e.hidden)) return;
-  const text = `${location.host}/w/${S.studio}`, label = 'WATCH & CHAT LIVE';
+  const text = watchLinkText(), label = (watchCfg().badgeLabel || 'Watch & chat live').toUpperCase();
   g.save();
   g.font = '700 15px Inter, sans-serif'; const tw = g.measureText(text).width;
   g.font = '800 11px Inter, sans-serif'; const lw = g.measureText(label).width;
@@ -5548,5 +5744,193 @@ function drawWatchBadge() {
   g.textAlign = 'left'; g.textBaseline = 'alphabetic';
   g.fillStyle = '#9ca3af'; g.font = '800 11px Inter, sans-serif'; g.fillText(label, x + 42, y + 20);
   g.fillStyle = '#fff'; g.font = '700 15px Inter, sans-serif'; g.fillText(text, x + 42, y + 38);
+  g.restore();
+  S.badgeRect = { x, y, w, h };
+}
+
+// Panel sections remember being folded (per browser), so each host's panels open the way they left them.
+{
+  const folded = new Set(store.get('foldedSecs', []));
+  for (const d of document.querySelectorAll('details.psec[data-sec]')) {
+    if (folded.has(d.dataset.sec)) d.open = false;
+    d.addEventListener('toggle', () => { if (d.open) folded.delete(d.dataset.sec); else folded.add(d.dataset.sec); store.set('foldedSecs', [...folded]); });
+  }
+}
+
+// Keyboard users get focus rings everywhere; pointer users don't see a ring left on a header button after a click.
+addEventListener('keydown', (e) => { if (e.key === 'Tab' || e.key.startsWith('Arrow')) document.body.classList.add('kbd'); }, true);
+addEventListener('pointerdown', () => document.body.classList.remove('kbd'), true);
+
+// The studio's light: a tiny copy of the stage, blurred huge behind the glass, so the room takes on the show's colours.
+{
+  const amb = document.createElement('canvas'); amb.className = 'amb'; amb.width = 48; amb.height = 27;
+  document.querySelector('.backdrop')?.append(amb);
+  const cx = amb.getContext('2d', { alpha: false });
+  const quiet = matchMedia('(prefers-reduced-transparency: reduce)');
+  setInterval(() => {
+    if (document.hidden || quiet.matches || document.body.classList.contains('pre')) return;
+    try { cx.drawImage(canvas, 0, 0, amb.width, amb.height); amb.classList.add('on'); } catch {}
+  }, 400);
+}
+
+
+// The "Watch & chat live" badge on the stream: the host can point at it on the stage, change its words or hide it.
+{
+  const hit = document.createElement('button');
+  hit.type = 'button'; hit.className = 'badge-hit'; hit.hidden = true; hit.setAttribute('aria-label', 'Edit the watch link badge');
+  hit.innerHTML = '<span>Edit badge</span>';
+  $('#stage').append(hit);
+  const pop = document.createElement('div');
+  pop.className = 'popover glass raised badge-pop'; pop.popover = 'auto'; pop.setAttribute('aria-label', 'Watch link badge');
+  pop.innerHTML = `<b>Watch link on stream</b><p class="hint">Points platform viewers to your watch page, where they can chat and tip.</p>
+    <label class="fld"><span>Label</span><input class="input" id="badgeLabelIn" maxlength="28" placeholder="Watch & chat live"></label>
+    <div class="badge-pop-row"><button type="button" class="btn sm" id="badgeHide">Hide from stream</button><button type="button" class="btn sm primary" id="badgeDone">Done</button></div>`;
+  document.body.append(pop);
+  hit.onclick = () => { pop.querySelector('#badgeLabelIn').value = watchCfg().badgeLabel || ''; togglePopover(pop, hit, 'top'); pop.querySelector('#badgeLabelIn').focus(); };
+  pop.querySelector('#badgeLabelIn').addEventListener('input', (e) => setWatch({ badgeLabel: e.target.value.slice(0, 28) }));
+  pop.querySelector('#badgeHide').onclick = () => { setWatch({ badge: false }); pop.hidePopover(); toast('The watch link badge is off. Turn it back on in Show → Viewer features.'); };
+  pop.querySelector('#badgeDone').onclick = () => pop.hidePopover();
+  let last = '';
+  const place = () => {
+    const r = S.badgeRect, show = !!r && isHost() && !document.body.classList.contains('pre');
+    const key = show ? `${r.x}|${r.y}|${r.w}|${r.h}` : '';
+    if (key !== last) {
+      last = key; hit.hidden = !show;
+      if (show) Object.assign(hit.style, { left: (r.x / W * 100) + '%', top: (r.y / H * 100) + '%', width: (r.w / W * 100) + '%', height: (r.h / H * 100) + '%' });
+    }
+    requestAnimationFrame(place);
+  };
+  requestAnimationFrame(place);
+}
+
+// The page loader leaves once the page has its fonts and styles (the studio's own data shows as skeletons).
+if (document.readyState === 'complete') window.gatherBoot?.done(); else addEventListener('load', () => window.gatherBoot?.done(), { once: true });
+
+// Landing preview: the mock chat plays like a real one. Messages arrive one by one, a super chat lands with an alert
+// on the stage, the AI types its answer, reactions float up, and the viewer count ticks. Paused when off screen.
+{
+  const win = $('.hz-win'), feed = $('.hz-feed');
+  const quiet = matchMedia('(prefers-reduced-motion: reduce)');
+  if (win && feed && !quiet.matches) {
+    const POOL = [
+      { n: 'Dev', h: 20, t: 'What camera is that?' },
+      { n: 'Ana', h: 200, t: 'Hi from Lisbon 👋' },
+      { n: 'Kai', h: 300, t: 'The new layout looks so clean' },
+      { n: 'Jason', h: 140, t: 'Love this format!', paid: '$10' },
+      { ai: 1, t: 'A Sony ZV-E10. Link’s on screen.' },
+      { n: 'Lena', h: 260, t: '🔥🔥🔥' },
+      { n: 'Marco', h: 40, t: 'Watching from Austin 🤠' },
+      { n: 'Noah', h: 170, t: '@Sam can we get the slides after?' },
+      { ai: 1, t: 'Yes. They go out by email right after the show.' },
+      { n: 'Zoe', h: 330, t: 'Best setup I’ve seen on a stream', paid: '$5' },
+      { n: 'Omar', h: 90, t: 'First time here, this is great' },
+      { n: 'Kai', h: 300, t: 'gg 👏' },
+    ];
+    const REACT = ['❤️', '🔥', '👏', '😂', '🎉', '💙'];
+    const stage = $('.hz-stage'), floats = $('.hz-floats'), views = $('.hz-views'), typing = $('.hz-typing');
+    const tiles = $$('.hz-tile');
+    let i = 0, visible = true, count = 1284, first = true;
+    const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+    const running = () => visible && !document.hidden && document.body.classList.contains('pre') && !document.documentElement.classList.contains('booting');
+    const el = (tag, cls, txt) => { const e = document.createElement(tag); if (cls) e.className = cls; if (txt != null) e.textContent = txt; return e; };
+    const drop = (node, ms) => setTimeout(() => node.remove(), ms);
+
+    function bubble(m) {
+      const li = el('div', 'hz-msg in' + (m.paid ? ' paid' : '') + (m.ai ? ' ai' : ''));
+      const av = el('span', 'hz-mav' + (m.ai ? ' orb' : ''), m.ai ? '' : m.n[0]);
+      if (!m.ai) av.style.setProperty('--h', m.h);
+      const body = el('div'), name = el('b', '', m.ai ? 'Sam ' : m.n + ' ');
+      if (m.paid || m.ai) name.append(el('em', '', m.ai ? 'AI' : m.paid));
+      body.append(name, el('p', '', m.t)); li.append(av, body);
+      return li;
+    }
+    function push(li) {
+      feed.append(li);
+      const h = li.offsetHeight; // grow into place so everything above glides up instead of jumping
+      li.animate([{ height: '0px', marginTop: '-8px' }, { height: h + 'px', marginTop: '0px' }], { duration: 380, easing: 'cubic-bezier(.2,.8,.2,1)' });
+      while (feed.children.length > 8) feed.firstElementChild.remove();
+    }
+    function float(n = 1) {
+      for (let k = 0; k < n; k++) {
+        const f = el('span', 'hz-float', REACT[Math.floor(Math.random() * REACT.length)]);
+        f.style.setProperty('--dx', (Math.random() * -90 - 10).toFixed(0) + 'px');
+        f.style.setProperty('--r', (Math.random() * 40 - 20).toFixed(0) + 'deg');
+        f.style.setProperty('--t', (2.4 + Math.random() * 1.2).toFixed(2) + 's');
+        f.style.right = (5 + Math.random() * 6).toFixed(1) + '%';
+        f.style.animationDelay = (k * 0.12).toFixed(2) + 's';
+        floats.append(f); drop(f, 4200);
+      }
+    }
+    function alertPaid(m) {
+      const t = el('div', 'hz-toast'); t.append(el('b', '', m.paid), document.createTextNode(`${m.n} sent a super chat`));
+      stage.append(t); drop(t, 3300);
+    }
+    async function say(m) {
+      if (m.ai) {
+        typing.hidden = false;
+        const li = bubble({ ...m, t: '' }); const p = li.querySelector('p');
+        const dots = el('span', 'hz-dots'); dots.append(el('i'), el('i'), el('i')); p.replaceChildren(dots);
+        push(li); await sleep(1100);
+        typing.hidden = true;
+        const txt = document.createTextNode(''), cur = el('span', 'cur'); p.replaceChildren(txt, cur);
+        for (const ch of m.t) { txt.data += ch; await sleep(22); }
+        await sleep(500); cur.remove();
+        return;
+      }
+      push(bubble(m));
+      if (m.paid) { alertPaid(m); float(5); }
+      else if (/🔥|👏|👋|🤠/u.test(m.t)) float(2);
+    }
+    async function loop() {
+      for (;;) {
+        if (!running()) { await sleep(600); continue; }
+        if (first) { first = false; feed.replaceChildren(); await sleep(350); }
+        const m = POOL[i++ % POOL.length];
+        await say(m);
+        if (Math.random() < 0.55) float(1 + Math.floor(Math.random() * 2));
+        if (Math.random() < 0.6) { count += 1 + Math.floor(Math.random() * 9); views.textContent = count.toLocaleString('en-US'); views.classList.remove('tick'); void views.offsetWidth; views.classList.add('tick'); }
+        if (i % 3 === 0) tiles.forEach((t) => t.classList.toggle('talk')); // the speaker changes now and then
+        await sleep(i <= 3 ? 700 : 1500 + Math.random() * 900);
+      }
+    }
+    new IntersectionObserver(([e]) => { visible = e.isIntersecting; }).observe(win);
+    loop();
+  }
+}
+
+
+// ---------------------------------------------------------------- on the stream: the community goal, reaction waves
+// The goal bar (top centre) fills with confirmed super chats; it's drawn into the program, so every platform sees it.
+function goalRaised() { let t = 0; for (const x of S.supers?.values() || []) if (x.status === 'confirmed' || x.status === 'answered') t += Number(x.amount) || 0; return t; }
+function drawGoal() {
+  const goal = watchCfg().goal;
+  if (!S.studio || !(goal?.target > 0)) return;
+  const raised = goalRaised(), p = Math.min(1, raised / goal.target);
+  const w = Math.min(W * 0.42, 520), h = 54, x = (W - w) / 2, y = 22;
+  g.save();
+  g.fillStyle = 'rgba(8,12,26,0.72)'; rr(x, y, w, h, 14); g.fill();
+  g.strokeStyle = 'rgba(255,255,255,0.14)'; g.lineWidth = 1.5; rr(x, y, w, h, 14); g.stroke();
+  g.textBaseline = 'alphabetic';
+  g.fillStyle = '#fde68a'; g.font = '800 12px Inter, sans-serif'; g.fillText(('🎯 ' + (goal.label || 'Community goal')).toUpperCase(), x + 16, y + 21);
+  const amt = `$${Math.round(raised).toLocaleString()} / $${goal.target.toLocaleString()}`;
+  g.font = '700 14px Inter, sans-serif'; g.fillStyle = '#fff'; const tw = g.measureText(amt).width; g.fillText(amt, x + w - 16 - tw, y + 21);
+  const bx = x + 16, by = y + 32, bw = w - 32, bh = 10;
+  g.fillStyle = 'rgba(255,255,255,0.12)'; rr(bx, by, bw, bh, 5); g.fill();
+  if (p > 0) { const gr = g.createLinearGradient(bx, 0, bx + bw, 0); gr.addColorStop(0, '#a3e635'); gr.addColorStop(1, '#22c55e'); g.fillStyle = gr; rr(bx, by, Math.max(bh, bw * p), bh, 5); g.fill(); }
+  g.restore();
+}
+// Each viewer reaction rises from the lower right of the picture and fades: a wave when the room gets loud.
+function drawWaves() {
+  const list = S.waves; if (!list?.length) return;
+  const now = performance.now(), life = 2600;
+  g.save(); g.textAlign = 'center'; g.textBaseline = 'middle';
+  for (let i = list.length - 1; i >= 0; i--) {
+    const w = list[i], t = (now - w.t0) / life;
+    if (t >= 1) { list.splice(i, 1); continue; }
+    const ease = 1 - Math.pow(1 - t, 3);
+    g.globalAlpha = t < 0.12 ? t / 0.12 : 1 - Math.max(0, (t - 0.6) / 0.4);
+    g.font = `${Math.round(44 * w.s * (0.7 + 0.3 * Math.min(1, t * 4)))}px "Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif`;
+    g.fillText(w.e, (w.x + w.dx * Math.sin(t * 6)) * W, H * (0.9 - ease * 0.55));
+  }
   g.restore();
 }

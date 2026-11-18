@@ -1,6 +1,7 @@
 // The public watch page (/w/<studio>): the show straight from the studio over WebRTC (no platform in between),
 // with the host's YouTube/Twitch/Kick players as a fallback, a live chat, reactions, super chats paid directly to
 // the host, and "Ask to join the stage". Viewers never need an account.
+import { configureGoogle, googleConfigured, googleSignInToken } from './google.js';
 const $ = (s) => document.querySelector(s);
 const safeDecode = (s) => { try { return decodeURIComponent(s); } catch { return ''; } };
 const code = safeDecode(location.pathname.split('/')[2] || '').toLowerCase().replace(/[^a-z0-9-]/g, '');
@@ -32,6 +33,7 @@ export function embedFor(kind, raw, host = location.hostname) {
 }
 
 // ---------------------------------------------------------------- state
+const ACCT = { user: null, av: '', then: null, up: false };
 const W = { info: null, shown: new Set(), source: 'direct', iframe: '', direct: { state: 'idle', pc: null, gen: 0 }, lastReacts: null };
 const store = {
   get(k, d) { try { const v = localStorage.getItem('gather:w:' + k); return v == null ? d : JSON.parse(v); } catch { return d; } },
@@ -66,7 +68,7 @@ async function poll() {
   try {
     const r = await fetch(`/api/studio?action=wfeed&studio=${encodeURIComponent(code)}`);
     render(r.ok ? await r.json() : { found: false });
-  } catch { $('#wEmptyH').textContent = 'Can’t reach gather right now. Retrying…'; }
+  } catch { $('#wv').classList.remove('sk-wait'); window.gatherBoot?.done(); $('#wEmptyH').textContent = 'Can’t reach gather right now. Retrying…'; }
   setTimeout(poll, document.hidden ? 8000 : 2000);
 }
 
@@ -75,24 +77,40 @@ function clockText(since) {
   return [Math.floor(s / 3600), Math.floor(s / 60) % 60, s % 60].map((n, i) => (i ? String(n).padStart(2, '0') : n)).join(':').replace(/^0:/, '');
 }
 function render(info) {
+  // A show that was on and now isn't has ended: keep its name and host, stop the frozen picture, say so.
+  if (info.found) { if (W.ended) setTimeout(startDirect, 0); W.last = { title: info.title, host: info.host, watch: info.watch, links: info.live?.links?.length ? info.live.links : W.last?.links || [] }; W.ended = false; }
+  else if (W.last && !info.unclaimed && !info.offline) {
+    if (!W.ended) { W.ended = true; stopDirect(); W.direct.state = 'idle'; }
+    info = { ...info, ended: true, title: W.last.title, host: W.last.host };
+  }
   W.info = info;
+  $('#wv').classList.toggle('ended', !!info.ended);
+  $('#wv').classList.toggle('nofeed', !info.found && !info.ended);
+  if ($('#wv').classList.contains('sk-wait')) { $('#wv').classList.remove('sk-wait'); $$('#wMsgs .sk-row').forEach((r) => r.remove()); window.gatherBoot?.done(); }
   if (info.code && info.code !== W.code) { W.code = info.code; sess = store.get(skey(), null); }
-  const title = info.found ? info.title || 'Live show' : info.offline ? `${info.name} · offline` : info.unclaimed ? 'Nobody here yet' : 'Show not found';
+  const title = info.found ? info.title || 'Live show' : info.ended ? `${info.title || 'The show'} · ended` : info.offline ? `${info.name} · offline` : info.unclaimed ? 'Nobody here yet' : 'Show not found';
   $('#wTitle').textContent = title; document.title = `${title} · Watch live`;
   if (info.color) document.documentElement.style.setProperty('--accent', info.color);
   const live = !!(info.found && info.live?.on);
   const onAir = live || W.direct.state === 'live';
   $('#wLive').hidden = !onAir;
+  $('#wv').classList.toggle('on-air', onAir);
+  // Came in on the long studio code? Show (and switch the address bar to) the short link, so it's what people copy.
+  if (info.short && /^\/w\/gather-/.test(location.pathname)) history.replaceState(null, '', '/w/' + info.short + location.search);
+  renderHost(info);
   $('#wLiveText').textContent = live ? 'Live · ' + clockText(info.live.since) : 'On air';
   $('#wViewers').hidden = !info.found;
   $('#wViewers').textContent = info.viewers ? `${info.viewers} watching` : '';
   const w = info.watch || {};
   $('#wSuperBtn').hidden = !w.supers || w.chat === false;
+  $('#wSuperStrip').hidden = $('#wSuperBtn').hidden; // the same super chat, where viewers already look
   // Voice questions replace the old call-in: raise a hand, record, the host decides.
-  $('#wHand').hidden = $('#wMic').hidden = w.voice === false || !navigator.mediaDevices?.getUserMedia || !window.MediaRecorder;
+  $('#wMic').hidden = w.voice === false || !navigator.mediaDevices?.getUserMedia || !window.MediaRecorder;
   $('#wChatState').textContent = !info.found ? '' : w.chat === false ? 'Chat is off' : w.slow ? `Slow mode · ${w.slow}s` : '';
   $('#wCompose').hidden = !info.found || w.chat === false;
   renderChat(info.chat || []);
+  renderRoom(info); renderGoal(info);
+  $('#wChat').classList.toggle('quiet', !$('#wMsgs li.row, #wMsgs li.paid'));
   renderTops(info.chat || []);
   renderAbout(info);
   renderShopUI(info); renderPollCard(info); renderQueueCard(info); renderHype(info); renderVertical(info);
@@ -105,11 +123,12 @@ function renderChat(items) {
   const log = $('#wMsgs'), atBottom = log.scrollHeight - log.scrollTop - log.clientHeight < 40;
   for (const m of items) {
     if (W.muted.has(String(m.name).toLowerCase())) continue;
-    const old = log.querySelector(`[data-id="${CSS.escape(m.id)}"] .wv-like`); if (old) old.textContent = m.likes ? `♥ ${m.likes}` : '';
+    const old = log.querySelector(`[data-id="${CSS.escape(m.id)}"] .wv-like span`); if (old) old.textContent = m.likes ? String(m.likes) : '';
     const key = m.id + ':' + (m.status || '');
     if (W.shown.has(key)) continue;
     if (W.booted && sess?.named && m.name !== sess.name && new RegExp('@' + sess.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b', 'i').test(m.text)) toast(`${m.name} mentioned you.`);
     W.shown.add(key);
+    if (W.booted && $('#wv').classList.contains('no-chat')) { const u = $('#wUnread'); u.textContent = Math.min(99, (+u.textContent || 0) + 1); u.hidden = false; } // count what arrives while chat is folded
     log.querySelector(`[data-id="${CSS.escape(m.id)}"]`)?.remove();
     log.querySelector(`[data-sc="${CSS.escape(m.sc || '')}"]`)?.remove(); // my own pending claim, now confirmed
     log.append(msgEl(m));
@@ -132,23 +151,29 @@ function msgEl(m) {
   if (!mine && sess?.named && new RegExp('@' + sess.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b', 'i').test(m.text)) li.classList.add('mention');
   if (m.paid) { const a = document.createElement('span'); a.className = 'amt'; a.textContent = m.paid; li.append(a); const b = document.createElement('b'); b.textContent = m.name; li.append(b, richText(m.text)); return li; }
   // avatar · name · time · text, then like / reply / more on hover
-  const av = document.createElement('span'); av.className = 'wv-av'; av.style.background = nameColor(m.name); av.textContent = (m.name || '?').trim().split(/\s+/).slice(0, 2).map((w) => w[0]).join('').toUpperCase(); av.setAttribute('aria-hidden', 'true');
+  const av = document.createElement('span'); av.className = 'wv-av'; av.style.background = nameColor(m.name);
+  if (m.av && /^data:image\/(jpeg|png|webp);base64,/.test(m.av)) { av.style.background = 'none'; queueMicrotask(() => { const im = document.createElement('img'); im.src = m.av; im.alt = ''; av.replaceChildren(im); }); } av.textContent = (m.name || '?').trim().split(/\s+/).slice(0, 2).map((w) => w[0]).join('').toUpperCase(); av.setAttribute('aria-hidden', 'true');
   const body = document.createElement('div');
   const head = document.createElement('div'); head.className = 'wv-mh';
   const b = document.createElement('b'); b.textContent = m.name; if (!mine) b.style.color = nameColor(m.name);
   const t = document.createElement('time'); const d = new Date(m.ts || Date.now()); t.dateTime = d.toISOString(); t.textContent = d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
   head.append(b, t);
-  if (m.q) { const q = document.createElement('span'); q.className = 'wv-qb'; q.textContent = '✋ Question'; head.append(q); }
-  const lk = document.createElement('span'); lk.className = 'wv-like'; lk.textContent = m.likes ? `♥ ${m.likes}` : ''; head.append(lk);
-  body.append(head, richText(m.text));
-  const acts = document.createElement('div'); acts.className = 'wv-acts';
-  const mk = (txt, label, fn) => { const k = document.createElement('button'); k.type = 'button'; k.textContent = txt; k.setAttribute('aria-label', label); k.title = label; k.onclick = fn; return k; };
+  if (m.q) { const q = document.createElement('span'); q.className = 'wv-qb'; q.innerHTML = '<svg class="i" aria-hidden="true"><use href="/icons.svg#i-hand"/></svg>Question'; head.append(q); }
+  const lk = document.createElement('button'); lk.type = 'button'; lk.className = 'wv-like'; lk.dataset.likeFor = m.id;
+  lk.setAttribute('aria-label', 'Like'); lk.setAttribute('aria-pressed', String(W.liked?.has(m.id) || false));
+  lk.innerHTML = '<svg class="i" aria-hidden="true"><use href="/icons.svg#i-heart"/></svg><span></span>'; lk.querySelector('span').textContent = m.likes ? String(m.likes) : '';
+  if (String(m.id).startsWith('mine-')) lk.disabled = true; else lk.onclick = () => likeMsg(m.id, lk);
+  const gap = document.createElement('span'); gap.className = 'wv-sp';
+  const acts = document.createElement('span'); acts.className = 'wv-acts';
+  const mk = (icon, label, fn) => { const k = document.createElement('button'); k.type = 'button'; k.innerHTML = `<svg class="i" aria-hidden="true"><use href="/icons.svg#i-${icon}"/></svg>`; k.setAttribute('aria-label', label); k.title = label; k.onclick = fn; return k; };
   if (!String(m.id).startsWith('mine-')) {
-    const like = mk('♥', 'Like', () => likeMsg(m.id, like)); like.setAttribute('aria-pressed', String(W.liked.has(m.id)));
-    acts.append(like, mk('↩', 'Reply', () => { const x = $('#wText'); x.value = `@${m.name} ` + x.value.replace(/^@\S+\s/, ''); x.focus(); }));
-    if (!mine) acts.append(mk('⚑', 'Report spam', () => reportMsg(m.id, li)), mk('🔇', `Mute ${m.name} for me`, () => muteName(m.name)));
+    acts.append(mk('reply', 'Reply', () => setReply(m)));
+    if (!mine) acts.append(mk('flag', 'Report spam', () => reportMsg(m.id, li)), mk('volume-x', `Mute ${m.name} for me`, () => muteName(m.name)));
   }
-  li.append(av, body, acts);
+  head.append(gap, acts, lk);
+  if (m.re?.n) { const q = document.createElement('span'); q.className = 'wv-re'; q.textContent = `${m.re.n}: ${m.re.t || ''}`; body.append(head, q, richText(m.text)); }
+  else body.append(head, richText(m.text));
+  li.append(av, body);
   return li;
 }
 /** Message text with :emotes: as the host's images and @names highlighted. Built from text nodes, never HTML. */
@@ -184,12 +209,19 @@ function renderSources(info) {
   if (W.source === 'direct' && W.direct.state === 'off' && embeds.length) W.source = embeds[0].embed;
   if (W.source !== 'direct' && !embeds.some((l) => l.embed === W.source)) W.source = 'direct';
   $('#wTabs').hidden = tabs.length < 2;
-  $('#wTabs').replaceChildren(...tabs.map((t) => {
-    const b = document.createElement('button'); b.type = 'button'; b.className = 'btn sm' + (t.id === W.source ? ' on' : ''); b.setAttribute('role', 'tab'); b.setAttribute('aria-selected', String(t.id === W.source));
-    b.textContent = t.label; b.onclick = () => { W.source = t.id; renderSources(W.info); };
-    return b;
-  }));
-  $('#wLinks').replaceChildren(...links.map((l) => { const a = document.createElement('a'); a.className = 'btn sm ghost'; a.href = l.url; a.target = '_blank'; a.rel = 'noopener'; a.textContent = `Open on ${nameOf(l)}`; return a; }));
+  // Rebuild the tabs only when they change (not on every feed), so a click or keyboard focus is never lost mid-render.
+  const tkey = JSON.stringify(tabs);
+  if (W.tabsKey !== tkey) {
+    W.tabsKey = tkey;
+    $('#wTabs').replaceChildren(...tabs.map((t) => {
+      const b = document.createElement('button'); b.type = 'button'; b.className = 'btn sm'; b.setAttribute('role', 'tab'); b.dataset.src = t.id;
+      b.textContent = t.label; b.onclick = () => { W.source = t.id; renderSources(W.info); };
+      return b;
+    }));
+  }
+  for (const b of $('#wTabs').children) { const on = b.dataset.src === W.source; b.classList.toggle('on', on); b.setAttribute('aria-selected', String(on)); }
+  const lkey = JSON.stringify(links);
+  if (W.linksKey !== lkey) W.linksKey = lkey, $('#wLinks').replaceChildren(...links.map((l) => { const a = document.createElement('a'); a.className = 'btn sm ghost'; a.href = l.url; a.target = '_blank'; a.rel = 'noopener'; a.textContent = `Open on ${nameOf(l)}`; return a; }));
   showPlayer(info);
 }
 function showPlayer(info) {
@@ -201,8 +233,10 @@ function showPlayer(info) {
     box.hidden = !playing; W.iframe = '';
     $('#wCtrls').hidden = !playing; $('#wUnmute').hidden = !playing || !v.muted;
     $('#wEmpty').hidden = !!playing;
-    $('#wEmptyH').textContent = info.offline ? `${info.name} isn’t live right now.` : info.unclaimed ? `${location.host}/w/${info.handle} isn’t anyone’s page yet.` : !info.found ? 'This show isn’t on right now.' : W.direct.state === 'connecting' ? 'Connecting to the studio…' : W.direct.state === 'full' ? 'The direct stream is full right now.' : 'Waiting for the show to start.';
-    $('#wEmptyP').textContent = info.offline ? 'Keep this page open — it starts playing by itself the moment they go on.' : info.unclaimed ? 'Claim it for free in the gather studio: Show → Your watch page.' : !info.found ? 'Check the link with the host.' : W.direct.state === 'full' ? 'Watch on one of the platforms below, or try again in a minute.' : 'This page starts playing by itself.';
+    $('#wEmptyActs').hidden = !!info.found;
+    renderEmptyExtras(info);
+    $('#wEmptyH').textContent = info.ended ? 'That’s a wrap.' : info.offline && info.next ? info.next.title : info.offline ? `${info.name} isn’t live right now.` : info.unclaimed ? `${location.host}/w/${info.handle} isn’t anyone’s page yet.` : !info.found ? 'This show isn’t on right now.' : W.direct.state === 'connecting' ? 'Connecting to the studio…' : W.direct.state === 'full' ? 'The direct stream is full right now.' : 'Waiting for the show to start.';
+    $('#wEmptyP').textContent = info.offline && info.next ? countdownText(info.next.when) : info.ended ? `${info.host?.name || 'The host'} ended the show. Keep this page open: it starts playing by itself the next time they go live.` : info.offline ? 'Keep this page open — it starts playing by itself the moment they go on.' : info.unclaimed ? 'Claim it for free in the gather studio: Show → Your watch page.' : !info.found ? 'Check the link with the host.' : W.direct.state === 'full' ? 'Watch on one of the platforms below, or try again in a minute.' : 'This page starts playing by itself.';
   } else if (W.iframe !== W.source) {
     W.iframe = W.source;
     const f = document.createElement('iframe');
@@ -229,7 +263,7 @@ async function startDirect() {
   const stream = new MediaStream(); video.srcObject = stream;
   pc.ontrack = (e) => { stream.addTrack(e.track); video.play().catch(() => {}); };
   // Switch from "Connecting…" to the picture only when a real frame has arrived, so viewers never see a black box.
-  video.addEventListener('loadeddata', () => { if (gen !== D.gen) return; D.state = 'live'; D.video = video; render(W.info); setMuted(video.muted); if (W.q !== 'auto') setQuality(W.q); }, { once: true });
+  video.addEventListener('loadeddata', () => { if (gen !== D.gen) return; D.state = 'live'; D.video = video; setAmbient(stream); render(W.info); setMuted(video.muted); if (W.q !== 'auto') setQuality(W.q); }, { once: true });
   pc.onicecandidate = (e) => { if (e.candidate) api('wrtcSignal', { ...creds(), data: { candidate: e.candidate } }).catch(() => {}); };
   pc.onconnectionstatechange = () => {
     if (pc.connectionState === 'connected' && D.state !== 'live') D.state = 'connecting'; // "live" once a frame shows
@@ -279,8 +313,16 @@ $('#wFull').onclick = () => {
 };
 document.addEventListener('fullscreenchange', () => { if (!document.fullscreenElement) $('#wv').classList.remove('theater'); if (document.fullscreenElement && innerHeight > innerWidth) setFill(true); });
 addEventListener('keydown', (e) => { if (e.key === 'Escape' && $('#wv').classList.contains('theater') && !document.fullscreenElement) $('#wv').classList.remove('theater'); });
+// The ambient glow behind the page plays the same stream (decoded once by the browser), blurred by CSS.
+function setAmbient(stream) {
+  const a = $('#wAmbientVid'); if (!a) return;
+  a.srcObject = stream || null; $('#wv').classList.toggle('glow', !!stream);
+  if (stream) a.play().catch(() => {});
+}
 function toggleChat() { const off = $('#wv').classList.toggle('no-chat'); $('#wChatToggle').setAttribute('aria-pressed', String(off)); $('#wChatToggle').setAttribute('aria-label', off ? 'Show chat (C)' : 'Hide chat (C)'); store.set('noChat', off); }
 $('#wChatToggle').onclick = toggleChat;
+$('#wChatCollapse').onclick = toggleChat;
+$('#wChatReopen').onclick = () => { toggleChat(); $('#wUnread').hidden = true; $('#wUnread').textContent = ''; $('#wText')?.focus(); };
 if (store.get('noChat', false) && innerWidth > 900) toggleChat();
 // Touch: tap the video to show the controls for a few seconds.
 $('#wPlayerWrap').addEventListener('pointerdown', (e) => { if (e.pointerType !== 'mouse') { $('#wPlayerWrap').classList.add('show-ctrls'); clearTimeout(W.ctrlT); W.ctrlT = setTimeout(() => $('#wPlayerWrap').classList.remove('show-ctrls'), 3500); } });
@@ -307,7 +349,7 @@ addEventListener('pagehide', () => { if (sess && W.direct.pc) navigator.sendBeac
 
 // ---------------------------------------------------------------- reactions
 function floatOne(e) {
-  const s = document.createElement('span'); s.textContent = e; s.style.left = 8 + Math.random() * 84 + '%';
+  const s = document.createElement('span'); s.textContent = e; s.style.right = 14 + Math.random() * 46 + 'px'; // rise from the reaction rail
   $('#wFloats').append(s); setTimeout(() => s.remove(), 2600);
 }
 function floatReacts(r) {
@@ -318,9 +360,8 @@ function floatReacts(r) {
   W.mine = {};
 }
 W.mine = {};
-$('#wReacts').replaceChildren(...REACTS.map((e) => {
-  const b = document.createElement('button'); b.type = 'button'; b.textContent = e; b.setAttribute('aria-label', 'React ' + e);
-  b.onclick = async () => {
+// A reaction: it floats up here at once; rapid taps build a combo, and they're sent as one burst every 600 ms.
+function sendReact(e) {
     floatOne(e); W.mine[e] = (W.mine[e] || 0) + 1;
     // Rapid taps build a combo on screen, and are sent as one burst every 600 ms rather than one call per tap.
     W.combo = W.comboE === e && Date.now() - W.comboT < 1200 ? W.combo + 1 : 1; W.comboE = e; W.comboT = Date.now();
@@ -329,18 +370,21 @@ $('#wReacts').replaceChildren(...REACTS.map((e) => {
     W.pendingReacts = (W.pendingReacts || 0) + 1;
     if (W.reactT) return;
     W.reactT = setTimeout(async () => { W.reactT = null; const n = Math.min(5, W.pendingReacts); W.pendingReacts = 0; try { await ensureSession(); for (let i = 0; i < n; i++) await api('wsend', { ...creds(), type: 'react', emoji: e }); } catch {} }, 600);
-  };
-  return b;
-}));
+}
+// The heart in the player controls (hover); hold or right-click it for the other reactions.
+$('#wHeart').onclick = () => sendReact('❤️');
+$('#wHeart').oncontextmenu = (ev) => { ev.preventDefault(); $('#wReactPick').hidden = !$('#wReactPick').hidden; };
+{ let hold = 0; $('#wHeart').addEventListener('pointerdown', () => { hold = setTimeout(() => { $('#wReactPick').hidden = false; }, 450); }); for (const ev of ['pointerup', 'pointerleave']) $('#wHeart').addEventListener(ev, () => clearTimeout(hold)); }
+$('#wReactPick').replaceChildren(...REACTS.map((e) => { const b = document.createElement('button'); b.type = 'button'; b.textContent = e; b.setAttribute('aria-label', 'React ' + e); b.onclick = () => { sendReact(e); $('#wReactPick').hidden = true; }; return b; }));
 
 // ---------------------------------------------------------------- chat
 function showErr(sel, msg) { const e = $(sel); e.textContent = msg || ''; e.hidden = !msg; }
-function renderMe() { $('#wMe').textContent = sess?.name || 'Name'; }
-$('#wMe').onclick = () => { $('#wName').value = sess?.named ? sess.name : store.get('name', ''); showErr('#wNameErr', ''); $('#wNameDlg').showModal(); $('#wName').select(); };
+function renderMe() { $('#wMe').textContent = ACCT?.user?.name || (sess?.named ? sess.name : '') || 'Sign in'; }
+
 let naming = null;
 async function setName(name) {
   naming = (async () => { await ensureSession();
-  sess = { ...(await api('whello', { ...creds(), name })), named: true }; store.set('sess:' + code, sess); store.set('name', name);
+  sess = { ...(await api('whello', { ...creds(), name, ...acctBody() })), named: true }; store.set('sess:' + code, sess); store.set('name', name);
   renderMe(); })();
   try { await naming; } finally { naming = null; }
 }
@@ -350,22 +394,26 @@ $('#wNameForm').addEventListener('submit', async (e) => {
   if (!name) return showErr('#wNameErr', 'Type a name.');
   // Close at once (feels instant) and save in the background; reopen only if the name is refused.
   $('#wNameDlg').close(); $('#wMe').textContent = name; $('#wText').focus();
-  try { await setName(name); } catch (err) { renderMe(); showErr('#wNameErr', err.message); $('#wNameDlg').showModal(); }
+  try { await setName(name); const next = W.guestThen; W.guestThen = null; next?.(); } catch (err) { renderMe(); showErr('#wNameErr', err.message); $('#wNameDlg').showModal(); }
 });
 $('#wCompose').addEventListener('submit', async (e) => {
   e.preventDefault();
   const text = $('#wText').value.trim();
   if (!text) return;
   showErr('#wErr', '');
+  if (!ACCT.user && !sess?.named) { ACCT.then = () => $('#wCompose').requestSubmit(); return openSignIn(); }
   try {
+    if (ACCT.user && !sess?.signed) await joinSigned(); // guests already chat under the name they picked
     if (naming) await naming.catch(() => {});
     await ensureSession(); renderMe();
     const asking = $('#wAsk').getAttribute('aria-pressed') === 'true';
-    const r = await api('wsend', { ...creds(), type: asking ? 'question' : 'chat', text });
+    const re = W.reply ? { n: W.reply.name, t: String(W.reply.text || '').slice(0, 80) } : undefined;
+    const r = await api('wsend', { ...creds(), type: asking ? 'question' : 'chat', text, re });
+    setReply(null);
     if (asking) { setAsk(false); toast('Question sent. The host sees it highlighted.'); }
     $('#wText').value = '';
     W.shown.add(r.id + ':');
-    $('#wMsgs').append(msgEl({ id: r.id, name: sess.name, text, ts: Date.now(), q: asking })); $('#wMsgs').scrollTop = $('#wMsgs').scrollHeight;
+    $('#wMsgs').append(msgEl({ id: r.id, name: sess.name, text, ts: Date.now(), q: asking, av: ACCT.av, re })); $('#wMsgs').scrollTop = $('#wMsgs').scrollHeight;
   } catch (err) {
     if (err.status === 401) { await renew().catch(() => {}); return showErr('#wErr', 'Your chat session ended. Send again.'); }
     showErr('#wErr', err.message);
@@ -406,6 +454,7 @@ function openSuperRefresh() {
 }
 const $$ = (s) => document.querySelectorAll(s);
 $('#wSuperBtn').onclick = () => openSuper();
+$('#wSuperStrip').onclick = () => openSuper();
 $('#wPayGo').onclick = async () => {
   const w = W.info?.watch || {}, handle = w.pay?.[SC.method];
   if (!handle) return;
@@ -431,9 +480,8 @@ $$('button[data-close]').forEach((b) => b.addEventListener('click', () => b.clos
 
 // ---------------------------------------------------------------- share
 $('#wShare').onclick = async () => {
-  const url = location.origin + '/w/' + code;
-  try { if (navigator.share) await navigator.share({ title: document.title, url }); else { await navigator.clipboard.writeText(url); toast('Link copied.'); } }
-  catch {}
+  const url = location.origin + location.pathname; // the short link or name once known
+  try { await navigator.clipboard.writeText(url); toast('Link copied.'); } catch { toast(url); }
 };
 
 renderMe();
@@ -504,7 +552,7 @@ W.muted = new Set(store.get('muted', []));
 async function likeMsg(id, btn) {
   if (W.liked.has(id)) return;
   W.liked.add(id); store.set('liked:' + code, [...W.liked].slice(-300)); btn?.setAttribute('aria-pressed', 'true');
-  const lk = $(`[data-id="${CSS.escape(id)}"] .wv-like`); if (lk) { const n = (Number(lk.textContent.replace(/\D/g, '')) || 0) + 1; lk.textContent = `♥ ${n}`; }
+  const lk = $(`[data-id="${CSS.escape(id)}"] .wv-like span`); if (lk) lk.textContent = String((Number(lk.textContent) || 0) + 1);
   try { await ensureSession(); await api('wsend', { ...creds(), type: 'like', msg: id }); } catch {}
 }
 async function reportMsg(id, li) {
@@ -657,13 +705,14 @@ function renderHype(info) {
   $('#wHypeBar').style.width = lv + '%';
   $('#wHypeLvl').textContent = lv >= 100 ? 'MAX' : lv >= 60 ? 'Hot' : lv >= 25 ? 'Warm' : 'Chill';
   $('#wHype').classList.toggle('max', lv >= 100);
+  $('#wHype').hidden = lv === 0;
 }
 
 // ---------------------------------------------------------------- vertical: 9:16 on upright phones, framed on the speaker
 function renderVertical(info) {
   const native = info.aspect === '9:16', upright = innerHeight > innerWidth && innerWidth <= 900;
   $('#wv').classList.toggle('native916', native);
-  $('#wv').classList.toggle('vertical', !native && upright && W.vertical !== false);
+  $('#wv').classList.toggle('vertical', !native && upright && W.vertical === true);
   const v = $('#wDirect'); if (v) v.style.objectPosition = `${Math.round((info.focus ?? 0.5) * 100)}% 50%`;
   $('#wFill').setAttribute('aria-pressed', String($('#wv').classList.contains('vertical')));
 }
@@ -781,5 +830,288 @@ $('#wRecSend').onclick = async () => {
   } catch (e) { showErr('#wVoiceErr', e.message); $('#wRecSend').disabled = false; }
 };
 $('#wVoiceDlg').addEventListener('close', () => { if (VQ.rec?.state === 'recording') voiceStop(); });
-$('#wHand').onclick = voiceOpen;
 $('#wMic').onclick = voiceOpen;
+
+
+// ---------------------------------------------------------------- signing in to chat
+// Watching needs nothing. Chatting needs an account (Google, or email and password), so every message carries a real
+// name and, if the viewer has one, their photo. It's the same account as the studio: signing in here signs in there.
+const acctToken = () => { try { return JSON.parse(localStorage.getItem('gather:acctToken') || 'null') || ''; } catch { return ''; } };
+const acctBody = () => (ACCT.user && acctToken() ? { acct: acctToken(), ...(ACCT.av ? { av: ACCT.av } : {}) } : {});
+async function acctApi(action, body = {}) {
+  const t = acctToken();
+  const r = await fetch(`/api/account?action=${action}`, { method: 'POST', headers: { 'Content-Type': 'application/json', ...(t ? { Authorization: `Bearer ${t}` } : {}) }, body: JSON.stringify(body) });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) { const e = new Error(j.error || 'Something went wrong. Try again.'); e.status = r.status; throw e; }
+  return j;
+}
+/** A 48-pixel copy of the account photo, small enough to travel with each chat message. */
+async function smallAvatar(src) {
+  if (!src) return '';
+  try {
+    const img = new Image(); img.src = src; await img.decode();
+    const c = document.createElement('canvas'); c.width = c.height = 48; const x = c.getContext('2d');
+    const s = Math.min(img.naturalWidth, img.naturalHeight);
+    x.drawImage(img, (img.naturalWidth - s) / 2, (img.naturalHeight - s) / 2, s, s, 0, 0, 48, 48);
+    const out = c.toDataURL('image/jpeg', 0.8); return out.length <= 9000 ? out : '';
+  } catch { return ''; }
+}
+async function setAccount(user, token) {
+  if (token) localStorage.setItem('gather:acctToken', JSON.stringify(token));
+  ACCT.user = user; ACCT.av = await smallAvatar(user?.avatar);
+  renderMe();
+}
+/** Join (or re-join) the chat as the signed-in account. */
+async function joinSigned() {
+  await ensureSession();
+  sess = { ...(await api('whello', { ...creds(), name: ACCT.user.name, ...acctBody() })), named: true };
+  store.set('sess:' + code, sess); renderMe();
+}
+function renderSignMode() {
+  const up = ACCT.up;
+  $('#wSignH').textContent = up ? 'Create your account' : 'Sign in to chat';
+  $('#wSignNameRow').hidden = $('#wSignAgreeRow').hidden = !up;
+  $('#wSignGo').textContent = up ? 'Create account and chat' : 'Sign in';
+  $('#wSignQ').textContent = up ? 'Have an account?' : 'New here?';
+  $('#wSignMode').textContent = up ? 'Sign in' : 'Create an account';
+  $('#wSignPass').autocomplete = up ? 'new-password' : 'current-password';
+  showErr('#wSignErr', '');
+}
+let googleReady = null;
+function openSignIn() {
+  renderSignMode();
+  googleReady ||= api('config', {}).then((c) => { configureGoogle(c.googleClientId); }).catch(() => {});
+  googleReady.then(() => { $('#wGoogle').hidden = $('#wOr').hidden = $('#wSignLegal').hidden = !googleConfigured(); });
+  $('#wSignDlg').showModal();
+}
+async function signedIn(r) {
+  await setAccount(r.user, r.token);
+  $('#wSignDlg').close();
+  await joinSigned().catch((err) => showErr('#wErr', err.message));
+  toast(`Signed in as ${r.user.name}.`);
+  const next = ACCT.then; ACCT.then = null; if (next) next();
+}
+$('#wSignMode').onclick = () => { ACCT.up = !ACCT.up; renderSignMode(); };
+$('#wGoogle').onclick = async () => {
+  showErr('#wSignErr', ''); $('#wGoogle').setAttribute('aria-busy', 'true');
+  try { const accessToken = await googleSignInToken(); await signedIn(await acctApi('google', { accessToken, agree: true })); }
+  catch (err) { showErr('#wSignErr', err.message); }
+  finally { $('#wGoogle').removeAttribute('aria-busy'); }
+};
+$('#wSignForm').addEventListener('submit', async (e) => {
+  e.preventDefault(); showErr('#wSignErr', '');
+  const email = $('#wSignEmail').value.trim(), password = $('#wSignPass').value;
+  if (!email || !password) return showErr('#wSignErr', 'Type your email and password.');
+  if (ACCT.up && !$('#wSignAgree').checked) return showErr('#wSignErr', 'Tick the box to agree to the Terms and Privacy policy first.');
+  $('#wSignGo').setAttribute('aria-busy', 'true');
+  try { await signedIn(await acctApi(ACCT.up ? 'signup' : 'login', ACCT.up ? { email, password, name: $('#wSignName').value.trim(), agree: true } : { email, password })); }
+  catch (err) { showErr('#wSignErr', err.message); }
+  finally { $('#wSignGo').removeAttribute('aria-busy'); }
+});
+$('#wSignDlg').addEventListener('close', () => { if (!ACCT.user) ACCT.then = null; });
+// Signed in already (here or in the studio): pick the account up quietly.
+if (acctToken()) acctApi('me').then((r) => setAccount(r.user)).catch(() => {});
+// Your name chip: signed-out viewers sign in from it; signed-in viewers can sign out.
+$('#wMe').onclick = () => {
+  if (!ACCT.user) return openSignIn();
+  if (confirm(`Signed in as ${ACCT.user.name}. Sign out of the chat?`)) { localStorage.removeItem('gather:acctToken'); ACCT.user = null; ACCT.av = ''; renew().then(renderMe).catch(() => {}); toast('Signed out.'); }
+};
+
+
+// ---------------------------------------------------------------- the streamer, under the video
+function initialsOf(n) { return String(n || '?').trim().split(/\s+/).slice(0, 2).map((w) => w[0] || '').join('').toUpperCase() || '?'; }
+function renderHost(info) {
+  const card = $('#wHost');
+  if (!info.found && !info.ended && !(info.offline && info.host)) { card.hidden = true; return; }
+  card.hidden = false;
+  const h = info.host || {}, w = info.watch || {};
+  $('#wHostTitle').textContent = info.offline ? `${h.name || 'This streamer'} isn’t live right now` : info.title || 'Live show';
+  $('#wHostName').textContent = h.name || 'The host';
+  $('#wHostHandle').textContent = h.handle ? '@' + h.handle : '';
+  const live = info.live?.on || W.direct.state === 'live';
+  $('#wHostLive').hidden = !live || !!info.ended || !!info.offline;
+  renderSub(h);
+  $('#wHostMeta').textContent = info.offline ? 'Subscribe to get an email when they go live.' : info.ended ? 'Show ended' : [live ? (info.live?.on ? `Live for ${clockText(info.live.since)}` : 'On air now') : 'Not on air', info.viewers ? `${info.viewers} watching` : ''].filter(Boolean).join(' · ');
+  const av = $('#wHostAv');
+  if (!av.dataset.done) {
+    av.textContent = initialsOf(h.name); av.style.background = nameColor(h.name || '?');
+    if (h.photo) { av.dataset.done = '1'; api('havatar', {}).then((r) => { if (r.avatar) { const im = document.createElement('img'); im.src = r.avatar; im.alt = ''; av.replaceChildren(im); av.style.background = 'none'; } }).catch(() => {}); }
+  }
+  $('#wHostAbout').textContent = w.about || '';
+  $('#wHostAbout').hidden = !w.about;
+  const links = [...(w.links || []), ...((info.live?.on && info.live.links) || []).map((l) => ({ label: 'Also live on ' + nameOf(l), url: l.url }))];
+  const key = JSON.stringify(links);
+  if (W.hostLinks !== key) {
+    W.hostLinks = key;
+    $('#wHostLinks').replaceChildren(...links.map((l) => { const li = document.createElement('li'), a = document.createElement('a'); a.href = l.url; a.target = '_blank'; a.rel = 'noopener nofollow'; a.textContent = l.label; li.append(a); return li; }));
+  }
+  $('#wHostLinks').hidden = !links.length;
+}
+// Share: each network's own share page, opened in a small window; Copy link copies the short link.
+const SHARE = {
+  x: (u, t) => `https://twitter.com/intent/tweet?url=${u}&text=${t}`,
+  facebook: (u) => `https://www.facebook.com/sharer/sharer.php?u=${u}`,
+  linkedin: (u) => `https://www.linkedin.com/sharing/share-offsite/?url=${u}`,
+  reddit: (u, t) => `https://www.reddit.com/submit?url=${u}&title=${t}`,
+  whatsapp: (u, t) => `https://wa.me/?text=${t}%20${u}`,
+};
+document.querySelectorAll('[data-share]').forEach((b) => b.addEventListener('click', () => {
+  const u = encodeURIComponent(location.origin + location.pathname), t = encodeURIComponent(`Watch ${W.info?.title || 'this show'} live`);
+  window.open(SHARE[b.dataset.share](u, t), 'share', 'width=620,height=640,noopener');
+}));
+$('#wShareTop').onclick = () => { if (navigator.share) navigator.share({ title: document.title, url: location.origin + location.pathname }).catch(() => {}); else $('#wHost').scrollIntoView({ behavior: 'smooth', block: 'center' }); };
+
+$('#wEmptyShare').onclick = () => $('#wShareTop').click();
+
+// ---------------------------------------------------------------- subscribe: an email when the streamer goes live
+const SUBS = { get: () => { try { return JSON.parse(localStorage.getItem('gather:subs') || '{}'); } catch { return {}; } },
+  set: (o) => { try { localStorage.setItem('gather:subs', JSON.stringify(o)); } catch {} } };
+const subKey = (h) => (h?.handle || h?.name || '').toLowerCase();
+function renderSub(h) {
+  const btn = $('#wSub'), on = !!SUBS.get()[subKey(h)];
+  W.subHost = h;
+  btn.hidden = !h?.alerts;
+  btn.classList.toggle('on', on);
+  btn.setAttribute('aria-pressed', String(on));
+  $('#wSubText').textContent = on ? 'Subscribed' : 'Subscribe';
+  btn.querySelector('use').setAttribute('href', '/icons.svg#i-' + (on ? 'bell-ring' : 'bell'));
+  const n = h?.subs || 0;
+  $('#wHostSubs').textContent = h?.alerts ? `${n.toLocaleString()} subscriber${n === 1 ? '' : 's'}` : '';
+}
+$('#wSub').onclick = async () => {
+  const h = W.subHost || {}, all = SUBS.get(), t = all[subKey(h)];
+  if (t) { // already subscribed here: one tap to stop
+    if (!confirm(`Stop getting emails when ${h.name || 'they'} go live?`)) return;
+    try { await api('wunsub', { t: t === true ? '' : t }); } catch {}
+    delete all[subKey(h)]; SUBS.set(all); renderSub(h); toast('Unsubscribed. You won’t get live alerts.');
+    return;
+  }
+  $('#wSubWho').textContent = h.name ? `${h.name} live` : 'a show';
+  $('#wSubAsk').hidden = false; $('#wSubDone').hidden = true; $('#wSubErr').hidden = true;
+  if (!$('#wSubEmail').value && ACCT?.user?.email) $('#wSubEmail').value = ACCT.user.email;
+  $('#wSubDlg').showModal(); $('#wSubEmail').focus();
+};
+$('#wSubForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const go = $('#wSubGo'); go.disabled = true; $('#wSubErr').hidden = true;
+  try {
+    const r = await api('wsub', { studio: W.info?.handle || W.code || code, email: $('#wSubEmail').value.trim(), origin: location.origin });
+    if (r.already) { const all = SUBS.get(); all[subKey(W.subHost)] = all[subKey(W.subHost)] || true; SUBS.set(all); renderSub(W.subHost); $('#wSubDlg').close(); toast('You’re already subscribed.'); return; }
+    $('#wSubDoneP').textContent = `We sent a link to ${$('#wSubEmail').value.trim()}. Tap it and you’re in.`;
+    $('#wSubAsk').hidden = true; $('#wSubDone').hidden = false;
+  } catch (err) { $('#wSubErr').textContent = err.message; $('#wSubErr').hidden = false; }
+  finally { go.disabled = false; }
+});
+// Landing here from an email: confirm the subscription, or unsubscribe.
+(async () => {
+  const q = new URLSearchParams(location.search), ok = q.get('subok'), off = q.get('unsub');
+  if (!ok && !off) return;
+  q.delete('subok'); q.delete('unsub');
+  history.replaceState(null, '', location.pathname + (q.toString() ? '?' + q : ''));
+  try {
+    if (ok) {
+      const r = await api('wsubok', { t: ok });
+      const all = SUBS.get(); all[(r.handle || r.name).toLowerCase()] = r.t; SUBS.set(all);
+      if (W.subHost) renderSub(W.subHost);
+      toast(`You’re subscribed. We’ll email you when ${r.name || 'they'} go live.`);
+    } else {
+      const r = await api('wunsub', { t: off });
+      const all = SUBS.get(); for (const k of Object.keys(all)) if (all[k] === off) delete all[k]; SUBS.set(all);
+      if (W.subHost) renderSub(W.subHost);
+      toast(r.name ? `Unsubscribed from ${r.name}. No more live alerts.` : 'Unsubscribed.');
+    }
+  } catch (err) { toast(err.message, true); }
+})();
+// The about text shows in full when it's short; longer ones open with "Show more".
+$('#wHostMore').onclick = () => { const on = $('#wHostDesc').classList.toggle('open'); $('#wHostMore').textContent = on ? 'Show less' : 'Show more'; };
+new ResizeObserver(() => { const p = $('#wHostAbout'); $('#wHostMore').hidden = !$('#wHostDesc').classList.contains('open') && p.scrollHeight <= p.clientHeight + 2; }).observe($('#wHostAbout'));
+
+// Phones: the streamer card starts as one line (photo, name, Subscribe); a tap opens the title, share and about.
+$('#wHost').addEventListener('click', (e) => {
+  if (innerWidth > 900 || e.target.closest('button, a')) return;
+  $('#wHost').classList.toggle('open');
+});
+
+// ---------------------------------------------------------------- the room: who's here, the pinned message, a welcome
+function renderRoom(info) {
+  const on = !!info.found;
+  const names = on ? (info.here || []) : [], n = on ? info.viewers || 0 : 0;
+  $('#wHere').hidden = !on || n < 1;
+  const key = names.join('|');
+  if ($('#wHereAvs').dataset.k !== key) {
+    $('#wHereAvs').dataset.k = key;
+    $('#wHereAvs').replaceChildren(...names.slice(0, 7).map((nm) => { const a = document.createElement('i'); a.textContent = initialsOf(nm); a.title = nm; a.style.background = nameColor(nm); return a; }));
+  }
+  const others = Math.max(0, n - Math.min(7, names.length));
+  $('#wHereN').textContent = names.length ? (others ? `+${others.toLocaleString()} watching` : 'watching now') : `${n.toLocaleString()} watching now`;
+  const pin = on ? (info.watch?.pin || '') : '';
+  $('#wPin').hidden = !pin;
+  $('#wPinText').textContent = pin;
+  $('#wPinBy').textContent = `Pinned by ${info.host?.name || 'the host'}`;
+  $('#wMsgs').dataset.welcome = on ? `Welcome to ${info.title || 'the show'}! Say hi, ${info.host?.name || 'the host'} sees every message.` : '';
+}
+// Not signed in? Chat under a name you pick instead.
+$('#wGuest').onclick = () => {
+  W.guestThen = ACCT.then; ACCT.then = null;
+  $('#wSignDlg').close();
+  $('#wName').value = store.get('name', '') || '';
+  $('#wNameDlg').showModal(); $('#wName').focus();
+};
+
+// Touch screens: tap a message to show its reply / report / mute tools (tap again, or another message, to hide).
+$('#wMsgs').addEventListener('click', (e) => {
+  if (matchMedia('(hover: hover)').matches || e.target.closest('button, a')) return;
+  const li = e.target.closest('li.row'); if (!li) return;
+  const on = !li.classList.contains('tapped');
+  for (const x of $$('#wMsgs li.tapped')) x.classList.toggle('tapped', false);
+  li.classList.toggle('tapped', on);
+});
+
+// The community goal: super chats the host confirmed fill it, right under the video.
+function renderGoal(info) {
+  const goal = info.found ? info.watch?.goal : null;
+  $('#wGoal').hidden = !goal;
+  if (!goal) return;
+  const raised = info.raised || 0, p = Math.min(100, Math.round(raised / goal.target * 100));
+  $('#wGoalLabel').textContent = '🎯 ' + (goal.label || 'Community goal');
+  $('#wGoalBar').style.width = p + '%';
+  $('#wGoalN').textContent = `$${Math.round(raised).toLocaleString()} of $${goal.target.toLocaleString()}`;
+  $('#wGoal').classList.toggle('done', p >= 100);
+}
+
+// ---------------------------------------------------------------- replies
+function setReply(m) {
+  W.reply = m ? { name: m.name, text: m.text } : null;
+  $('#wReplyTo').hidden = !m;
+  if (m) { $('#wReplyName').textContent = m.name; $('#wText').focus(); }
+}
+$('#wReplyX').onclick = () => setReply(null);
+
+// ---------------------------------------------------------------- between shows: countdown, reminder, replay
+function countdownText(when) {
+  const ms = when - Date.now();
+  if (ms <= 0) return 'Starting any minute. This page plays by itself.';
+  const d = Math.floor(ms / 864e5), h = Math.floor(ms / 36e5) % 24, m = Math.floor(ms / 6e4) % 60, s = Math.floor(ms / 1e3) % 60;
+  const at = new Date(when).toLocaleString([], { weekday: 'short', hour: 'numeric', minute: '2-digit' });
+  return `Starts in ${d ? d + 'd ' : ''}${d || h ? h + 'h ' : ''}${m}m ${d ? '' : s + 's'} · ${at}`.replace(/\s+·/, ' ·');
+}
+setInterval(() => { const i = W.info; if (i?.offline && i.next && !$('#wEmpty').hidden) $('#wEmptyP').textContent = countdownText(i.next.when); }, 1000);
+function renderEmptyExtras(info) {
+  const acts = $('#wEmptyActs');
+  const key = `${!!(info.offline && info.host?.alerts)}|${info.ended ? (W.last?.links || [])[0]?.url || '' : ''}`;
+  if (acts.dataset.k === key) return; acts.dataset.k = key;
+  for (const x of acts.querySelectorAll('.extra')) x.remove();
+  const add = (el) => { el.classList.add('extra'); acts.prepend(el); };
+  if (info.offline && info.host?.alerts) { const b = document.createElement('button'); b.type = 'button'; b.className = 'btn sm primary'; b.innerHTML = '<svg class="i" aria-hidden="true"><use href="/icons.svg#i-bell"/></svg>Remind me'; b.onclick = () => $('#wSub').click(); add(b); }
+  const replay = info.ended && (W.last?.links || [])[0];
+  if (replay) { const a = document.createElement('a'); a.className = 'btn sm primary'; a.href = replay.url; a.target = '_blank'; a.rel = 'noopener'; a.innerHTML = '<svg class="i" aria-hidden="true"><use href="/icons.svg#i-play"/></svg>Watch the replay'; add(a); }
+}
+
+// ---------------------------------------------------------------- keyboard: T theater, H heart, ? the list
+addEventListener('keydown', (e) => {
+  if (e.metaKey || e.ctrlKey || e.altKey || ['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement?.tagName) || document.querySelector('dialog[open]')) return;
+  const k = e.key.toLowerCase();
+  if (k === 't') { e.preventDefault(); $('#wv').classList.toggle('theater'); }
+  else if (k === 'h') { e.preventDefault(); sendReact('❤️'); }
+  else if (e.key === '?') { e.preventDefault(); $('#wKeysDlg').showModal(); }
+});

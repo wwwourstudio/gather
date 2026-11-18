@@ -6,6 +6,16 @@ const ARGS = ['--use-fake-ui-for-media-stream', '--use-fake-device-for-media-str
 let ok = true;
 const check = (name, cond, detail = '') => { console.log(`${cond ? 'ok  ' : 'FAIL'} ${name}${detail ? ' — ' + detail : ''}`); if (!cond) ok = false; };
 const wait = (p, fn, arg, ms = 10000) => p.waitForFunction(fn, arg, { timeout: ms, polling: 100 }).then(() => true).catch(() => false);
+
+// Chatting on the watch page needs an account: sign up from the "Sign in to chat" box (email + password).
+const signUp = async (page, name) => {
+  if (!(await page.isVisible('#wSignDlg'))) await page.click('#wMe');
+  await page.waitForSelector('#wSignDlg[open]');
+  if (!(await page.isVisible('#wSignNameRow'))) await page.click('#wSignMode');
+  await page.fill('#wSignName', name); await page.fill('#wSignEmail', `${name.toLowerCase()}-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}@example.com`);
+  await page.fill('#wSignPass', 'correct horse battery'); await page.check('#wSignAgree'); await page.click('#wSignGo');
+  await page.waitForFunction(() => !document.querySelector('#wSignDlg').open, null, { timeout: 10000 });
+};
 const post = (api, action, body, token) => fetch(`${B}/api/${api}?action=${action}`, { method: 'POST', headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) }, body: JSON.stringify(body) }).then(async (r) => ({ http: r.status, ...(await r.json().catch(() => ({}))) }));
 
 (async () => {
@@ -48,7 +58,7 @@ const post = (api, action, body, token) => fetch(`${B}/api/${api}?action=${actio
     // The waiting viewer's page picks up the live show by itself.
     check('viewer on /w/<name>: the show appears by itself', await wait(v, () => !/anyone’s page/.test(document.querySelector('#wEmptyH')?.textContent || '') && document.querySelector('#wViewers') && !document.querySelector('#wViewers').hidden, null, 20000));
     check('viewer: direct video plays through the named link', await wait(v, () => document.querySelector('#wDirect')?.videoWidth > 0, null, 30000));
-    await v.fill('#wText', 'hi from the named page'); await v.click('#wSend');
+    await v.fill('#wText', 'hi from the named page'); await v.click('#wSend'); await signUp(v, 'Priya');
     await a.click('[data-tab="chat"]');
     check('host: chat from the named page arrives', await wait(a, () => /hi from the named page/.test(document.querySelector('#msgs').textContent)));
 
