@@ -5152,7 +5152,7 @@ setInterval(() => { if (S.studio && !S.rec && S.state?.rec?.on) renderDock(); },
 // Viewers watch the program straight from this browser over WebRTC (no platform in between), chat, react, send
 // super chats paid directly to the host, and ask to join the stage. A laptop can encode and upload the program
 // for a handful of viewers, so the host sets a cap; past it, viewers fall back to the platform players.
-const WATCH_DEFAULTS = { chat: true, supers: false, join: false, queue: false, voice: true, badge: true, direct: true, cap: 6, slow: 0, min: 2, about: '', links: [], pay: { paypal: '', venmo: '', cashapp: '', stripe: '' } };
+const WATCH_DEFAULTS = { chat: true, supers: false, join: false, queue: false, voice: true, badge: true, direct: true, cap: 6, slow: 0, min: 2, about: '', pin: '', links: [], pay: { paypal: '', venmo: '', cashapp: '', stripe: '' } };
 const watchCfg = () => ({ ...WATCH_DEFAULTS, ...(S.state.watch || {}), pay: { ...WATCH_DEFAULTS.pay, ...(S.state.watch?.pay || {}) } });
 // Signed-in hosts with a watch-page name share gather…/w/<name>, which follows them from show to show.
 const myHandle = () => (isHost() && acct.user?.handle) || '';
@@ -5334,6 +5334,7 @@ function renderWatchSec() {
   for (const k of Object.keys(PAY_NAME)) { const el = $('#wpPay-' + k); if (document.activeElement !== el) el.value = cfg.pay[k] || ''; }
   if (document.activeElement !== $('#wpCap')) $('#wpCap').value = String(cfg.cap);
   if (document.activeElement !== $('#wpAbout')) $('#wpAbout').value = cfg.about || '';
+  if (document.activeElement !== $('#wpPin')) $('#wpPin').value = cfg.pin || '';
   if (document.activeElement !== $('#wpLinks')) $('#wpLinks').value = (cfg.links || []).map((l) => `${l.label} | ${l.url}`).join('\n');
   if (document.activeElement !== $('#wpMin')) $('#wpMin').value = String(cfg.min);
   // Super chats: the payment fields are always shown, with one line saying what's left to do.
@@ -5380,6 +5381,7 @@ $('#wpCard').onclick = () => {
 for (const [id, k] of [['#wpChat', 'chat'], ['#wpSupers', 'supers'], ['#wpJoin', 'join'], ['#wpDirect', 'direct'], ['#wpVoice', 'voice'], ['#wpBadge', 'badge']]) if ($(id)) $(id).onchange = (e) => setWatch({ [k]: e.target.checked });
 $('#wpCap').onchange = (e) => setWatch({ cap: Number(e.target.value) });
 $('#wpAbout').onchange = (e) => setWatch({ about: e.target.value.trim() });
+$('#wpPin').onchange = (e) => setWatch({ pin: e.target.value.trim() });
 $('#wpLinks').onchange = (e) => {
   const links = e.target.value.split('\n').map((line) => { const [a, b] = line.includes('|') ? line.split('|') : ['', line]; let url = (b || '').trim(); if (url && !/^https?:\/\//i.test(url)) url = 'https://' + url; return { label: a.trim() || url.replace(/^https?:\/\/(www\.)?/, '').split('/')[0], url }; }).filter((l) => /^https:\/\//.test(l.url)).slice(0, 6);
   setWatch({ links });

@@ -109,6 +109,7 @@ function render(info) {
   $('#wChatState').textContent = !info.found ? '' : w.chat === false ? 'Chat is off' : w.slow ? `Slow mode · ${w.slow}s` : '';
   $('#wCompose').hidden = !info.found || w.chat === false;
   renderChat(info.chat || []);
+  renderRoom(info);
   $('#wChat').classList.toggle('quiet', !$('#wMsgs li.row, #wMsgs li.paid'));
   renderTops(info.chat || []);
   renderAbout(info);
@@ -389,16 +390,16 @@ $('#wNameForm').addEventListener('submit', async (e) => {
   if (!name) return showErr('#wNameErr', 'Type a name.');
   // Close at once (feels instant) and save in the background; reopen only if the name is refused.
   $('#wNameDlg').close(); $('#wMe').textContent = name; $('#wText').focus();
-  try { await setName(name); } catch (err) { renderMe(); showErr('#wNameErr', err.message); $('#wNameDlg').showModal(); }
+  try { await setName(name); const next = W.guestThen; W.guestThen = null; next?.(); } catch (err) { renderMe(); showErr('#wNameErr', err.message); $('#wNameDlg').showModal(); }
 });
 $('#wCompose').addEventListener('submit', async (e) => {
   e.preventDefault();
   const text = $('#wText').value.trim();
   if (!text) return;
   showErr('#wErr', '');
-  if (!ACCT.user) { ACCT.then = () => $('#wCompose').requestSubmit(); return openSignIn(); }
+  if (!ACCT.user && !sess?.named) { ACCT.then = () => $('#wCompose').requestSubmit(); return openSignIn(); }
   try {
-    if (!sess?.signed) await joinSigned();
+    if (ACCT.user && !sess?.signed) await joinSigned(); // guests already chat under the name they picked
     if (naming) await naming.catch(() => {});
     await ensureSession(); renderMe();
     const asking = $('#wAsk').getAttribute('aria-pressed') === 'true';
@@ -1018,15 +1019,44 @@ $('#wSubForm').addEventListener('submit', async (e) => {
 // The about text shows in full when it's short; longer ones open with "Show more".
 $('#wHostMore').onclick = () => { const on = $('#wHostDesc').classList.toggle('open'); $('#wHostMore').textContent = on ? 'Show less' : 'Show more'; };
 new ResizeObserver(() => { const p = $('#wHostAbout'); $('#wHostMore').hidden = !$('#wHostDesc').classList.contains('open') && p.scrollHeight <= p.clientHeight + 2; }).observe($('#wHostAbout'));
-// The video leaves exactly the card's height free under it (desktop), however much the streamer wrote.
-new ResizeObserver(() => {
-  const box = $('#wStageBox'), card = $('#wHost');
-  if (innerWidth <= 900 || card.hidden) box.style.removeProperty('--hostH');
-  else box.style.setProperty('--hostH', card.offsetHeight + 12 + 'px');
-}).observe($('#wHost'));
 
 // Phones: the streamer card starts as one line (photo, name, Subscribe); a tap opens the title, share and about.
 $('#wHost').addEventListener('click', (e) => {
   if (innerWidth > 900 || e.target.closest('button, a')) return;
   $('#wHost').classList.toggle('open');
+});
+
+// ---------------------------------------------------------------- the room: who's here, the pinned message, a welcome
+function renderRoom(info) {
+  const on = !!info.found;
+  const names = on ? (info.here || []) : [], n = on ? info.viewers || 0 : 0;
+  $('#wHere').hidden = !on || n < 1;
+  const key = names.join('|');
+  if ($('#wHereAvs').dataset.k !== key) {
+    $('#wHereAvs').dataset.k = key;
+    $('#wHereAvs').replaceChildren(...names.slice(0, 7).map((nm) => { const a = document.createElement('i'); a.textContent = initialsOf(nm); a.title = nm; a.style.background = nameColor(nm); return a; }));
+  }
+  const others = Math.max(0, n - Math.min(7, names.length));
+  $('#wHereN').textContent = names.length ? (others ? `+${others.toLocaleString()} watching` : 'watching now') : `${n.toLocaleString()} watching now`;
+  const pin = on ? (info.watch?.pin || '') : '';
+  $('#wPin').hidden = !pin;
+  $('#wPinText').textContent = pin;
+  $('#wPinBy').textContent = `Pinned by ${info.host?.name || 'the host'}`;
+  $('#wMsgs').dataset.welcome = on ? `Welcome to ${info.title || 'the show'}! Say hi, ${info.host?.name || 'the host'} sees every message.` : '';
+}
+// Not signed in? Chat under a name you pick instead.
+$('#wGuest').onclick = () => {
+  W.guestThen = ACCT.then; ACCT.then = null;
+  $('#wSignDlg').close();
+  $('#wName').value = store.get('name', '') || '';
+  $('#wNameDlg').showModal(); $('#wName').focus();
+};
+
+// Touch screens: tap a message to show its reply / report / mute tools (tap again, or another message, to hide).
+$('#wMsgs').addEventListener('click', (e) => {
+  if (matchMedia('(hover: hover)').matches || e.target.closest('button, a')) return;
+  const li = e.target.closest('li.row'); if (!li) return;
+  const on = !li.classList.contains('tapped');
+  for (const x of $$('#wMsgs li.tapped')) x.classList.toggle('tapped', false);
+  li.classList.toggle('tapped', on);
 });
