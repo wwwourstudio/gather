@@ -109,7 +109,7 @@ function render(info) {
   $('#wChatState').textContent = !info.found ? '' : w.chat === false ? 'Chat is off' : w.slow ? `Slow mode · ${w.slow}s` : '';
   $('#wCompose').hidden = !info.found || w.chat === false;
   renderChat(info.chat || []);
-  renderRoom(info);
+  renderRoom(info); renderGoal(info);
   $('#wChat').classList.toggle('quiet', !$('#wMsgs li.row, #wMsgs li.paid'));
   renderTops(info.chat || []);
   renderAbout(info);
@@ -358,9 +358,8 @@ function floatReacts(r) {
   W.mine = {};
 }
 W.mine = {};
-$('#wReacts')?.replaceChildren(...REACTS.map((e) => {
-  const b = document.createElement('button'); b.type = 'button'; b.textContent = e; b.setAttribute('aria-label', 'React ' + e);
-  b.onclick = async () => {
+// A reaction: it floats up here at once; rapid taps build a combo, and they're sent as one burst every 600 ms.
+function sendReact(e) {
     floatOne(e); W.mine[e] = (W.mine[e] || 0) + 1;
     // Rapid taps build a combo on screen, and are sent as one burst every 600 ms rather than one call per tap.
     W.combo = W.comboE === e && Date.now() - W.comboT < 1200 ? W.combo + 1 : 1; W.comboE = e; W.comboT = Date.now();
@@ -369,9 +368,12 @@ $('#wReacts')?.replaceChildren(...REACTS.map((e) => {
     W.pendingReacts = (W.pendingReacts || 0) + 1;
     if (W.reactT) return;
     W.reactT = setTimeout(async () => { W.reactT = null; const n = Math.min(5, W.pendingReacts); W.pendingReacts = 0; try { await ensureSession(); for (let i = 0; i < n; i++) await api('wsend', { ...creds(), type: 'react', emoji: e }); } catch {} }, 600);
-  };
-  return b;
-}));
+}
+// The heart in the player controls (hover); hold or right-click it for the other reactions.
+$('#wHeart').onclick = () => sendReact('❤️');
+$('#wHeart').oncontextmenu = (ev) => { ev.preventDefault(); $('#wReactPick').hidden = !$('#wReactPick').hidden; };
+{ let hold = 0; $('#wHeart').addEventListener('pointerdown', () => { hold = setTimeout(() => { $('#wReactPick').hidden = false; }, 450); }); for (const ev of ['pointerup', 'pointerleave']) $('#wHeart').addEventListener(ev, () => clearTimeout(hold)); }
+$('#wReactPick').replaceChildren(...REACTS.map((e) => { const b = document.createElement('button'); b.type = 'button'; b.textContent = e; b.setAttribute('aria-label', 'React ' + e); b.onclick = () => { sendReact(e); $('#wReactPick').hidden = true; }; return b; }));
 
 // ---------------------------------------------------------------- chat
 function showErr(sel, msg) { const e = $(sel); e.textContent = msg || ''; e.hidden = !msg; }
@@ -1060,3 +1062,15 @@ $('#wMsgs').addEventListener('click', (e) => {
   for (const x of $$('#wMsgs li.tapped')) x.classList.toggle('tapped', false);
   li.classList.toggle('tapped', on);
 });
+
+// The community goal: super chats the host confirmed fill it, right under the video.
+function renderGoal(info) {
+  const goal = info.found ? info.watch?.goal : null;
+  $('#wGoal').hidden = !goal;
+  if (!goal) return;
+  const raised = info.raised || 0, p = Math.min(100, Math.round(raised / goal.target * 100));
+  $('#wGoalLabel').textContent = '🎯 ' + (goal.label || 'Community goal');
+  $('#wGoalBar').style.width = p + '%';
+  $('#wGoalN').textContent = `$${Math.round(raised).toLocaleString()} of $${goal.target.toLocaleString()}`;
+  $('#wGoal').classList.toggle('done', p >= 100);
+}

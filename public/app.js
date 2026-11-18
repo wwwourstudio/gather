@@ -1049,6 +1049,7 @@ function drawChrome() {
   g.textBaseline = 'middle';
   // The show title is no longer drawn on the stage: it lives in the header and on the watch page.
   if (window.__shopReady) { drawProduct(); drawPoll(); drawWatchBadge(); }
+  drawGoal(); drawWaves();
 }
 // The program is painted tier by tier: stage → media → (brand frame) → overlays → chat → ticker → system.
 const TIER_Z = Object.fromEntries(TIERS.map((x) => [x.id, x.z]));
@@ -1223,6 +1224,8 @@ const seenFeed = new Set();
 function addExternal(m) {
   if (seenFeed.has(m.id)) return;
   seenFeed.add(m.id);
+  const em = String(m.text || '').trim(); // a message that's only emoji ("🔥🔥🔥") rises on the stream too
+  if (em && em.length <= 24 && /^(\p{Extended_Pictographic}|\p{Emoji_Modifier}|\u200d|\ufe0f|\s)+$/u.test(em)) for (const e of [...em.matchAll(/\p{Extended_Pictographic}/gu)].slice(0, 4)) reactFloat(e[0]);
   pushFeed(m);
   const li = document.createElement('li');
   li.className = 'msg ext' + (m.paid ? ' paid' : '');
@@ -5152,7 +5155,7 @@ setInterval(() => { if (S.studio && !S.rec && S.state?.rec?.on) renderDock(); },
 // Viewers watch the program straight from this browser over WebRTC (no platform in between), chat, react, send
 // super chats paid directly to the host, and ask to join the stage. A laptop can encode and upload the program
 // for a handful of viewers, so the host sets a cap; past it, viewers fall back to the platform players.
-const WATCH_DEFAULTS = { chat: true, supers: false, join: false, queue: false, voice: true, badge: true, direct: true, cap: 6, slow: 0, min: 2, about: '', pin: '', links: [], pay: { paypal: '', venmo: '', cashapp: '', stripe: '' } };
+const WATCH_DEFAULTS = { chat: true, supers: false, join: false, queue: false, voice: true, badge: true, direct: true, cap: 6, slow: 0, min: 2, about: '', pin: '', goal: { label: '', target: 0 }, reactsOnStream: true, links: [], pay: { paypal: '', venmo: '', cashapp: '', stripe: '' } };
 const watchCfg = () => ({ ...WATCH_DEFAULTS, ...(S.state.watch || {}), pay: { ...WATCH_DEFAULTS.pay, ...(S.state.watch?.pay || {}) } });
 // Signed-in hosts with a watch-page name share gather…/w/<name>, which follows them from show to show.
 const myHandle = () => (isHost() && acct.user?.handle) || '';
@@ -5313,6 +5316,7 @@ async function refreshSupers() { if (!S.studio || !isHost()) return; try { for (
 
 // Reactions from the watch page float over the host's stage view (never into the program).
 function reactFloat(e) {
+  if (watchCfg().reactsOnStream !== false) { (S.waves ||= []).push({ e, t0: performance.now(), x: 0.78 + Math.random() * 0.16, dx: (Math.random() - 0.5) * 0.08, s: 0.9 + Math.random() * 0.5 }); if (S.waves.length > 60) S.waves.shift(); return; }
   const s = document.createElement('span'); s.className = 'react-float'; s.textContent = e; s.style.left = 10 + Math.random() * 80 + '%';
   $('#stage')?.append(s); setTimeout(() => s.remove(), 2600);
 }
@@ -5335,6 +5339,9 @@ function renderWatchSec() {
   if (document.activeElement !== $('#wpCap')) $('#wpCap').value = String(cfg.cap);
   if (document.activeElement !== $('#wpAbout')) $('#wpAbout').value = cfg.about || '';
   if (document.activeElement !== $('#wpPin')) $('#wpPin').value = cfg.pin || '';
+  if (document.activeElement !== $('#wpGoalLabel')) $('#wpGoalLabel').value = cfg.goal?.label || '';
+  if (document.activeElement !== $('#wpGoalTarget')) $('#wpGoalTarget').value = cfg.goal?.target || '';
+  $('#wpReacts').checked = cfg.reactsOnStream !== false;
   if (document.activeElement !== $('#wpLinks')) $('#wpLinks').value = (cfg.links || []).map((l) => `${l.label} | ${l.url}`).join('\n');
   if (document.activeElement !== $('#wpMin')) $('#wpMin').value = String(cfg.min);
   // Super chats: the payment fields are always shown, with one line saying what's left to do.
@@ -5382,6 +5389,9 @@ for (const [id, k] of [['#wpChat', 'chat'], ['#wpSupers', 'supers'], ['#wpJoin',
 $('#wpCap').onchange = (e) => setWatch({ cap: Number(e.target.value) });
 $('#wpAbout').onchange = (e) => setWatch({ about: e.target.value.trim() });
 $('#wpPin').onchange = (e) => setWatch({ pin: e.target.value.trim() });
+const setGoal = () => setWatch({ goal: { label: $('#wpGoalLabel').value.trim().slice(0, 40), target: Math.max(0, Math.min(100000, Math.round(Number($('#wpGoalTarget').value) || 0))) } });
+$('#wpGoalLabel').onchange = setGoal; $('#wpGoalTarget').onchange = setGoal;
+$('#wpReacts').onchange = (e) => setWatch({ reactsOnStream: e.target.checked });
 $('#wpLinks').onchange = (e) => {
   const links = e.target.value.split('\n').map((line) => { const [a, b] = line.includes('|') ? line.split('|') : ['', line]; let url = (b || '').trim(); if (url && !/^https?:\/\//i.test(url)) url = 'https://' + url; return { label: a.trim() || url.replace(/^https?:\/\/(www\.)?/, '').split('/')[0], url }; }).filter((l) => /^https:\/\//.test(l.url)).slice(0, 6);
   setWatch({ links });
@@ -5886,4 +5896,41 @@ if (document.readyState === 'complete') window.gatherBoot?.done(); else addEvent
     new IntersectionObserver(([e]) => { visible = e.isIntersecting; }).observe(win);
     loop();
   }
+}
+
+
+// ---------------------------------------------------------------- on the stream: the community goal, reaction waves
+// The goal bar (top centre) fills with confirmed super chats; it's drawn into the program, so every platform sees it.
+function goalRaised() { let t = 0; for (const x of S.supers?.values() || []) if (x.status === 'confirmed' || x.status === 'answered') t += Number(x.amount) || 0; return t; }
+function drawGoal() {
+  const goal = watchCfg().goal;
+  if (!S.studio || !(goal?.target > 0)) return;
+  const raised = goalRaised(), p = Math.min(1, raised / goal.target);
+  const w = Math.min(W * 0.42, 520), h = 54, x = (W - w) / 2, y = 22;
+  g.save();
+  g.fillStyle = 'rgba(8,12,26,0.72)'; rr(x, y, w, h, 14); g.fill();
+  g.strokeStyle = 'rgba(255,255,255,0.14)'; g.lineWidth = 1.5; rr(x, y, w, h, 14); g.stroke();
+  g.textBaseline = 'alphabetic';
+  g.fillStyle = '#fde68a'; g.font = '800 12px Inter, sans-serif'; g.fillText(('🎯 ' + (goal.label || 'Community goal')).toUpperCase(), x + 16, y + 21);
+  const amt = `$${Math.round(raised).toLocaleString()} / $${goal.target.toLocaleString()}`;
+  g.font = '700 14px Inter, sans-serif'; g.fillStyle = '#fff'; const tw = g.measureText(amt).width; g.fillText(amt, x + w - 16 - tw, y + 21);
+  const bx = x + 16, by = y + 32, bw = w - 32, bh = 10;
+  g.fillStyle = 'rgba(255,255,255,0.12)'; rr(bx, by, bw, bh, 5); g.fill();
+  if (p > 0) { const gr = g.createLinearGradient(bx, 0, bx + bw, 0); gr.addColorStop(0, '#a3e635'); gr.addColorStop(1, '#22c55e'); g.fillStyle = gr; rr(bx, by, Math.max(bh, bw * p), bh, 5); g.fill(); }
+  g.restore();
+}
+// Each viewer reaction rises from the lower right of the picture and fades: a wave when the room gets loud.
+function drawWaves() {
+  const list = S.waves; if (!list?.length) return;
+  const now = performance.now(), life = 2600;
+  g.save(); g.textAlign = 'center'; g.textBaseline = 'middle';
+  for (let i = list.length - 1; i >= 0; i--) {
+    const w = list[i], t = (now - w.t0) / life;
+    if (t >= 1) { list.splice(i, 1); continue; }
+    const ease = 1 - Math.pow(1 - t, 3);
+    g.globalAlpha = t < 0.12 ? t / 0.12 : 1 - Math.max(0, (t - 0.6) / 0.4);
+    g.font = `${Math.round(44 * w.s * (0.7 + 0.3 * Math.min(1, t * 4)))}px "Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif`;
+    g.fillText(w.e, (w.x + w.dx * Math.sin(t * 6)) * W, H * (0.9 - ease * 0.55));
+  }
+  g.restore();
 }

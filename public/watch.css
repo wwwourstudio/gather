@@ -54,7 +54,7 @@ body { background: #05070d; }
 @keyframes wv-ping { from { transform: scale(0.3); opacity: 0.9; } to { transform: scale(1.4); opacity: 0; } }
 
 /* on the picture: sound, reactions floating up, captions */
-.wv-unmute { position: absolute; z-index: 3; left: 50%; top: 16px; transform: translateX(-50%); display: inline-flex; align-items: center; gap: 8px; padding: 8px 16px; border-radius: 999px; background: var(--accent); color: var(--accent-ink, #fff); font-weight: 700; white-space: nowrap; box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.7); }
+.wv-unmute { position: absolute; z-index: 3; left: 50%; bottom: 72px; transform: translateX(-50%); display: inline-flex; align-items: center; gap: 8px; padding: 8px 16px; border-radius: 999px; background: var(--accent); color: var(--accent-ink, #fff); font-weight: 700; white-space: nowrap; box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.7); }
 .wv-unmute .short { display: none; }
 .wv-floats { position: absolute; inset: 0; z-index: 1; overflow: hidden; pointer-events: none; }
 .wv-floats span { position: absolute; bottom: 10%; font-size: 28px; animation: wv-float 2.4s var(--ease-out) forwards; }
@@ -80,7 +80,7 @@ body { background: #05070d; }
 
 /* ---------------------------------------------------------------- the bar under the video (only when it has something) */
 .wv-strip { display: flex; align-items: center; gap: 8px; min-width: 0; }
-.wv-strip:not(:has(.btn:not([hidden]), .wv-hype:not([hidden]), .wv-sources:not([hidden]), .wv-links > *)) { display: none; }
+.wv-strip:not(:has(.btn:not([hidden]), .wv-goal:not([hidden]), .wv-hype:not([hidden]), .wv-sources:not([hidden]), .wv-links > *)) { display: none; }
 .wv-strip .btn { height: 38px; padding: 0 14px; gap: 7px; border-radius: 999px; border: 1px solid rgba(255, 255, 255, 0.1); background: rgba(255, 255, 255, 0.06); color: var(--ink); font-weight: 600; }
 .wv-strip .btn:hover { background: rgba(255, 255, 255, 0.11); }
 .wv-strip .btn.wv-supers { border-color: transparent; background: linear-gradient(135deg, #a3e635, #22c55e); color: #0b1a05; box-shadow: 0 8px 22px -10px rgba(34, 197, 94, 0.8); }
@@ -93,6 +93,15 @@ body { background: #05070d; }
 .wv-hype em { min-width: 44px; font-style: normal; font-weight: 700; color: var(--ink-2); }
 .wv-hype.max { border-color: #ec4899; animation: wv-pulse 0.8s ease-in-out infinite alternate; }
 @keyframes wv-pulse { to { box-shadow: 0 0 18px rgba(236, 72, 153, 0.6); } }
+
+/* the community goal: super chats fill it */
+.wv-goal { flex: 1 1 320px; min-width: 0; display: flex; align-items: center; gap: 10px; height: 40px; padding: 0 14px; border-radius: 999px; background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(250, 204, 21, 0.25); font-size: 13px; }
+.wv-goal[hidden] { display: none; }
+.wv-goal-l { flex: none; max-width: 40%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 700; color: #fde68a; }
+.wv-goal i { flex: 1; min-width: 60px; height: 8px; border-radius: 999px; background: rgba(255, 255, 255, 0.1); overflow: hidden; }
+.wv-goal b { display: block; width: 0; height: 100%; border-radius: inherit; background: linear-gradient(90deg, #a3e635, #22c55e); transition: width 0.8s var(--ease-out); }
+.wv-goal-n { flex: none; font-weight: 700; font-variant-numeric: tabular-nums; }
+.wv-goal.done { border-color: #22c55e; box-shadow: 0 0 22px -6px rgba(34, 197, 94, 0.7); }
 
 /* ---------------------------------------------------------------- the streamer card */
 .wv-host { display: grid; gap: 12px; min-width: 0; padding: 16px 18px 18px; border-radius: 16px; background: rgba(10, 14, 30, 0.45); border: 1px solid rgba(255, 255, 255, 0.08); -webkit-backdrop-filter: blur(20px) saturate(140%); backdrop-filter: blur(20px) saturate(140%); }
@@ -454,3 +463,12 @@ button.wv-like:disabled { opacity: 0.4; cursor: default; }
   .wv-strip .btn { width: 38px; padding: 0; justify-content: center; }
   .wv-chat { grid-row: 1; grid-column: 2; border-left: 1px solid rgba(255, 255, 255, 0.07); }
 }
+
+/* the reaction heart in the player controls; hold it for the other reactions */
+.wv-heartwrap { position: relative; display: inline-flex; }
+.wv-heart:hover { color: #fb7185; }
+.wv-heart:active { transform: scale(0.9); }
+.wv-reactpick { position: absolute; bottom: calc(100% + 8px); left: 50%; transform: translateX(-50%); display: flex; gap: 2px; padding: 4px; border-radius: 999px; background: rgba(10, 14, 28, 0.85); border: 1px solid rgba(255, 255, 255, 0.14); -webkit-backdrop-filter: blur(16px); backdrop-filter: blur(16px); }
+.wv-reactpick[hidden] { display: none; }
+.wv-reactpick button { width: 36px; height: 36px; border-radius: 999px; font-size: 19px; }
+.wv-reactpick button:hover { background: rgba(255, 255, 255, 0.12); transform: scale(1.15); }

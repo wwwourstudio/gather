@@ -108,6 +108,7 @@
             <input class="wv-vol" id="wVol" type="range" min="0" max="1" step="0.05" value="1" aria-label="Volume">
             <span class="wv-badge" id="wDelay" hidden></span>
             <span class="wv-sp"></span>
+            <span class="wv-heartwrap"><button class="wv-c wv-heart" id="wHeart" type="button" aria-label="Send a heart (hold for more reactions)" data-tip="React (hold for more)"><svg class="i" aria-hidden="true"><use href="/icons.svg#i-heart"/></svg></button><span class="wv-reactpick" id="wReactPick" hidden role="group" aria-label="Reactions"></span></span>
             <button class="wv-c" id="wClip" type="button" hidden aria-label="Clip the last 30 seconds" data-tip="Clip the last 30 s"><svg class="i" aria-hidden="true"><use href="/icons.svg#i-scissors"/></svg></button>
             <button class="wv-c wv-txt" id="wCC" type="button" aria-pressed="false" aria-label="Captions" data-tip="Captions">CC</button>
             <button class="wv-c wv-txt" id="wQual" type="button" aria-label="Quality" data-tip="Quality">Auto</button>
@@ -118,6 +119,7 @@
           </div>
         </div>
       <div class="wv-strip">
+          <div class="wv-goal" id="wGoal" hidden><span class="wv-goal-l" id="wGoalLabel">Goal</span><i><b id="wGoalBar"></b></i><span class="wv-goal-n" id="wGoalN"></span></div>
           <div class="wv-hype" id="wHype" title="Hype: how much the room is reacting"><span>🔥</span><i><b id="wHypeBar"></b></i><em id="wHypeLvl">Warm</em></div>
           <div class="wv-sources" id="wTabs" role="tablist" aria-label="Watch on" hidden></div>
           <div class="wv-links" id="wLinks"></div>
